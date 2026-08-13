@@ -1,0 +1,42 @@
+id: indexes.invalid
+version: 1
+
+name: Index invalide
+description: >
+  Index laissé invalide par un CREATE INDEX CONCURRENTLY interrompu. Il n'est pas utilisé par
+  le planificateur mais continue d'être maintenu à chaque écriture.
+category: indexes
+severity: warning
+group: configuration
+
+requires:
+  views:
+    - pg_index
+    - pg_class
+
+query: |
+  SELECT
+    n.nspname                    AS schemaname,
+    t.relname                    AS tablename,
+    i.relname                    AS indexname,
+    pg_relation_size(i.oid)      AS index_bytes
+  FROM pg_index ix
+  JOIN pg_class i ON i.oid = ix.indexrelid
+  JOIN pg_class t ON t.oid = ix.indrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  WHERE NOT ix.indisvalid
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+
+key:
+  - schemaname
+  - indexname
+
+recommendation:
+  title: "Index invalide : {{ indexname }}"
+  message: "{{ indexname }} sur {{ schemaname }}.{{ tablename }} est invalide et occupe {{ index_bytes | bytes }} sans servir aux requêtes."
+  impact: medium
+  confidence: high
+  evidence:
+    - index_bytes
+  sql: "REINDEX INDEX CONCURRENTLY {{ schemaname }}.{{ indexname }};"
+  documentation: https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY

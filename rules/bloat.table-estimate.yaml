@@ -1,0 +1,71 @@
+id: bloat.table-estimate
+version: 1
+
+name: Espace perdu estimé sur une table
+description: >
+  Estimation de l'écart entre la taille réelle de la table et la taille théorique de ses
+  lignes, d'après les statistiques du planificateur. C'est une estimation : pgstattuple donne
+  la mesure exacte, au prix d'une lecture complète.
+category: bloat
+severity: warning
+group: configuration
+
+requires:
+  views:
+    - pg_class
+    - pg_stats
+
+parameters:
+  ratio_minimum: 0.3
+  pages_minimum: 1000
+
+query: |
+  WITH largeurs AS (
+    SELECT
+      c.oid,
+      n.nspname                                            AS schemaname,
+      c.relname,
+      c.reltuples,
+      c.relpages,
+      current_setting('block_size')::numeric               AS bs,
+      SUM((1 - COALESCE(s.null_frac, 0)) * COALESCE(s.avg_width, 1024)) AS largeur_ligne
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    LEFT JOIN pg_stats s ON s.schemaname = n.nspname AND s.tablename = c.relname
+    WHERE c.relkind = 'r'
+      AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND c.reltuples > 0
+      AND c.relpages > @pages_minimum
+    GROUP BY c.oid, n.nspname, c.relname, c.reltuples, c.relpages
+  )
+  SELECT
+    schemaname,
+    relname,
+    relpages,
+    reltuples,
+    largeur_ligne,
+    pg_relation_size(oid)                                                          AS taille_octets,
+    CEIL(reltuples * (largeur_ligne + 24) / (bs - 24))                             AS pages_attendues,
+    GREATEST(relpages - CEIL(reltuples * (largeur_ligne + 24) / (bs - 24)), 0) * bs AS perte_octets,
+    1 - (CEIL(reltuples * (largeur_ligne + 24) / (bs - 24)) / relpages)             AS ratio_perte
+  FROM largeurs
+  WHERE largeur_ligne IS NOT NULL
+
+condition: ratio_perte > ratio_minimum
+
+key:
+  - schemaname
+  - relname
+
+recommendation:
+  title: "Environ {{ ratio_perte | percent }} d'espace perdu sur {{ schemaname }}.{{ relname }}"
+  message: "{{ relname }} occupe {{ taille_octets | bytes }} pour {{ pages_attendues | number }} pages attendues, soit {{ perte_octets | bytes }} d'espace potentiellement récupérable."
+  impact: medium
+  confidence: low
+  evidence:
+    - relpages
+    - pages_attendues
+    - perte_octets
+    - ratio_perte
+  sql: "-- Nécessite un verrou exclusif, ou pg_repack pour l'éviter\nVACUUM FULL {{ schemaname }}.{{ relname }};"
+  documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-SPACE-RECOVERY

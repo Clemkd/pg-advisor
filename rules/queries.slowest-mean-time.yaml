@@ -1,0 +1,54 @@
+id: queries.slowest-mean-time
+version: 1
+
+name: Requêtes lentes en moyenne
+description: >
+  Classement des requêtes par temps d'exécution moyen. Dépend de pg_stat_statements :
+  la règle est ignorée là où l'extension est absente.
+category: queries
+severity: warning
+group: recommendations
+
+requires:
+  extensions:
+    - pg_stat_statements
+  views:
+    - pg_stat_statements
+
+parameters:
+  seuil_ms: 500
+  appels_minimum: 50
+
+limit: 20
+
+query: |
+  SELECT
+    queryid,
+    calls,
+    mean_exec_time,
+    total_exec_time,
+    rows,
+    left(query, 500) AS query_text
+  FROM pg_stat_statements
+  WHERE calls > @appels_minimum
+    AND dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+  ORDER BY mean_exec_time DESC
+  LIMIT 50
+
+condition: mean_exec_time > seuil_ms
+
+key:
+  - queryid
+
+recommendation:
+  title: "Requête lente : {{ mean_exec_time | duration }} en moyenne"
+  message: "La requête {{ queryid }} s'exécute en {{ mean_exec_time | duration }} en moyenne sur {{ calls | number }} appels, pour un cumul de {{ total_exec_time | duration }}."
+  impact: high
+  confidence: high
+  evidence:
+    - query_text
+    - calls
+    - mean_exec_time
+    - total_exec_time
+    - rows
+  documentation: https://www.postgresql.org/docs/current/pgstatstatements.html

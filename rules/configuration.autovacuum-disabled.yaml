@@ -1,0 +1,35 @@
+id: configuration.autovacuum-disabled
+version: 1
+
+name: Autovacuum désactivé
+description: >
+  Sans autovacuum, les lignes mortes ne sont jamais recyclées et l'instance finit par
+  atteindre la limite de wraparound des identifiants de transaction.
+category: configuration
+severity: critical
+group: configuration
+
+requires:
+  views:
+    - pg_settings
+
+query: |
+  SELECT name, setting, source
+  FROM pg_settings
+  WHERE name = 'autovacuum'
+
+condition: setting == 'off'
+
+key:
+  - name
+
+recommendation:
+  title: "Autovacuum désactivé sur l'instance"
+  message: "Le paramètre autovacuum vaut « {{ setting }} » (source : {{ source }}). Le nettoyage des lignes mortes ne se fera plus automatiquement."
+  impact: high
+  confidence: high
+  evidence:
+    - setting
+    - source
+  sql: "ALTER SYSTEM SET autovacuum = on; SELECT pg_reload_conf();"
+  documentation: https://www.postgresql.org/docs/current/runtime-config-autovacuum.html

@@ -1,0 +1,37 @@
+id: security.superuser-roles
+version: 1
+
+name: Rôles superutilisateur nombreux
+description: >
+  Un superutilisateur contourne toutes les vérifications de droits, y compris la sécurité au
+  niveau ligne. Les comptes applicatifs n'en ont normalement pas besoin.
+category: security
+severity: warning
+group: configuration
+
+requires:
+  views:
+    - pg_roles
+
+parameters:
+  maximum: 2
+
+query: |
+  SELECT
+    count(*)                                       AS nombre,
+    string_agg(rolname, ', ' ORDER BY rolname)     AS roles
+  FROM pg_roles
+  WHERE rolsuper
+    AND rolcanlogin
+
+condition: nombre > maximum
+
+recommendation:
+  title: "{{ nombre }} rôles superutilisateur peuvent se connecter"
+  message: "Rôles concernés : {{ roles }}. Restreindre les droits des comptes applicatifs limite la portée d'une compromission."
+  impact: medium
+  confidence: medium
+  evidence:
+    - nombre
+    - roles
+  documentation: https://www.postgresql.org/docs/current/role-attributes.html

@@ -1,0 +1,43 @@
+id: connections.saturation
+version: 1
+
+name: Slots de connexion presque épuisés
+description: >
+  Quand les slots sont saturés, les nouvelles connexions sont refusées, y compris celles de
+  l'exploitation. Un pooler est presque toujours préférable à une augmentation de
+  max_connections.
+category: connections
+severity: critical
+group: health
+
+requires:
+  views:
+    - pg_stat_activity
+    - pg_settings
+
+parameters:
+  seuil: 0.85
+
+# Plusieurs sous-requêtes agrégées en une ligne : la condition combine les colonnes entre elles.
+# Seules les sessions clientes sont comptées : ce sont elles que max_connections limite.
+query: |
+  SELECT
+    (SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend')              AS used,
+    (SELECT setting::int FROM pg_settings WHERE name = 'max_connections')                      AS max_connections,
+    (SELECT setting::int FROM pg_settings WHERE name = 'superuser_reserved_connections')        AS reserved,
+    (SELECT count(*) FROM pg_stat_activity
+      WHERE backend_type = 'client backend' AND state = 'idle')                                AS idle
+
+condition: used::float / (max_connections - reserved) > seuil
+
+recommendation:
+  title: "Connexions proches de la limite"
+  message: "{{ used }} connexions ouvertes sur {{ max_connections }} autorisées, dont {{ idle }} inactives. Envisager PgBouncer avant d'augmenter max_connections."
+  impact: high
+  confidence: high
+  evidence:
+    - used
+    - max_connections
+    - reserved
+    - idle
+  documentation: https://www.postgresql.org/docs/current/runtime-config-connection.html

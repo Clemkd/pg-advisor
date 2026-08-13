@@ -1,0 +1,40 @@
+id: checkpoints.forced-too-often
+version: 1
+
+name: Checkpoints déclenchés par saturation des WAL
+description: >
+  Un checkpoint déclenché par le volume de WAL plutôt que par le délai indique un
+  max_wal_size trop petit : les écritures se concentrent en pics.
+category: checkpoints
+severity: warning
+group: statistics
+
+requires:
+  views:
+    - pg_stat_bgwriter
+  maxVersion: 16
+
+parameters:
+  part_maximum: 0.3
+  checkpoints_minimum: 10
+
+query: |
+  SELECT
+    checkpoints_timed,
+    checkpoints_req,
+    checkpoints_req::float / NULLIF(checkpoints_timed + checkpoints_req, 0) AS part_forces
+  FROM pg_stat_bgwriter
+
+condition: checkpoints_timed + checkpoints_req > checkpoints_minimum and part_forces > part_maximum
+
+recommendation:
+  title: "{{ part_forces | percent }} des checkpoints sont forcés"
+  message: "{{ checkpoints_req }} checkpoints sur {{ checkpoints_timed }} planifiés ont été déclenchés par le volume de WAL. Augmenter max_wal_size lisse les écritures."
+  impact: medium
+  confidence: high
+  evidence:
+    - checkpoints_timed
+    - checkpoints_req
+    - part_forces
+  sql: "ALTER SYSTEM SET max_wal_size = '4GB'; SELECT pg_reload_conf();"
+  documentation: https://www.postgresql.org/docs/current/wal-configuration.html

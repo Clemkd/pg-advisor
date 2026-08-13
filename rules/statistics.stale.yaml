@@ -1,0 +1,49 @@
+id: statistics.stale
+version: 1
+
+name: Statistiques périmées
+description: >
+  Des statistiques anciennes sur une table qui a beaucoup changé depuis conduisent le
+  planificateur à sous-estimer ou surestimer les volumes.
+category: statistics
+severity: info
+group: recommendations
+
+requires:
+  views:
+    - pg_stat_user_tables
+
+parameters:
+  jours_maximum: 7
+  modifications_minimum: 10000
+
+query: |
+  SELECT
+    schemaname,
+    relname,
+    n_live_tup,
+    n_mod_since_analyze,
+    GREATEST(
+      COALESCE(EXTRACT(EPOCH FROM (now() - last_analyze)), 0),
+      COALESCE(EXTRACT(EPOCH FROM (now() - last_autoanalyze)), 0)
+    ) / 86400 AS jours_depuis_analyse
+  FROM pg_stat_user_tables
+  WHERE (last_analyze IS NOT NULL OR last_autoanalyze IS NOT NULL)
+    AND n_mod_since_analyze > @modifications_minimum
+
+condition: jours_depuis_analyse > jours_maximum
+
+key:
+  - schemaname
+  - relname
+
+recommendation:
+  title: "Statistiques anciennes sur {{ schemaname }}.{{ relname }}"
+  message: "Dernière analyse il y a {{ jours_depuis_analyse | round:1 }} jours, avec {{ n_mod_since_analyze | number }} modifications depuis."
+  impact: medium
+  confidence: medium
+  evidence:
+    - n_mod_since_analyze
+    - jours_depuis_analyse
+  sql: "ANALYZE {{ schemaname }}.{{ relname }};"
+  documentation: https://www.postgresql.org/docs/current/planner-stats.html

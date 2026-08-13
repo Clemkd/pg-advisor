@@ -1,0 +1,35 @@
+id: indexes.redundant
+version: 1
+
+name: Index redondant
+description: >
+  Index dont les colonnes forment le préfixe d'un autre index de la même table : les requêtes
+  qui l'utilisent peuvent s'appuyer sur l'index plus large. Détection confiée à un handler,
+  la comparaison portant sur plusieurs lignes entre elles.
+category: indexes
+severity: info
+group: recommendations
+
+requires:
+  views:
+    - pg_index
+    - pg_class
+
+handler: indexes.redundant
+
+key:
+  - schemaname
+  - indexname
+
+recommendation:
+  title: "Index redondant : {{ indexname }}"
+  message: "{{ indexname }} ({{ index_bytes | bytes }}) est couvert par {{ covering_index }} sur {{ schemaname }}.{{ tablename }}."
+  impact: low
+  confidence: medium
+  evidence:
+    - covering_index
+    - index_bytes
+    - idx_scan
+    - columns
+  sql: "DROP INDEX CONCURRENTLY {{ schemaname }}.{{ indexname }};"
+  documentation: https://www.postgresql.org/docs/current/indexes-multicolumn.html

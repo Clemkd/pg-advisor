@@ -1,0 +1,15 @@
+services:
+  pg-advisor:
+    build: .
+    image: pg-advisor
+    ports:
+      - "8080:8080"
+    volumes:
+      # SQLite + règles créées depuis l'IHM
+      - advisor-data:/app/data
+      # Règles fournies par l'opérateur, lecture seule
+      - ./rules:/app/rules:ro
+    restart: unless-stopped
+
+volumes:
+  advisor-data:

@@ -1,0 +1,61 @@
+id: indexes.missing-foreign-key
+version: 1
+
+name: Clé étrangère sans index
+description: >
+  Une clé étrangère non indexée force un parcours complet de la table fille à chaque
+  suppression ou mise à jour de la clé référencée, et allonge les verrous.
+category: indexes
+severity: warning
+group: configuration
+
+requires:
+  views:
+    - pg_constraint
+    - pg_index
+    - pg_class
+
+parameters:
+  taille_minimum_octets: 1048576
+
+query: |
+  SELECT
+    n.nspname                          AS schemaname,
+    t.relname                          AS tablename,
+    c.conname                          AS constraint_name,
+    pg_get_constraintdef(c.oid)        AS definition,
+    pg_relation_size(t.oid)            AS table_bytes
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid = c.conrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  WHERE c.contype = 'f'
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+    -- Aucun index dont les premières colonnes couvrent celles de la contrainte.
+    -- indkey est un int2vector indexé à partir de zéro : unnest WITH ORDINALITY évite de
+    -- dépendre de ses bornes, contrairement à un découpage de tableau.
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_index i
+      WHERE i.indrelid = c.conrelid
+        AND i.indisvalid
+        AND (
+          SELECT array_agg(colonne ORDER BY position)
+          FROM unnest(i.indkey::int2[]) WITH ORDINALITY AS prefixe(colonne, position)
+          WHERE position <= array_length(c.conkey, 1)
+        ) @> c.conkey
+    )
+    AND pg_relation_size(t.oid) > @taille_minimum_octets
+
+key:
+  - schemaname
+  - constraint_name
+
+recommendation:
+  title: "Clé étrangère non indexée sur {{ schemaname }}.{{ tablename }}"
+  message: "La contrainte {{ constraint_name }} ({{ definition }}) n'est couverte par aucun index ; la table pèse {{ table_bytes | bytes }}."
+  impact: medium
+  confidence: high
+  evidence:
+    - definition
+    - table_bytes
+  documentation: https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-FK

@@ -1,0 +1,49 @@
+id: indexes.unused
+version: 1
+
+name: Index jamais utilisé
+description: >
+  Un index non scanné depuis la dernière remise à zéro des statistiques coûte en écriture et
+  en espace sans rien accélérer. Vérifier l'ancienneté des statistiques avant de conclure.
+category: indexes
+severity: info
+group: recommendations
+
+requires:
+  views:
+    - pg_stat_user_indexes
+    - pg_index
+
+parameters:
+  taille_minimum_octets: 8388608
+
+query: |
+  SELECT
+    s.schemaname,
+    s.relname,
+    s.indexrelname,
+    s.idx_scan,
+    pg_relation_size(s.indexrelid) AS index_bytes
+  FROM pg_stat_user_indexes s
+  JOIN pg_index i ON i.indexrelid = s.indexrelid
+  WHERE NOT i.indisunique
+    AND NOT i.indisprimary
+    AND pg_relation_size(s.indexrelid) > @taille_minimum_octets
+  ORDER BY pg_relation_size(s.indexrelid) DESC
+
+condition: idx_scan == 0
+
+key:
+  - schemaname
+  - indexrelname
+
+recommendation:
+  title: "Index inutilisé : {{ indexrelname }}"
+  message: "{{ indexrelname }} sur {{ schemaname }}.{{ relname }} occupe {{ index_bytes | bytes }} et n'a jamais été parcouru."
+  impact: low
+  confidence: medium
+  evidence:
+    - idx_scan
+    - index_bytes
+  sql: "DROP INDEX CONCURRENTLY {{ schemaname }}.{{ indexrelname }};"
+  documentation: https://www.postgresql.org/docs/current/monitoring-stats.html

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PgAdvisor.Api/PgAdvisor.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PgAdvisor.Tests/PgAdvisor.Tests.csproj" />
+  </Folder>
+</Solution>

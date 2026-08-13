@@ -1,0 +1,52 @@
+id: storage.largest-relations
+version: 1
+
+name: Relations les plus volumineuses
+description: >
+  Inventaire des tables dépassant un seuil de taille, index compris. Sert de repère pour les
+  sauvegardes, la rétention et le partitionnement.
+category: storage
+severity: info
+group: configuration
+
+requires:
+  views:
+    - pg_class
+
+parameters:
+  taille_minimum_octets: 1073741824
+
+limit: 20
+
+query: |
+  SELECT
+    n.nspname                                    AS schemaname,
+    c.relname,
+    pg_total_relation_size(c.oid)                AS total_octets,
+    pg_relation_size(c.oid)                      AS table_octets,
+    pg_indexes_size(c.oid)                       AS index_octets,
+    c.reltuples::bigint                          AS lignes_estimees
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE c.relkind IN ('r', 'p', 'm')
+    AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+  ORDER BY pg_total_relation_size(c.oid) DESC
+  LIMIT 50
+
+condition: total_octets > taille_minimum_octets
+
+key:
+  - schemaname
+  - relname
+
+recommendation:
+  title: "{{ schemaname }}.{{ relname }} occupe {{ total_octets | bytes }}"
+  message: "{{ relname }} totalise {{ total_octets | bytes }} dont {{ index_octets | bytes }} d'index, pour environ {{ lignes_estimees | number }} lignes."
+  impact: low
+  confidence: high
+  evidence:
+    - total_octets
+    - table_octets
+    - index_octets
+    - lignes_estimees
+  documentation: https://www.postgresql.org/docs/current/disk-usage.html

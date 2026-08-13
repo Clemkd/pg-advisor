@@ -1,0 +1,28 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# SPA
+node_modules/
+dist/
+src/PgAdvisor.Api/wwwroot/
+
+# Données locales de l'Advisor : base, clé de chiffrement des secrets, clés de protection des
+# cookies. Le motif couvre les répertoires suffixés (advisor-data-explain, ...) créés en
+# faisant tourner l'API en local avec un DataDirectory dédié.
+advisor-data*/
+*.key
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets et surcharges locales
+appsettings.Local.json
+.env
+.env.local
+
+# Éditeurs
+.vscode/
+.idea/

@@ -1,0 +1,40 @@
+id: checkpoints.forced-too-often-pg17
+version: 1
+
+name: Checkpoints déclenchés par saturation des WAL (PostgreSQL 17+)
+description: >
+  Même diagnostic que checkpoints.forced-too-often, sur pg_stat_checkpointer : les compteurs
+  de checkpoints ont quitté pg_stat_bgwriter en PostgreSQL 17.
+category: checkpoints
+severity: warning
+group: statistics
+
+requires:
+  views:
+    - pg_stat_checkpointer
+  minVersion: 17
+
+parameters:
+  part_maximum: 0.3
+  checkpoints_minimum: 10
+
+query: |
+  SELECT
+    num_timed,
+    num_requested,
+    num_requested::float / NULLIF(num_timed + num_requested, 0) AS part_forces
+  FROM pg_stat_checkpointer
+
+condition: num_timed + num_requested > checkpoints_minimum and part_forces > part_maximum
+
+recommendation:
+  title: "{{ part_forces | percent }} des checkpoints sont forcés"
+  message: "{{ num_requested }} checkpoints sur {{ num_timed }} planifiés ont été déclenchés par le volume de WAL. Augmenter max_wal_size lisse les écritures."
+  impact: medium
+  confidence: high
+  evidence:
+    - num_timed
+    - num_requested
+    - part_forces
+  sql: "ALTER SYSTEM SET max_wal_size = '4GB'; SELECT pg_reload_conf();"
+  documentation: https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-CHECKPOINTER-VIEW

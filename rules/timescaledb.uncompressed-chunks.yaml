@@ -1,0 +1,51 @@
+id: timescaledb.uncompressed-chunks
+version: 1
+
+name: Chunks anciens non compressés
+description: >
+  Chunks dont la fenêtre est close depuis longtemps et qui restent non compressés : soit
+  aucune politique de compression n'existe, soit elle n'aboutit pas.
+category: timescaledb
+severity: info
+group: configuration
+
+requires:
+  extensions:
+    - timescaledb
+  views:
+    - timescaledb_information.chunks
+
+parameters:
+  jours_minimum: 7
+
+limit: 50
+
+query: |
+  SELECT
+    hypertable_schema,
+    hypertable_name,
+    chunk_name,
+    range_end,
+    is_compressed,
+    EXTRACT(EPOCH FROM (now() - range_end)) / 86400 AS age_jours
+  FROM timescaledb_information.chunks
+  WHERE range_end < now()
+  ORDER BY range_end
+
+condition: is_compressed == false and age_jours > jours_minimum
+
+key:
+  - hypertable_schema
+  - chunk_name
+
+recommendation:
+  title: "Chunk non compressé depuis {{ age_jours | round }} jours"
+  message: "{{ chunk_name }} de l'hypertable {{ hypertable_name }} est clos depuis {{ age_jours | round }} jours et n'est pas compressé."
+  impact: medium
+  confidence: medium
+  evidence:
+    - hypertable_name
+    - range_end
+    - age_jours
+  sql: "SELECT compress_chunk('{{ chunk_name }}');"
+  documentation: https://docs.timescale.com/use-timescale/latest/compression/

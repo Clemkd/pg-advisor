@@ -1,0 +1,484 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PgAdvisor.Api.Data;
+using PgAdvisor.Api.Models;
+using PgAdvisor.Api.Postgres;
+using PgAdvisor.Api.Rules;
+using PgAdvisor.Api.Rules.Expressions;
+using PgAdvisor.Api.Rules.Handlers;
+using PgAdvisor.Api.Scheduler;
+using PgAdvisor.Api.Services;
+using PgAdvisor.Api.Sse;
+
+namespace PgAdvisor.Api.Controllers;
+
+/// <summary>
+/// Gestion des règles depuis l'IHM : consultation, validation, création, modification,
+/// suppression, surcharges par instance et exécution d'essai. Les écritures produisent des
+/// fichiers YAML dans le volume de données — le format fichier reste la référence.
+/// </summary>
+[ApiController]
+[Route("api/rules")]
+public sealed class RulesController(
+    AdvisorDbContext db,
+    RuleStore store,
+    RuleLoader loader,
+    RuleFileService files,
+    RuleHandlerRegistry handlers,
+    AnalysisService analysis,
+    ConnectionPresenter presenter,
+    EventBus bus,
+    ILogger<RulesController> logger) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<RuleSummaryResponse>>> List(
+        [FromQuery] string? category,
+        [FromQuery] string? origin,
+        [FromQuery] string? search,
+        CancellationToken ct = default)
+    {
+        var snapshot = store.Current;
+        var overrides = await LoadOverridesAsync(ct);
+
+        var rules = snapshot.Rules.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            rules = rules.Where(r => string.Equals(r.Category, category, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(origin))
+        {
+            rules = rules.Where(r => string.Equals(r.Origin.ToString(), origin, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var needle = search.Trim();
+            rules = rules.Where(r =>
+                r.Id.Contains(needle, StringComparison.OrdinalIgnoreCase) ||
+                (r.Definition.Name ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase) ||
+                (r.Definition.Description ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Ok(rules.Select(rule => ToSummary(rule, snapshot, overrides)).ToList());
+    }
+
+    [HttpGet("schema")]
+    public ActionResult<RuleSchemaResponse> Schema() => Ok(new RuleSchemaResponse
+    {
+        Categories = RuleCategories.All,
+        Severities = [Severities.Info, Severities.Warning, Severities.Critical],
+        Groups = RuleGroups.All,
+        Filters = Template.FilterNames,
+        Functions = ExpressionParser.FunctionNames,
+        KnownViews = CapabilityDetector.CandidateViews,
+        NotableExtensions = CapabilityDetector.NotableExtensions,
+        Handlers = handlers.All.Select(h => new RuleHandlerResponse(h.Name, h.Description)).ToList(),
+        Template = NewRuleTemplate,
+    });
+
+    [HttpGet("errors")]
+    public ActionResult<IEnumerable<RuleErrorResponse>> Errors() => Ok(store.Current.Errors
+        .Select(e => new RuleErrorResponse(
+            Path.GetFileName(e.Path), e.RuleId, e.Message, e.Origin.ToString().ToLowerInvariant()))
+        .ToList());
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<RuleDetailResponse>> Get(string id, CancellationToken ct)
+    {
+        var snapshot = store.Current;
+        var rule = snapshot.Find(id);
+        if (rule is null)
+        {
+            return NotFound();
+        }
+
+        var overrides = await LoadOverridesAsync(ct);
+        var connections = await db.PostgresConnections.OrderBy(c => c.Name).ToListAsync(ct);
+
+        var applicability = connections.Select(connection =>
+        {
+            var result = rule.EvaluateApplicability(presenter.CapabilitiesFor(connection));
+            return new RuleApplicabilityResponse(connection.Id, connection.Name, result.IsApplicable, result.Reason);
+        }).ToList();
+
+        return Ok(new RuleDetailResponse
+        {
+            Rule = ToSummary(rule, snapshot, overrides),
+            Yaml = rule.RawYaml,
+            Applicability = applicability,
+        });
+    }
+
+    /// <summary>Valide un YAML sans rien écrire : utilisé à la frappe dans l'éditeur.</summary>
+    [HttpPost("validate")]
+    public ActionResult<ValidateRuleResponse> Validate(SaveRuleRequest request)
+    {
+        var compilation = loader.Compile(request.Yaml, "(éditeur)", RuleOrigin.User);
+
+        return Ok(new ValidateRuleResponse(
+            compilation.Rule is not null,
+            compilation.Errors,
+            compilation.Rule is null ? null : ToSummary(compilation.Rule, store.Current, [])));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<RuleDetailResponse>> Create(SaveRuleRequest request, CancellationToken ct)
+    {
+        var compilation = loader.Compile(request.Yaml, "(éditeur)", RuleOrigin.User);
+        if (compilation.Rule is null)
+        {
+            return ValidationProblem(compilation.Errors);
+        }
+
+        if (store.Current.Find(compilation.Rule.Id) is not null)
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict,
+                title: $"Une règle « {compilation.Rule.Id} » existe déjà. Modifiez-la ou choisissez un autre identifiant.");
+        }
+
+        return await SaveAsync(request.Yaml, expectedId: null, ct);
+    }
+
+    /// <summary>
+    /// Enregistre une règle. Modifier une règle fournie crée une version utilisateur qui la
+    /// masque, sans jamais toucher au répertoire monté en lecture seule.
+    /// </summary>
+    [HttpPut("{id}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<RuleDetailResponse>> Update(string id, SaveRuleRequest request, CancellationToken ct)
+    {
+        if (store.Current.Find(id) is null)
+        {
+            return NotFound();
+        }
+
+        return await SaveAsync(request.Yaml, expectedId: id, ct);
+    }
+
+    [HttpDelete("{id}")]
+    [Authorize(Roles = Roles.Admin)]
+    public ActionResult Delete(string id)
+    {
+        if (!files.HasUserFile(id))
+        {
+            var rule = store.Current.Find(id);
+            if (rule is null)
+            {
+                return NoContent();
+            }
+
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: "Cette règle est fournie avec l'application et ne peut pas être supprimée. " +
+                       "Désactivez-la par une surcharge, ou remplacez-la par une version utilisateur.");
+        }
+
+        files.DeleteUserRule(id);
+        bus.Publish(AdvisorEventTypes.RulesReloaded, BuildReloadPayload());
+        return NoContent();
+    }
+
+    [HttpPost("reload")]
+    [Authorize(Roles = Roles.Admin)]
+    public ActionResult<RulesStatusResponse> Reload()
+    {
+        var snapshot = store.Reload();
+        bus.Publish(AdvisorEventTypes.RulesReloaded, BuildReloadPayload());
+
+        return Ok(new RulesStatusResponse
+        {
+            Total = snapshot.Rules.Count,
+            Enabled = snapshot.Rules.Count(r => r.Definition.Enabled),
+            Provided = snapshot.Rules.Count(r => r.Origin == RuleOrigin.Provided),
+            User = snapshot.Rules.Count(r => r.Origin == RuleOrigin.User),
+            LoadedAt = snapshot.LoadedAt,
+            Errors = snapshot.Errors
+                .Select(e => new RuleErrorResponse(
+                    Path.GetFileName(e.Path), e.RuleId, e.Message, e.Origin.ToString().ToLowerInvariant()))
+                .ToList(),
+            ByCategory = snapshot.Rules
+                .GroupBy(r => r.Category)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Count()),
+        });
+    }
+
+    /// <summary>Exécute la règle sur une instance et retourne le résultat sans rien persister.</summary>
+    [HttpPost("{id}/dry-run")]
+    public async Task<ActionResult<DryRunResponse>> DryRun(string id, DryRunRequest request, CancellationToken ct)
+    {
+        LoadedRule? rule;
+
+        if (!string.IsNullOrWhiteSpace(request.Yaml))
+        {
+            // Aperçu du YAML en cours d'édition, pas nécessairement enregistré.
+            var compilation = loader.Compile(request.Yaml, "(éditeur)", RuleOrigin.User);
+            if (compilation.Rule is null)
+            {
+                return ValidationProblem(compilation.Errors);
+            }
+
+            rule = compilation.Rule;
+        }
+        else
+        {
+            rule = store.Current.Find(id);
+            if (rule is null)
+            {
+                return NotFound();
+            }
+        }
+
+        if (!await db.PostgresConnections.AnyAsync(c => c.Id == request.ConnectionId, ct))
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Instance inconnue.");
+        }
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+
+            var result = await analysis.DryRunAsync(request.ConnectionId, rule, timeout.Token);
+
+            return Ok(new DryRunResponse
+            {
+                Executed = result.Executed,
+                SkipReason = result.SkipReason,
+                Error = result.Error,
+                RowCount = result.RowCount,
+                DurationMs = result.Duration.TotalMilliseconds,
+                Rows = result.Rows,
+                Findings = result.Findings
+                    .Select(f => new DryRunFinding(f.TargetKey, f.Severity, f.Title, f.Message, f.RemediationSql, f.Evidence))
+                    .ToList(),
+            });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
+        {
+            logger.LogWarning("Aperçu de la règle {RuleId} impossible : {Message}", id, ex.Message);
+            return Ok(new DryRunResponse { Error = ex.Message });
+        }
+    }
+
+    /// <summary>Crée ou remplace une surcharge : activation, sévérité, seuils, périodicité.</summary>
+    [HttpPut("{id}/override")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<RuleOverrideResponse>> SaveOverride(
+        string id, SaveRuleOverrideRequest request, CancellationToken ct)
+    {
+        var rule = store.Current.Find(id);
+        if (rule is null)
+        {
+            return NotFound();
+        }
+
+        if (request.Severity is not null && !Severities.IsValid(request.Severity.ToLowerInvariant()))
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Sévérité inconnue.");
+        }
+
+        if (request.ConnectionId is int connectionId &&
+            !await db.PostgresConnections.AnyAsync(c => c.Id == connectionId, ct))
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Instance inconnue.");
+        }
+
+        var unknownParameters = (request.Parameters ?? [])
+            .Keys
+            .Where(key => !(rule.Definition.Parameters ?? []).ContainsKey(key))
+            .ToList();
+
+        if (unknownParameters.Count > 0)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: $"Seuils inconnus pour cette règle : {string.Join(", ", unknownParameters)}.");
+        }
+
+        var existing = await db.RuleOverrides
+            .FirstOrDefaultAsync(o => o.RuleId == id && o.ConnectionId == request.ConnectionId, ct);
+
+        if (existing is null)
+        {
+            existing = new RuleOverride { RuleId = id, ConnectionId = request.ConnectionId };
+            db.RuleOverrides.Add(existing);
+        }
+
+        existing.Enabled = request.Enabled;
+        existing.Severity = request.Severity?.ToLowerInvariant();
+        existing.IntervalSeconds = request.IntervalSeconds;
+        existing.ParametersJson = request.Parameters is null || request.Parameters.Count == 0
+            ? null
+            : RuleParameterSerializer.Serialize(request.Parameters);
+        existing.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        var connectionName = request.ConnectionId is null
+            ? null
+            : await db.PostgresConnections
+                .Where(c => c.Id == request.ConnectionId)
+                .Select(c => c.Name)
+                .FirstOrDefaultAsync(ct);
+
+        return Ok(ToOverride(existing, connectionName));
+    }
+
+    [HttpDelete("{id}/override")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> DeleteOverride(string id, [FromQuery] int? connectionId, CancellationToken ct)
+    {
+        var existing = await db.RuleOverrides
+            .FirstOrDefaultAsync(o => o.RuleId == id && o.ConnectionId == connectionId, ct);
+
+        if (existing is null)
+        {
+            return NoContent();
+        }
+
+        db.RuleOverrides.Remove(existing);
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    private async Task<ActionResult<RuleDetailResponse>> SaveAsync(string yaml, string? expectedId, CancellationToken ct)
+    {
+        var result = await files.SaveAsync(yaml, expectedId, ct);
+        if (!result.Success || result.Rule is null)
+        {
+            return ValidationProblem(result.Errors);
+        }
+
+        bus.Publish(AdvisorEventTypes.RulesReloaded, BuildReloadPayload());
+
+        var snapshot = store.Current;
+        var overrides = await LoadOverridesAsync(ct);
+
+        return Ok(new RuleDetailResponse
+        {
+            Rule = ToSummary(result.Rule, snapshot, overrides),
+            Yaml = result.Rule.RawYaml,
+        });
+    }
+
+    private object BuildReloadPayload()
+    {
+        var snapshot = store.Current;
+        return new
+        {
+            total = snapshot.Rules.Count,
+            errors = snapshot.Errors.Count,
+            loadedAt = snapshot.LoadedAt,
+        };
+    }
+
+    private ActionResult ValidationProblem(IReadOnlyList<string> errors)
+    {
+        foreach (var error in errors)
+        {
+            ModelState.AddModelError("yaml", error);
+        }
+
+        return ValidationProblem(ModelState);
+    }
+
+    private async Task<List<RuleOverride>> LoadOverridesAsync(CancellationToken ct) =>
+        await db.RuleOverrides.AsNoTracking().ToListAsync(ct);
+
+    private RuleSummaryResponse ToSummary(LoadedRule rule, RuleSnapshot snapshot, List<RuleOverride> overrides)
+    {
+        var requires = rule.Definition.Requires;
+        var connectionNames = db.PostgresConnections
+            .AsNoTracking()
+            .ToDictionary(c => c.Id, c => c.Name);
+
+        return new RuleSummaryResponse
+        {
+            Id = rule.Id,
+            Name = rule.Definition.Name ?? rule.Id,
+            Description = rule.Definition.Description,
+            Category = rule.Category,
+            Severity = rule.Severity,
+            Group = rule.Group,
+            Version = rule.Definition.Version,
+            Enabled = rule.Definition.Enabled,
+            Origin = rule.Origin.ToString().ToLowerInvariant(),
+            Editable = rule.IsEditable,
+            OverridesProvided = snapshot.Shadowed.Contains(rule.Id),
+            File = Path.GetFileName(rule.SourcePath),
+            Handler = rule.Definition.Handler,
+            HasQuery = !string.IsNullOrWhiteSpace(rule.Definition.Query),
+            IntervalSeconds = rule.Definition.IntervalSeconds,
+            Requires = new RuleRequirementsResponse
+            {
+                Views = requires?.Views ?? [],
+                Extensions = requires?.Extensions ?? [],
+                MissingExtensions = requires?.MissingExtensions ?? [],
+                MinVersion = requires?.MinVersion,
+                MaxVersion = requires?.MaxVersion,
+                MonitorRole = requires?.MonitorRole,
+                Primary = requires?.Primary,
+            },
+            Parameters = new Dictionary<string, object?>(rule.Definition.Parameters ?? [], StringComparer.OrdinalIgnoreCase),
+            Overrides = overrides
+                .Where(o => string.Equals(o.RuleId, rule.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(o => ToOverride(o, o.ConnectionId is null ? null : connectionNames.GetValueOrDefault(o.ConnectionId.Value)))
+                .ToList(),
+        };
+    }
+
+    private static RuleOverrideResponse ToOverride(RuleOverride source, string? connectionName) => new()
+    {
+        ConnectionId = source.ConnectionId,
+        ConnectionName = connectionName,
+        Enabled = source.Enabled,
+        Severity = source.Severity,
+        IntervalSeconds = source.IntervalSeconds,
+        Parameters = RuleParameterSerializer.Deserialize(source.ParametersJson),
+        UpdatedAt = source.UpdatedAt,
+    };
+
+    private const string NewRuleTemplate = """
+        id: categorie.sujet
+        version: 1
+
+        name: Titre court de la règle
+        category: performance
+        severity: warning
+        group: recommendations
+
+        requires:
+          views:
+            - pg_stat_user_tables
+
+        parameters:
+          seuil: 0.2
+
+        query: |
+          SELECT
+            schemaname,
+            relname,
+            n_dead_tup,
+            n_live_tup,
+            n_dead_tup::float / NULLIF(n_live_tup, 0) AS ratio
+          FROM pg_stat_user_tables
+          WHERE n_live_tup > 10000
+
+        condition: ratio > seuil
+
+        key:
+          - schemaname
+          - relname
+
+        recommendation:
+          title: "Titre du diagnostic"
+          message: "{{ relname }} présente {{ ratio | percent }} de lignes mortes."
+          impact: medium
+          confidence: high
+          sql: "VACUUM (ANALYZE) {{ schemaname }}.{{ relname }};"
+          documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html
+        """;
+}

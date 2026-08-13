@@ -1,0 +1,48 @@
+id: connections.idle-in-transaction
+version: 1
+
+name: Session inactive dans une transaction
+description: >
+  Une transaction ouverte et inactive retient les lignes mortes, empêche le vacuum de
+  progresser et conserve ses verrous.
+category: connections
+severity: warning
+group: health
+
+requires:
+  views:
+    - pg_stat_activity
+
+parameters:
+  secondes_maximum: 300
+
+query: |
+  SELECT
+    pid,
+    usename,
+    application_name,
+    client_addr::text                                       AS client,
+    state,
+    EXTRACT(EPOCH FROM (now() - state_change))              AS secondes_inactif,
+    EXTRACT(EPOCH FROM (now() - xact_start))                AS secondes_transaction
+  FROM pg_stat_activity
+  WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')
+
+condition: secondes_inactif > secondes_maximum
+
+key:
+  - pid
+
+recommendation:
+  title: "Session {{ pid }} inactive en transaction depuis {{ secondes_inactif | seconds }}"
+  message: "La session {{ pid }} ({{ usename }} / {{ application_name }}) est {{ state }} depuis {{ secondes_inactif | seconds }}. Elle bloque le nettoyage des lignes mortes."
+  impact: medium
+  confidence: high
+  evidence:
+    - usename
+    - application_name
+    - client
+    - state
+    - secondes_transaction
+  sql: "SELECT pg_terminate_backend({{ pid }}); -- à n'exécuter qu'après vérification de l'application"
+  documentation: https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-IDLE-IN-TRANSACTION-SESSION-TIMEOUT

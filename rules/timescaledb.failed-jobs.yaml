@@ -1,0 +1,44 @@
+id: timescaledb.failed-jobs
+version: 1
+
+name: Tâche TimescaleDB en échec
+description: >
+  Les politiques de compression, de rétention et de rafraîchissement des agrégats continus
+  s'exécutent en tâches de fond. Leurs échecs sont silencieux côté application.
+category: timescaledb
+severity: warning
+group: statistics
+
+requires:
+  extensions:
+    - timescaledb
+  views:
+    - timescaledb_information.job_stats
+
+query: |
+  SELECT
+    job_id,
+    hypertable_schema,
+    hypertable_name,
+    last_run_status,
+    last_successful_finish,
+    total_failures,
+    total_runs
+  FROM timescaledb_information.job_stats
+
+condition: last_run_status != 'Success' and total_failures > 0
+
+key:
+  - job_id
+
+recommendation:
+  title: "Tâche TimescaleDB {{ job_id }} en échec"
+  message: "La tâche {{ job_id }} sur {{ hypertable_name }} est en statut {{ last_run_status }} ; {{ total_failures }} échecs sur {{ total_runs }} exécutions."
+  impact: medium
+  confidence: high
+  evidence:
+    - last_run_status
+    - last_successful_finish
+    - total_failures
+    - total_runs
+  documentation: https://docs.timescale.com/use-timescale/latest/jobs/

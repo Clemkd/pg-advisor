@@ -1,0 +1,32 @@
+id: extensions.pgstattuple-missing
+version: 1
+
+name: pgstattuple absente
+description: >
+  L'estimation d'espace perdu repose sur les statistiques du planificateur. pgstattuple donne
+  la mesure exacte, au prix d'une lecture complète de la relation.
+category: extensions
+severity: info
+group: configuration
+
+requires:
+  missingExtensions:
+    - pgstattuple
+
+handler: capabilities.missing-extension
+
+key:
+  - extension
+
+recommendation:
+  title: "Installer pgstattuple pour mesurer l'espace perdu exactement"
+  message: >
+    pgstattuple n'est pas disponible. Les règles de bloat restent des estimations tant que
+    l'extension est absente.
+  impact: low
+  confidence: high
+  evidence:
+    - extension
+    - installable
+  sql: "CREATE EXTENSION pgstattuple;"
+  documentation: https://www.postgresql.org/docs/current/pgstattuple.html

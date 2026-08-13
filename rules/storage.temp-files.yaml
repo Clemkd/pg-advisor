@@ -1,0 +1,39 @@
+id: storage.temp-files
+version: 1
+
+name: Fichiers temporaires volumineux
+description: >
+  Un volume important de fichiers temporaires signale des tris ou des jointures de hachage qui
+  débordent de work_mem sur le disque.
+category: storage
+severity: warning
+group: statistics
+
+requires:
+  views:
+    - pg_stat_database
+
+parameters:
+  octets_maximum: 1073741824
+
+query: |
+  SELECT
+    datname,
+    temp_files,
+    temp_bytes,
+    temp_bytes / NULLIF(temp_files, 0) AS octets_par_fichier
+  FROM pg_stat_database
+  WHERE datname = current_database()
+
+condition: temp_bytes > octets_maximum
+
+recommendation:
+  title: "{{ temp_bytes | bytes }} écrits en fichiers temporaires"
+  message: "{{ temp_files | number }} fichiers temporaires totalisant {{ temp_bytes | bytes }} depuis la dernière remise à zéro, soit {{ octets_par_fichier | bytes }} en moyenne. Un work_mem plus large éviterait ces débordements."
+  impact: medium
+  confidence: medium
+  evidence:
+    - temp_files
+    - temp_bytes
+    - octets_par_fichier
+  documentation: https://www.postgresql.org/docs/current/runtime-config-resource.html#GUC-WORK-MEM

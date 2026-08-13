@@ -1,0 +1,43 @@
+id: vacuum.never-analyzed
+version: 1
+
+name: Table jamais analysée
+description: >
+  Sans ANALYZE, le planificateur travaille sur des estimations par défaut et choisit
+  fréquemment des plans inadaptés.
+category: statistics
+severity: warning
+group: recommendations
+
+requires:
+  views:
+    - pg_stat_user_tables
+
+parameters:
+  lignes_minimum: 1000
+
+query: |
+  SELECT
+    schemaname,
+    relname,
+    n_live_tup,
+    last_analyze,
+    last_autoanalyze
+  FROM pg_stat_user_tables
+  WHERE n_live_tup > @lignes_minimum
+
+condition: last_analyze is null and last_autoanalyze is null
+
+key:
+  - schemaname
+  - relname
+
+recommendation:
+  title: "Statistiques absentes sur {{ schemaname }}.{{ relname }}"
+  message: "{{ relname }} contient {{ n_live_tup | number }} lignes et n'a jamais été analysée."
+  impact: high
+  confidence: high
+  evidence:
+    - n_live_tup
+  sql: "ANALYZE {{ schemaname }}.{{ relname }};"
+  documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-STATISTICS

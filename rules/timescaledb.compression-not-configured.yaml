@@ -1,0 +1,47 @@
+id: timescaledb.compression-not-configured
+version: 1
+
+name: Hypertable volumineuse sans compression
+description: >
+  Hypertable dépassant un certain volume sans compression activée. La compression réduit
+  fortement l'espace occupé par les données historiques.
+category: timescaledb
+severity: info
+group: configuration
+
+requires:
+  extensions:
+    - timescaledb
+  views:
+    - timescaledb_information.hypertables
+
+parameters:
+  taille_minimum_octets: 1073741824
+
+query: |
+  SELECT
+    hypertable_schema,
+    hypertable_name,
+    compression_enabled,
+    num_chunks,
+    hypertable_size(format('%I.%I', hypertable_schema, hypertable_name)::regclass) AS taille_octets
+  FROM timescaledb_information.hypertables
+
+condition: compression_enabled == false and taille_octets > taille_minimum_octets
+
+key:
+  - hypertable_schema
+  - hypertable_name
+
+recommendation:
+  title: "Compression inactive sur {{ hypertable_name }}"
+  message: "{{ hypertable_name }} occupe {{ taille_octets | bytes }} sur {{ num_chunks }} chunks sans compression activée."
+  impact: medium
+  confidence: medium
+  evidence:
+    - num_chunks
+    - taille_octets
+  sql: |
+    ALTER TABLE {{ hypertable_schema }}.{{ hypertable_name }} SET (timescaledb.compress);
+    SELECT add_compression_policy('{{ hypertable_schema }}.{{ hypertable_name }}', INTERVAL '30 days');
+  documentation: https://docs.timescale.com/use-timescale/latest/compression/about-compression/

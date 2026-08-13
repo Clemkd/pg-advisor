@@ -1,0 +1,12 @@
+**/bin
+**/obj
+**/node_modules
+**/wwwroot
+**/.vs
+**/.vscode
+**/.idea
+**/*.user
+.git
+.gitignore
+docs
+advisor-data

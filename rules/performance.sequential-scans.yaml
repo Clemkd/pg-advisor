@@ -1,0 +1,51 @@
+id: performance.sequential-scans
+version: 1
+
+name: Parcours séquentiels sur grande table
+description: >
+  Table volumineuse lue majoritairement en parcours complet. C'est le signe d'un index
+  manquant ou d'un prédicat non indexable.
+category: performance
+severity: warning
+group: recommendations
+
+requires:
+  views:
+    - pg_stat_user_tables
+
+parameters:
+  lignes_minimum: 100000
+  parcours_minimum: 100
+  part_sequentielle: 0.5
+
+query: |
+  SELECT
+    schemaname,
+    relname,
+    seq_scan,
+    idx_scan,
+    n_live_tup,
+    seq_tup_read,
+    seq_scan::float / NULLIF(seq_scan + COALESCE(idx_scan, 0), 0) AS part_seq,
+    seq_tup_read::float / NULLIF(seq_scan, 0) AS lignes_par_parcours
+  FROM pg_stat_user_tables
+  WHERE n_live_tup > @lignes_minimum
+    AND seq_scan > @parcours_minimum
+
+condition: part_seq > part_sequentielle and lignes_par_parcours > 10000
+
+key:
+  - schemaname
+  - relname
+
+recommendation:
+  title: "Parcours séquentiels fréquents sur {{ schemaname }}.{{ relname }}"
+  message: "{{ part_seq | percent }} des accès à {{ relname }} sont des parcours complets, avec {{ lignes_par_parcours | number }} lignes lues en moyenne."
+  impact: high
+  confidence: medium
+  evidence:
+    - seq_scan
+    - idx_scan
+    - n_live_tup
+    - lignes_par_parcours
+  documentation: https://www.postgresql.org/docs/current/indexes.html

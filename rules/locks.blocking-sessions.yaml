@@ -1,0 +1,48 @@
+id: locks.blocking-sessions
+version: 1
+
+name: Session bloquée par un verrou
+description: >
+  Requête en attente d'un verrou détenu par une autre session. Au-delà de quelques secondes,
+  l'attente devient visible par les utilisateurs.
+category: locks
+severity: critical
+group: health
+
+requires:
+  views:
+    - pg_stat_activity
+    - pg_locks
+
+parameters:
+  secondes_maximum: 30
+
+query: |
+  SELECT
+    bloque.pid                                                   AS pid_bloque,
+    bloque.usename                                               AS utilisateur_bloque,
+    left(COALESCE(bloque.query, ''), 300)                        AS requete_bloquee,
+    EXTRACT(EPOCH FROM (now() - bloque.query_start))             AS secondes_attente,
+    bloque.wait_event_type,
+    bloque.wait_event,
+    (SELECT string_agg(DISTINCT p::text, ', ')
+       FROM unnest(pg_blocking_pids(bloque.pid)) AS p)           AS pids_bloquants
+  FROM pg_stat_activity bloque
+  WHERE cardinality(pg_blocking_pids(bloque.pid)) > 0
+
+condition: secondes_attente > secondes_maximum
+
+key:
+  - pid_bloque
+
+recommendation:
+  title: "Session {{ pid_bloque }} bloquée depuis {{ secondes_attente | seconds }}"
+  message: "La session {{ pid_bloque }} attend un verrou détenu par {{ pids_bloquants }} depuis {{ secondes_attente | seconds }} ({{ wait_event_type }} / {{ wait_event }})."
+  impact: high
+  confidence: high
+  evidence:
+    - utilisateur_bloque
+    - requete_bloquee
+    - pids_bloquants
+    - wait_event
+  documentation: https://www.postgresql.org/docs/current/explicit-locking.html
