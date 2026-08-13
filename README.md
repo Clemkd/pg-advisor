@@ -9,6 +9,21 @@ l'interface**.
 L'outil est utile sans aucune extension PostgreSQL et devient plus précis à mesure que
 `pg_stat_statements`, TimescaleDB, `pgstattuple` ou HypoPG sont disponibles.
 
+## Aperçu
+
+| Vue d'ensemble | Recommandations |
+| --- | --- |
+| [![Vue d'ensemble](docs/images/01-tableau-de-bord.png)](docs/APERCU.md#vue-densemble) | [![Recommandations](docs/images/02-recommandations.png)](docs/APERCU.md#recommandations) |
+
+Le plan d'une requête se lit comme un diagramme d'activité : les données remontent des feuilles
+vers la racine, l'épaisseur d'un lien donne les lignes remontées, et chaque compteur est coloré
+selon son poids. Chaque étape se déplie sur place.
+
+[![Plan d'exécution](docs/images/06-plan-execution.png)](docs/APERCU.md#plan-dexécution)
+
+→ [Toutes les captures](docs/APERCU.md) : requêtes multi-instances, valeurs de paramètres
+proposées depuis la base, éditeur de règles, thème clair.
+
 ## Démarrage
 
 ```bash
@@ -146,5 +161,6 @@ de la base, et ne sont jamais renvoyés par l'API ni écrits dans les journaux.
 
 ## Documentation
 
+- [Aperçu de l'interface](docs/APERCU.md) — captures commentées de chaque vue
 - [Descriptif du projet](docs/PROJECT.md) — périmètre, architecture, priorités du MVP
 - [Format des règles](docs/RULES.md) — champs, prérequis, expressions, filtres, handlers, API

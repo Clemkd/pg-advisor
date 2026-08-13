@@ -46,11 +46,21 @@ export function ScoreRing({
           strokeDashoffset={circumference - filled}
         />
       </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className={cn('text-2xl font-semibold tabular-nums', colors.text)}>
+      {/* La légende ne tient pas dans une petite jauge : sous 96 px, le score parle seul plutôt
+          que de déborder de son cercle. */}
+      <div className="absolute flex flex-col items-center leading-none">
+        <span
+          className={cn(
+            'font-semibold tabular-nums',
+            size < 96 ? 'text-lg' : 'text-2xl',
+            colors.text,
+          )}
+        >
           {score === null ? '—' : score}
         </span>
-        <span className="text-ink-faint text-[10px] uppercase tracking-wide">sur 100</span>
+        {size >= 96 && (
+          <span className="text-ink-faint mt-1 text-[10px] tracking-wide uppercase">sur 100</span>
+        )}
       </div>
     </div>
   )
