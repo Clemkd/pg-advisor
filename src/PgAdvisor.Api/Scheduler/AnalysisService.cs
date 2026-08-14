@@ -104,7 +104,7 @@ public sealed class AnalysisService(
         catch (Exception ex)
         {
             var message = Describe(ex);
-            logger.LogWarning("Analyse de l'instance « {Name} » en échec : {Message}", connection.Name, message);
+            logger.LogWarning("Analysis of instance {Name} failed: {Message}", connection.Name, message);
 
             connection.LastError = message;
             connection.LastCollectedAt = DateTimeOffset.UtcNow;
@@ -115,7 +115,7 @@ public sealed class AnalysisService(
             }
             catch (Exception saveError)
             {
-                logger.LogError(saveError, "Enregistrement de l'erreur d'analyse impossible pour l'instance {Id}.", connectionId);
+                logger.LogError(saveError, "Cannot persist the analysis error for instance {Id}.", connectionId);
             }
 
             SetState(connectionId, state => state with
@@ -144,7 +144,7 @@ public sealed class AnalysisService(
         var db = scope.ServiceProvider.GetRequiredService<AdvisorDbContext>();
 
         var connection = await db.PostgresConnections.FirstOrDefaultAsync(c => c.Id == connectionId, cancellationToken)
-            ?? throw new InvalidOperationException("Instance inconnue.");
+            ?? throw new InvalidOperationException("Unknown instance.");
 
         await using var pg = await connectionFactory.OpenAsync(connection, cancellationToken);
         var capabilities = await detector.DetectAsync(pg, cancellationToken);
@@ -231,7 +231,7 @@ public sealed class AnalysisService(
             {
                 // Erreur d'exécution : on ne résout pas les findings de cette règle, ils sont
                 // simplement laissés en l'état jusqu'au prochain passage réussi.
-                logger.LogDebug("Règle {RuleId} non exécutée sur {Instance} : {Error}",
+                logger.LogDebug("Rule {RuleId} did not run on {Instance}: {Error}",
                     rule.Id, connection.Name, result.Error);
             }
         }
@@ -411,7 +411,7 @@ public sealed class AnalysisService(
     {
         PostgresException pg => $"{pg.SqlState} : {pg.MessageText}",
         NpgsqlException npgsql => npgsql.InnerException?.Message ?? npgsql.Message,
-        TimeoutException => "Délai d'attente dépassé.",
+        TimeoutException => "Timed out.",
         _ => exception.Message,
     };
 }

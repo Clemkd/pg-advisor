@@ -27,7 +27,7 @@ public sealed class RuleFileService(
     {
         if (string.IsNullOrWhiteSpace(yaml))
         {
-            return RuleSaveResult.Failed(["Le contenu YAML est vide."]);
+            return RuleSaveResult.Failed(["The YAML content is empty."]);
         }
 
         // Validation avant écriture : le disque ne reçoit que des règles compilables.
@@ -44,8 +44,8 @@ public sealed class RuleFileService(
         if (expectedId is not null && !string.Equals(expectedId, rule.Id, StringComparison.OrdinalIgnoreCase))
         {
             return RuleSaveResult.Failed([
-                $"L'identifiant de la règle ne peut pas changer : « {expectedId} » attendu, « {rule.Id} » fourni. " +
-                "Créez une nouvelle règle si l'identifiant doit être différent."
+                $"The rule identifier cannot change: expected \"{expectedId}\", got \"{rule.Id}\". " +
+                "Create a new rule if the identifier has to be different."
             ]);
         }
 
@@ -63,10 +63,10 @@ public sealed class RuleFileService(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger.LogError(ex, "Écriture de la règle {RuleId} impossible dans {Directory}.", rule.Id, _options.UserRulesDirectory);
+            logger.LogError(ex, "Cannot write rule {RuleId} to {Directory}.", rule.Id, _options.UserRulesDirectory);
             return RuleSaveResult.Failed([
-                $"Écriture impossible dans {_options.UserRulesDirectory} : {ex.Message}. " +
-                "Vérifiez que le volume de données est monté en écriture."
+                $"Cannot write to {_options.UserRulesDirectory}: {ex.Message}. " +
+                "Check that the data volume is mounted writable."
             ]);
         }
         finally
@@ -74,7 +74,7 @@ public sealed class RuleFileService(
             _writeLock.Release();
         }
 
-        logger.LogInformation("Règle {RuleId} enregistrée dans {Path}.", rule.Id, path);
+        logger.LogInformation("Rule {RuleId} saved to {Path}.", rule.Id, path);
 
         // Rechargement immédiat pour que la réponse reflète l'état réellement actif ; la
         // surveillance du répertoire déclencherait de toute façon le même rechargement.
@@ -96,7 +96,7 @@ public sealed class RuleFileService(
         }
 
         File.Delete(path);
-        logger.LogInformation("Règle utilisateur {RuleId} supprimée ({Path}).", id, path);
+        logger.LogInformation("User rule {RuleId} deleted ({Path}).", id, path);
 
         store.Reload();
         return true;
@@ -118,7 +118,7 @@ public sealed class RuleFileService(
         if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
             !path.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"Identifiant de règle refusé : « {id} ».");
+            throw new InvalidOperationException($"Rule identifier rejected: \"{id}\".");
         }
 
         return path;

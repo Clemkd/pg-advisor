@@ -53,7 +53,7 @@ public sealed class SecretProtector
         var bytes = Convert.FromBase64String(payload);
         if (bytes.Length < NonceSize + TagSize)
         {
-            throw new CryptographicException("Payload chiffré tronqué.");
+            throw new CryptographicException("Truncated encrypted payload.");
         }
 
         var nonce = bytes.AsSpan(0, NonceSize);
@@ -83,14 +83,14 @@ public sealed class SecretProtector
             }
 
             throw new InvalidOperationException(
-                $"La clé de chiffrement {path} est invalide ({existing.Length} octets au lieu de {KeySize}). " +
-                "La supprimer invalide les mots de passe enregistrés : ils devront être ressaisis.");
+                $"The encryption key {path} is invalid ({existing.Length} bytes instead of {KeySize}). " +
+                "Deleting it invalidates the stored passwords: they will have to be entered again.");
         }
 
         var key = RandomNumberGenerator.GetBytes(KeySize);
         File.WriteAllBytes(path, key);
         RestrictPermissions(path);
-        logger.LogInformation("Clé de chiffrement des secrets créée dans {Path}", path);
+        logger.LogInformation("Secret encryption key created at {Path}", path);
         return key;
     }
 

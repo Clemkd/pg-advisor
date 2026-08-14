@@ -54,7 +54,7 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
             if (!ruleIds.Contains(candidate.RuleId))
             {
                 // Ne devrait pas arriver ; garde-fou contre une résolution erronée en aval.
-                logger.LogWarning("Finding produit par la règle {RuleId} non déclarée comme exécutée : ignoré.",
+                logger.LogWarning("Finding produced by rule {RuleId}, which was not reported as executed: ignored.",
                     candidate.RuleId);
                 continue;
             }
@@ -65,7 +65,7 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
             {
                 finding = Create(connectionId, candidate, now);
                 db.Findings.Add(finding);
-                db.FindingHistory.Add(History(finding, null, FindingStatus.Active, now, "Détecté"));
+                db.FindingHistory.Add(History(finding, null, FindingStatus.Active, now, "Detected"));
                 result.Created.Add(finding);
                 continue;
             }
@@ -79,7 +79,7 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
                 finding.Status = FindingStatus.Active;
                 finding.ResolvedAt = null;
                 finding.DetectedAt = now;
-                db.FindingHistory.Add(History(finding, FindingStatus.Resolved, FindingStatus.Active, now, "Réapparu"));
+                db.FindingHistory.Add(History(finding, FindingStatus.Resolved, FindingStatus.Active, now, "Reappeared"));
                 result.Created.Add(finding);
             }
             else if (finding.Status == FindingStatus.Active)
@@ -99,7 +99,7 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
 
             finding.Status = FindingStatus.Resolved;
             finding.ResolvedAt = now;
-            db.FindingHistory.Add(History(finding, FindingStatus.Active, FindingStatus.Resolved, now, "Plus détecté"));
+            db.FindingHistory.Add(History(finding, FindingStatus.Active, FindingStatus.Resolved, now, "No longer detected"));
             result.Resolved.Add(finding);
         }
 
@@ -127,7 +127,7 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
         db.Findings.RemoveRange(orphans);
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("{Count} findings supprimés : leur règle n'existe plus.", orphans.Count);
+        logger.LogInformation("{Count} findings deleted: their rule no longer exists.", orphans.Count);
         return orphans.Count;
     }
 
@@ -164,8 +164,8 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
         db.FindingHistory.Add(History(finding, previous, status, now, note, actor));
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Finding {FindingId} passé de {From} à {To} par {Actor}.",
-            findingId, previous, status, actor ?? "le système");
+        logger.LogInformation("Finding {FindingId} moved from {From} to {To} by {Actor}.",
+            findingId, previous, status, actor ?? "the system");
 
         return finding;
     }

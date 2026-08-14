@@ -79,10 +79,10 @@ public class RuleLoaderTests
     }
 
     [Theory]
-    [InlineData("id: MAJUSCULES", "minuscules")]
-    [InlineData("category: inexistante", "Catégorie")]
-    [InlineData("severity: fatale", "Sévérité")]
-    [InlineData("group: inconnu", "Groupe")]
+    [InlineData("id: MAJUSCULES", "lowercase")]
+    [InlineData("category: inexistante", "category")]
+    [InlineData("severity: fatale", "severity")]
+    [InlineData("group: inconnu", "group")]
     [InlineData("version: 0", "version")]
     public void MetadonneesInvalidesSontSignalees(string replacement, string expectedFragment)
     {
@@ -119,7 +119,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("une seule requête", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("a single query", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("Condition invalide", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("Invalid condition", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("Handler", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("Unknown handler", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("soit « handler »", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("or \"handler\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("prérequis", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("requirement", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -44,7 +44,7 @@ public sealed class EventBus(ILogger<EventBus> logger)
 
         var id = Guid.NewGuid();
         _subscribers[id] = channel;
-        logger.LogDebug("Abonné SSE {Id} connecté ({Count} au total).", id, _subscribers.Count);
+        logger.LogDebug("SSE subscriber {Id} connected ({Count} in total).", id, _subscribers.Count);
 
         return new Subscription(this, id, channel.Reader);
     }
@@ -66,7 +66,7 @@ public sealed class EventBus(ILogger<EventBus> logger)
         if (_subscribers.TryRemove(id, out var channel))
         {
             channel.Writer.TryComplete();
-            logger.LogDebug("Abonné SSE {Id} déconnecté ({Count} restants).", id, _subscribers.Count);
+            logger.LogDebug("SSE subscriber {Id} disconnected ({Count} remaining).", id, _subscribers.Count);
         }
     }
 

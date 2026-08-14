@@ -202,7 +202,7 @@ public sealed record FunctionExpr(string Name, IReadOnlyList<Expr> Arguments) : 
                     .Contains(ValueOps.ToInvariantString(values.ElementAtOrDefault(1)), StringComparison.OrdinalIgnoreCase);
 
             default:
-                throw new ExpressionException($"Fonction inconnue : {Name}()");
+                throw new ExpressionException($"Unknown function: {Name}()");
         }
     }
 

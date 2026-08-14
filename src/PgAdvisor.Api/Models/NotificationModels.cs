@@ -29,7 +29,7 @@ public sealed record NotificationConfigurationResponse
 public sealed record SaveNotificationRequest
 {
     [Required, MaxLength(64), RegularExpression(@"^[a-z0-9][a-z0-9._-]*$",
-        ErrorMessage = "L'identifiant doit être en minuscules (lettres, chiffres, point, tiret, souligné).")]
+        ErrorMessage = "The identifier must be lowercase (letters, digits, dot, dash, underscore).")]
     public string Key { get; init; } = string.Empty;
 
     [Required, MaxLength(2048)]

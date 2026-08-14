@@ -32,7 +32,7 @@ public sealed class NotificationQueue(ILogger<NotificationQueue> logger)
     {
         if (!_channel.Writer.TryWrite(request))
         {
-            logger.LogWarning("File de notifications saturée : demande {Event} pour le finding {FindingId} abandonnée.",
+            logger.LogWarning("Notification queue is full: request {Event} for finding {FindingId} dropped.",
                 request.Event, request.FindingId);
         }
     }

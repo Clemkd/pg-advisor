@@ -155,7 +155,7 @@ public static class ValueOps
                 return ToBool(value);
 
             default:
-                throw new ExpressionException($"Cast inconnu : ::{type}");
+                throw new ExpressionException($"Unknown cast: ::{type}");
         }
     }
 }

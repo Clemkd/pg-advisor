@@ -116,7 +116,7 @@ public sealed class RulesController(
     [HttpPost("validate")]
     public ActionResult<ValidateRuleResponse> Validate(SaveRuleRequest request)
     {
-        var compilation = loader.Compile(request.Yaml, "(éditeur)", RuleOrigin.User);
+        var compilation = loader.Compile(request.Yaml, "(editor)", RuleOrigin.User);
 
         return Ok(new ValidateRuleResponse(
             compilation.Rule is not null,
@@ -128,7 +128,7 @@ public sealed class RulesController(
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<RuleDetailResponse>> Create(SaveRuleRequest request, CancellationToken ct)
     {
-        var compilation = loader.Compile(request.Yaml, "(éditeur)", RuleOrigin.User);
+        var compilation = loader.Compile(request.Yaml, "(editor)", RuleOrigin.User);
         if (compilation.Rule is null)
         {
             return ValidationProblem(compilation.Errors);
@@ -137,7 +137,7 @@ public sealed class RulesController(
         if (store.Current.Find(compilation.Rule.Id) is not null)
         {
             return Problem(statusCode: StatusCodes.Status409Conflict,
-                title: $"Une règle « {compilation.Rule.Id} » existe déjà. Modifiez-la ou choisissez un autre identifiant.");
+                title: $"A rule named \"{compilation.Rule.Id}\" already exists. Edit it, or pick another identifier.");
         }
 
         return await SaveAsync(request.Yaml, expectedId: null, ct);
@@ -172,8 +172,8 @@ public sealed class RulesController(
             }
 
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: "Cette règle est fournie avec l'application et ne peut pas être supprimée. " +
-                       "Désactivez-la par une surcharge, ou remplacez-la par une version utilisateur.");
+                title: "This rule ships with the application and cannot be deleted. " +
+                       "Disable it with an override, or replace it with a user-defined version.");
         }
 
         files.DeleteUserRule(id);
@@ -215,7 +215,7 @@ public sealed class RulesController(
         if (!string.IsNullOrWhiteSpace(request.Yaml))
         {
             // Aperçu du YAML en cours d'édition, pas nécessairement enregistré.
-            var compilation = loader.Compile(request.Yaml, "(éditeur)", RuleOrigin.User);
+            var compilation = loader.Compile(request.Yaml, "(editor)", RuleOrigin.User);
             if (compilation.Rule is null)
             {
                 return ValidationProblem(compilation.Errors);
@@ -234,7 +234,7 @@ public sealed class RulesController(
 
         if (!await db.PostgresConnections.AnyAsync(c => c.Id == request.ConnectionId, ct))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Instance inconnue.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Unknown instance.");
         }
 
         try
@@ -259,7 +259,7 @@ public sealed class RulesController(
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
-            logger.LogWarning("Aperçu de la règle {RuleId} impossible : {Message}", id, ex.Message);
+            logger.LogWarning("Cannot preview rule {RuleId}: {Message}", id, ex.Message);
             return Ok(new DryRunResponse { Error = ex.Message });
         }
     }
@@ -278,13 +278,13 @@ public sealed class RulesController(
 
         if (request.Severity is not null && !Severities.IsValid(request.Severity.ToLowerInvariant()))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Sévérité inconnue.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Unknown severity.");
         }
 
         if (request.ConnectionId is int connectionId &&
             !await db.PostgresConnections.AnyAsync(c => c.Id == connectionId, ct))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Instance inconnue.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Unknown instance.");
         }
 
         var unknownParameters = (request.Parameters ?? [])
@@ -295,7 +295,7 @@ public sealed class RulesController(
         if (unknownParameters.Count > 0)
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Seuils inconnus pour cette règle : {string.Join(", ", unknownParameters)}.");
+                title: $"Unknown thresholds for this rule: {string.Join(", ", unknownParameters)}.");
         }
 
         var existing = await db.RuleOverrides
@@ -442,10 +442,10 @@ public sealed class RulesController(
     };
 
     private const string NewRuleTemplate = """
-        id: categorie.sujet
+        id: category.subject
         version: 1
 
-        name: Titre court de la règle
+        name: Short rule title
         category: performance
         severity: warning
         group: recommendations
@@ -455,7 +455,7 @@ public sealed class RulesController(
             - pg_stat_user_tables
 
         parameters:
-          seuil: 0.2
+          threshold: 0.2
 
         query: |
           SELECT
@@ -467,15 +467,15 @@ public sealed class RulesController(
           FROM pg_stat_user_tables
           WHERE n_live_tup > 10000
 
-        condition: ratio > seuil
+        condition: ratio > threshold
 
         key:
           - schemaname
           - relname
 
         recommendation:
-          title: "Titre du diagnostic"
-          message: "{{ relname }} présente {{ ratio | percent }} de lignes mortes."
+          title: "Finding title"
+          message: "{{ relname }} holds {{ ratio | percent }} dead rows."
           impact: medium
           confidence: high
           sql: "VACUUM (ANALYZE) {{ schemaname }}.{{ relname }};"

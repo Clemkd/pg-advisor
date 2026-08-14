@@ -59,7 +59,7 @@ public sealed record QueryAnalysisResult
 /// traduit en réponse exploitable par l'interface, qui demande alors les valeurs manquantes.
 /// </summary>
 public sealed class MissingQueryParametersException(int required, int supplied)
-    : Exception($"Cette requête attend {required} valeur(s) de paramètre ; {supplied} fournie(s).")
+    : Exception($"This query expects {required} parameter value(s); {supplied} supplied.")
 {
     public int Required { get; } = required;
     public int Supplied { get; } = supplied;
@@ -219,7 +219,7 @@ public sealed partial class QueryAnalysisService(
         if (!ReferenceEquals(withoutExplain, trimmed))
         {
             trimmed = withoutExplain;
-            notes.Add("Le préfixe EXPLAIN de la requête a été retiré avant l'analyse.");
+            notes.Add("The EXPLAIN prefix was removed from the query before analysis.");
         }
 
         // Les textes de pg_stat_statements sont normalisés : leurs littéraux sont remplacés par
@@ -238,21 +238,21 @@ public sealed partial class QueryAnalysisService(
 
             trimmed = SubstituteParameters(trimmed, supplied);
             notes.Add(
-                $"{placeholders} paramètre(s) remplacé(s) par les valeurs fournies : le plan dépend de ces valeurs " +
-                "et peut différer pour d'autres.");
+                $"{placeholders} parameter(s) replaced with the supplied values: the plan depends on those values " +
+                "and may differ for others.");
         }
 
         if (!SqlGuard.Validate(trimmed, out var guardError))
         {
             throw new InvalidOperationException(
-                $"Requête refusée : {guardError} L'analyse est réservée aux requêtes de lecture.");
+                $"Query rejected: {guardError} Analysis is limited to read-only queries.");
         }
 
         await using var pg = await factory.OpenAsync(connection, cancellationToken);
 
         notes.Add(
-            "La requête a été réellement exécutée pour mesurer les temps. La transaction est annulée " +
-            "et la session est en lecture seule : aucune écriture n'est possible.");
+            "The query was actually executed to measure timings. The transaction is rolled back " +
+            "and the session is read-only: no write is possible.");
 
         var textPlan = await RunExplainAsync(pg, trimmed, buffers, "TEXT", cancellationToken);
         var jsonPlan = await RunExplainAsync(pg, trimmed, buffers, "JSON", cancellationToken);
@@ -265,9 +265,9 @@ public sealed partial class QueryAnalysisService(
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             // Un plan illisible ne doit pas priver l'opérateur de la vue texte.
-            logger.LogWarning(ex, "Plan JSON illisible pour l'instance {Instance}.", connection.Name);
+            logger.LogWarning(ex, "Unreadable JSON plan for instance {Instance}.", connection.Name);
             parsed = new ExplainPlan();
-            notes.Add("Le plan JSON n'a pas pu être analysé ; seule la vue texte est disponible.");
+            notes.Add("The JSON plan could not be parsed; only the text view is available.");
         }
 
         return new QueryAnalysisResult
@@ -445,7 +445,7 @@ public sealed partial class QueryAnalysisService(
         {
             // Transaction déjà terminée ou connexion perdue : sans conséquence, la connexion
             // est de toute façon fermée juste après.
-            logger.LogDebug(ex, "Annulation de la transaction d'analyse sans effet.");
+            logger.LogDebug(ex, "Rolling back the analysis transaction had no effect.");
         }
     }
 }

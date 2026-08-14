@@ -62,7 +62,7 @@ public sealed class RuleStore(
                 if (accepted.TryGetValue(rule.Id, out var existing))
                 {
                     errors.Add(new RuleLoadError(rule.SourcePath, rule.Id,
-                        $"Identifiant déjà défini par {existing.SourcePath} : règle ignorée.", rule.Origin));
+                        $"Identifier already defined by {existing.SourcePath}: rule ignored.", rule.Origin));
                     continue;
                 }
 
@@ -76,7 +76,7 @@ public sealed class RuleStore(
                 if (accepted.TryGetValue(rule.Id, out var existing) && existing.Origin == RuleOrigin.User)
                 {
                     errors.Add(new RuleLoadError(rule.SourcePath, rule.Id,
-                        $"Identifiant déjà défini par {existing.SourcePath} : règle ignorée.", rule.Origin));
+                        $"Identifier already defined by {existing.SourcePath}: rule ignored.", rule.Origin));
                     continue;
                 }
 
@@ -84,7 +84,7 @@ public sealed class RuleStore(
                 {
                     shadowed.Add(rule.Id);
                     logger.LogInformation(
-                        "La règle {RuleId} définie dans {Path} remplace la règle fournie du même identifiant.",
+                        "Rule {RuleId} defined in {Path} overrides the provided rule with the same identifier.",
                         rule.Id, rule.SourcePath);
                 }
 
@@ -105,16 +105,16 @@ public sealed class RuleStore(
 
         if (snapshot.Errors.Count == 0)
         {
-            logger.LogInformation("{Count} règles chargées.", snapshot.Rules.Count);
+            logger.LogInformation("{Count} rules loaded.", snapshot.Rules.Count);
         }
         else
         {
-            logger.LogWarning("{Count} règles chargées, {ErrorCount} en erreur.",
+            logger.LogWarning("{Count} rules loaded, {ErrorCount} in error.",
                 snapshot.Rules.Count, snapshot.Errors.Count);
 
             foreach (var error in snapshot.Errors)
             {
-                logger.LogWarning("Règle {RuleId} ({Path}) : {Message}",
+                logger.LogWarning("Rule {RuleId} ({Path}): {Message}",
                     error.RuleId ?? "?", Path.GetFileName(error.Path), error.Message);
             }
         }
@@ -126,7 +126,7 @@ public sealed class RuleStore(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Un abonné au rechargement des règles a échoué.");
+            logger.LogError(ex, "A rule reload subscriber failed.");
         }
 
         return snapshot;

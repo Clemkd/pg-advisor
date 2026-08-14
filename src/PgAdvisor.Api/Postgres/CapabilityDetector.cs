@@ -103,7 +103,7 @@ public sealed class CapabilityDetector(ILogger<CapabilityDetector> logger)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
-            throw new InvalidOperationException("L'instance n'a retourné aucune information d'identité.");
+            throw new InvalidOperationException("The instance returned no identity information.");
         }
 
         return (
@@ -153,7 +153,7 @@ public sealed class CapabilityDetector(ILogger<CapabilityDetector> logger)
         catch (PostgresException ex)
         {
             // Certaines offres managées restreignent cette vue : information simplement absente.
-            logger.LogDebug(ex, "pg_available_extensions inaccessible ; liste des extensions installables ignorée.");
+            logger.LogDebug(ex, "pg_available_extensions is not accessible; the installable extension list is skipped.");
         }
 
         return result;

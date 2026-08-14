@@ -83,10 +83,10 @@ public sealed class PgConnectionFactory(
         {
             // Ne jamais journaliser le contenu chiffré : seul l'identifiant de connexion est tracé.
             logger.LogError(ex,
-                "Impossible de déchiffrer le secret de la connexion {ConnectionId} ; ressaisir le mot de passe.",
+                "Cannot decrypt the secret of connection {ConnectionId}; the password must be entered again.",
                 connection.Id);
             throw new InvalidOperationException(
-                "Le secret enregistré est illisible (clé de chiffrement changée ?). Ressaisir le mot de passe.");
+                "The stored secret is unreadable (encryption key changed?). Enter the password again.");
         }
     }
 }

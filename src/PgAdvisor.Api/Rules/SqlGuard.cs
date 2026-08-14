@@ -15,14 +15,14 @@ public static class SqlGuard
 
         if (stripped.Length == 0)
         {
-            error = "La requête est vide.";
+            error = "The query is empty.";
             return false;
         }
 
         var withoutTrailing = stripped.TrimEnd().TrimEnd(';').TrimEnd();
         if (withoutTrailing.Contains(';'))
         {
-            error = "Une règle ne peut contenir qu'une seule requête : « ; » interdit en dehors de la fin.";
+            error = "A rule may contain a single query only: \";\" is not allowed except at the end.";
             return false;
         }
 
@@ -32,7 +32,7 @@ public static class SqlGuard
             !firstWord.Equals("table", StringComparison.OrdinalIgnoreCase) &&
             !firstWord.Equals("explain", StringComparison.OrdinalIgnoreCase))
         {
-            error = $"La requête doit commencer par SELECT, WITH, TABLE ou EXPLAIN (trouvé « {firstWord} »).";
+            error = $"The query must start with SELECT, WITH, TABLE or EXPLAIN (found \"{firstWord}\").";
             return false;
         }
 

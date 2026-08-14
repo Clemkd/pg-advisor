@@ -20,7 +20,7 @@ public sealed record ParameterSuggestion
     /// <summary>Valeur proposée, ou null si rien n'a pu être trouvé.</summary>
     public string? Value { get; init; }
 
-    /// <summary>« statistiques » (valeur la plus fréquente) ou « échantillon » (première ligne lue).</summary>
+    /// <summary>« statistics » (valeur la plus fréquente) ou « sample » (première ligne lue).</summary>
     public string? Source { get; init; }
 }
 
@@ -224,7 +224,7 @@ public sealed partial class QueryParameterSuggester(
 
             if (await command.ExecuteScalarAsync(cancellationToken) is string frequent)
             {
-                return (frequent, "statistiques");
+                return (frequent, "statistics");
             }
 
             // Identifiants issus du catalogue, échappés malgré tout : une relation peut porter
@@ -241,14 +241,14 @@ public sealed partial class QueryParameterSuggester(
                 CommandTimeout = (int)_scheduler.QueryTimeout.TotalSeconds,
             };
 
-            return (await fallback.ExecuteScalarAsync(cancellationToken) as string, "échantillon");
+            return (await fallback.ExecuteScalarAsync(cancellationToken) as string, "sample");
         }
         catch (PostgresException ex)
         {
             // Droits manquants ou type sans représentation textuelle : l'opérateur saisira la
             // valeur lui-même, ce n'est pas une raison d'échouer sur toute la requête.
-            logger.LogDebug(ex, "Aucune valeur proposable pour {Schema}.{Table}.{Column}.", schema, table, column);
-            return (null, "statistiques");
+            logger.LogDebug(ex, "No value can be suggested for {Schema}.{Table}.{Column}.", schema, table, column);
+            return (null, "statistics");
         }
     }
 

@@ -44,7 +44,7 @@ public sealed class NotificationsController(
 
         if (await db.NotificationConfigurations.AnyAsync(c => c.Key == request.Key, ct))
         {
-            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Cet identifiant de webhook est déjà utilisé.");
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "This webhook identifier is already taken.");
         }
 
         var configuration = new NotificationConfiguration
@@ -63,7 +63,7 @@ public sealed class NotificationsController(
         db.NotificationConfigurations.Add(configuration);
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Webhook « {Key} » créé.", configuration.Key);
+        logger.LogInformation("Webhook {Key} created.", configuration.Key);
         return CreatedAtAction(nameof(List), null, ToResponse(configuration, null));
     }
 
@@ -85,7 +85,7 @@ public sealed class NotificationsController(
 
         if (await db.NotificationConfigurations.AnyAsync(c => c.Key == request.Key && c.Id != id, ct))
         {
-            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Cet identifiant de webhook est déjà utilisé.");
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "This webhook identifier is already taken.");
         }
 
         configuration.Key = request.Key;
@@ -119,7 +119,7 @@ public sealed class NotificationsController(
         db.NotificationConfigurations.Remove(configuration);
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Webhook « {Key} » supprimé.", configuration.Key);
+        logger.LogInformation("Webhook {Key} deleted.", configuration.Key);
         return NoContent();
     }
 
@@ -199,32 +199,32 @@ public sealed class NotificationsController(
         if (!Severities.IsValid(request.MinimumSeverity.ToLowerInvariant()))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Sévérité minimale inconnue. Valeurs acceptées : {Severities.Info}, {Severities.Warning}, {Severities.Critical}.");
+                title: $"Unknown minimum severity. Accepted values: {Severities.Info}, {Severities.Warning}, {Severities.Critical}.");
         }
 
         if (!NotificationFormats.IsValid(request.Format?.ToLowerInvariant()))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Format inconnu. Valeurs acceptées : {string.Join(", ", NotificationFormats.All)}.");
+                title: $"Unknown format. Accepted values: {string.Join(", ", NotificationFormats.All)}.");
         }
 
         var events = NormalizeEvents(request.Events);
         if (events.Count == 0)
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Au moins un événement doit être souscrit.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "At least one event must be subscribed.");
         }
 
         var unknown = events.Where(e => !NotificationEvents.IsValid(e)).ToList();
         if (unknown.Count > 0)
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Événements inconnus : {string.Join(", ", unknown)}.");
+                title: $"Unknown events: {string.Join(", ", unknown)}.");
         }
 
         if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "L'URL doit être absolue et en http ou https.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "The URL must be absolute and use http or https.");
         }
 
         return null;

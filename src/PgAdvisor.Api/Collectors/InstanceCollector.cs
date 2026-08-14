@@ -83,7 +83,7 @@ public sealed class InstanceCollector(ILogger<InstanceCollector> logger)
         }
         catch (PostgresException ex)
         {
-            logger.LogDebug(ex, "Collecte de pg_stat_activity impossible ; métriques d'activité ignorées.");
+            logger.LogDebug(ex, "Cannot collect pg_stat_activity; activity metrics skipped.");
             return metrics;
         }
     }
@@ -124,7 +124,7 @@ public sealed class InstanceCollector(ILogger<InstanceCollector> logger)
         }
         catch (PostgresException ex)
         {
-            logger.LogDebug(ex, "Collecte de pg_stat_database impossible ; statistiques de base ignorées.");
+            logger.LogDebug(ex, "Cannot collect pg_stat_database; database statistics skipped.");
             return metrics;
         }
     }
@@ -140,7 +140,7 @@ public sealed class InstanceCollector(ILogger<InstanceCollector> logger)
         }
         catch (PostgresException ex)
         {
-            logger.LogDebug(ex, "pg_database_size indisponible ; taille de base ignorée.");
+            logger.LogDebug(ex, "pg_database_size is unavailable; database size skipped.");
             return 0;
         }
     }

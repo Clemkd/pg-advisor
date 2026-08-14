@@ -62,7 +62,7 @@ public sealed class RuleWatcher(
                     var current = ComputeFingerprint();
                     if (current != fingerprint)
                     {
-                        logger.LogDebug("Changement de règles détecté par relevé d'empreinte.");
+                        logger.LogDebug("Rule change detected by fingerprint polling.");
                         shouldReload = true;
                     }
                 }
@@ -79,7 +79,7 @@ public sealed class RuleWatcher(
                 catch (Exception ex)
                 {
                     // Un rechargement raté laisse le jeu de règles précédent en place.
-                    logger.LogError(ex, "Rechargement des règles impossible ; le jeu précédent reste actif.");
+                    logger.LogError(ex, "Cannot reload the rules; the previous rule set stays active.");
                 }
 
                 fingerprint = ComputeFingerprint();
@@ -128,7 +128,7 @@ public sealed class RuleWatcher(
     {
         if (!Directory.Exists(directory))
         {
-            logger.LogInformation("Répertoire de règles {Directory} absent : non surveillé.", directory);
+            logger.LogInformation("Rules directory {Directory} does not exist: not watched.", directory);
             return null;
         }
 
@@ -145,15 +145,15 @@ public sealed class RuleWatcher(
             watcher.Deleted += OnFileEvent;
             watcher.Renamed += OnFileEvent;
             watcher.Error += (_, args) =>
-                logger.LogWarning(args.GetException(), "Surveillance de {Directory} interrompue ; le relevé périodique prend le relais.", directory);
+                logger.LogWarning(args.GetException(), "Watching {Directory} stopped; periodic polling takes over.", directory);
 
             watcher.EnableRaisingEvents = true;
-            logger.LogInformation("Surveillance des règles active sur {Directory}.", directory);
+            logger.LogInformation("Rule watching active on {Directory}.", directory);
             return watcher;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Surveillance de {Directory} impossible ; le relevé périodique prend le relais.", directory);
+            logger.LogWarning(ex, "Cannot watch {Directory}; periodic polling takes over.", directory);
             return null;
         }
     }
@@ -198,7 +198,7 @@ public sealed class RuleWatcher(
             }
             catch (IOException ex)
             {
-                logger.LogDebug(ex, "Énumération de {Directory} impossible pour le relevé d'empreinte.", directory);
+                logger.LogDebug(ex, "Cannot enumerate {Directory} for the fingerprint.", directory);
                 continue;
             }
 

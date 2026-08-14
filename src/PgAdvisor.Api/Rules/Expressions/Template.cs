@@ -26,7 +26,7 @@ public sealed class Template
                 var close = source.IndexOf("}}", index + 2, StringComparison.Ordinal);
                 if (close < 0)
                 {
-                    throw new ExpressionException($"Interpolation non fermée à la position {index} : « }}}} » manquant.");
+                    throw new ExpressionException($"Unclosed interpolation at position {index}: missing \"}}}}\".");
                 }
 
                 if (literal.Length > 0)
@@ -99,7 +99,7 @@ public sealed class Template
     {
         if (string.IsNullOrWhiteSpace(body))
         {
-            throw new ExpressionException("Interpolation vide : {{ }}.");
+            throw new ExpressionException("Empty interpolation: {{ }}.");
         }
 
         var parts = SplitFilters(body);
@@ -121,7 +121,7 @@ public sealed class Template
             if (!KnownFilters.Contains(name))
             {
                 throw new ExpressionException(
-                    $"Filtre inconnu « {name} ». Disponibles : {string.Join(", ", KnownFilters.Order())}.");
+                    $"Unknown filter \"{name}\". Available: {string.Join(", ", KnownFilters.Order())}.");
             }
 
             filters.Add(new FilterSpec(name, argument));
@@ -271,7 +271,7 @@ public sealed class Template
             < 60_000 => $"{(milliseconds / 1_000).ToString("0.##", CultureInfo.InvariantCulture)} s",
             < 3_600_000 => $"{(milliseconds / 60_000).ToString("0.#", CultureInfo.InvariantCulture)} min",
             < 86_400_000 => $"{(milliseconds / 3_600_000).ToString("0.#", CultureInfo.InvariantCulture)} h",
-            _ => $"{(milliseconds / 86_400_000).ToString("0.#", CultureInfo.InvariantCulture)} j",
+            _ => $"{(milliseconds / 86_400_000).ToString("0.#", CultureInfo.InvariantCulture)} d",
         };
     }
 

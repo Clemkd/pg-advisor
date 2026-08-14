@@ -59,14 +59,14 @@ public sealed class DatabaseInitializer(
         if (provided)
         {
             logger.LogInformation(
-                "Compte administrateur « {Username} » créé avec le mot de passe fourni par la configuration.",
+                "Administrator account {Username} created with the password supplied by the configuration.",
                 username);
         }
         else
         {
             logger.LogWarning(
-                "Compte administrateur créé. Identifiant : {Username} — mot de passe : {Password}\n" +
-                "Ce mot de passe n'est affiché qu'une seule fois ; changez-le après la première connexion.",
+                "Administrator account created. Username: {Username} - password: {Password}\n" +
+                "This password is shown only once; change it after the first sign-in.",
                 username, password);
         }
     }

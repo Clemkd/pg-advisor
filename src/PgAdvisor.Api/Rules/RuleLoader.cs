@@ -38,13 +38,13 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
         }
         catch (YamlException ex)
         {
-            var location = ex.Start.Line > 0 ? $" (ligne {ex.Start.Line})" : string.Empty;
-            return new RuleCompilation(null, [$"YAML invalide{location} : {ex.Message}"]);
+            var location = ex.Start.Line > 0 ? $" (line {ex.Start.Line})" : string.Empty;
+            return new RuleCompilation(null, [$"Invalid YAML{location}: {ex.Message}"]);
         }
 
         if (definition is null)
         {
-            return new RuleCompilation(null, ["Le fichier est vide."]);
+            return new RuleCompilation(null, ["The file is empty."]);
         }
 
         var errors = new List<string>();
@@ -52,46 +52,46 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
         // --- Identité et métadonnées -----------------------------------------
         if (string.IsNullOrWhiteSpace(definition.Id))
         {
-            errors.Add("Le champ « id » est obligatoire.");
+            errors.Add("The \"id\" field is required.");
         }
         else if (!RuleIdPattern.IsMatch(definition.Id))
         {
-            errors.Add($"L'identifiant « {definition.Id} » doit être en minuscules et ne contenir que lettres, chiffres, point, tiret ou souligné.");
+            errors.Add($"Identifier \"{definition.Id}\" must be lowercase and contain only letters, digits, dot, dash or underscore.");
         }
 
         if (string.IsNullOrWhiteSpace(definition.Name))
         {
-            errors.Add("Le champ « name » est obligatoire.");
+            errors.Add("The \"name\" field is required.");
         }
 
         if (!RuleCategories.IsValid(definition.Category))
         {
-            errors.Add($"Catégorie « {definition.Category} » inconnue. Valeurs acceptées : {string.Join(", ", RuleCategories.All)}.");
+            errors.Add($"Unknown category \"{definition.Category}\". Accepted values: {string.Join(", ", RuleCategories.All)}.");
         }
 
         if (!Severities.IsValid(definition.Severity?.ToLowerInvariant()))
         {
-            errors.Add($"Sévérité « {definition.Severity} » inconnue. Valeurs acceptées : {Severities.Info}, {Severities.Warning}, {Severities.Critical}.");
+            errors.Add($"Unknown severity \"{definition.Severity}\". Accepted values: {Severities.Info}, {Severities.Warning}, {Severities.Critical}.");
         }
 
         if (definition.Group is not null && !RuleGroups.IsValid(definition.Group))
         {
-            errors.Add($"Groupe « {definition.Group} » inconnu. Valeurs acceptées : {string.Join(", ", RuleGroups.All)}.");
+            errors.Add($"Unknown group \"{definition.Group}\". Accepted values: {string.Join(", ", RuleGroups.All)}.");
         }
 
         if (definition.Version <= 0)
         {
-            errors.Add("Le champ « version » doit être un entier positif.");
+            errors.Add("The \"version\" field must be a positive integer.");
         }
 
         if (definition.IntervalSeconds is int interval && (interval < 5 || interval > 86_400))
         {
-            errors.Add("« intervalSeconds » doit être compris entre 5 et 86400.");
+            errors.Add("\"intervalSeconds\" must be between 5 and 86400.");
         }
 
         if (definition.Limit is int limit && (limit < 1 || limit > 1_000))
         {
-            errors.Add("« limit » doit être compris entre 1 et 1000.");
+            errors.Add("\"limit\" must be between 1 and 1000.");
         }
 
         // --- Source des lignes ------------------------------------------------
@@ -100,17 +100,17 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
 
         if (hasQuery && hasHandler)
         {
-            errors.Add("Une règle utilise soit « query », soit « handler », pas les deux.");
+            errors.Add("A rule uses either \"query\" or \"handler\", not both.");
         }
 
         if (hasQuery && !SqlGuard.Validate(definition.Query!, out var sqlError))
         {
-            errors.Add($"Requête refusée : {sqlError}");
+            errors.Add($"Query rejected: {sqlError}");
         }
 
         if (hasHandler && !handlers.Contains(definition.Handler!))
         {
-            errors.Add($"Handler « {definition.Handler} » inconnu. Disponibles : {string.Join(", ", handlers.All.Select(h => h.Name))}.");
+            errors.Add($"Unknown handler \"{definition.Handler}\". Available: {string.Join(", ", handlers.All.Select(h => h.Name))}.");
         }
 
         if (!hasQuery && !hasHandler)
@@ -127,7 +127,7 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
 
             if (!hasRequirement)
             {
-                errors.Add("Une règle sans « query » ni « handler » doit déclarer au moins un prérequis dans « requires » : sinon elle produirait un finding permanent sans diagnostic.");
+                errors.Add("A rule with neither \"query\" nor \"handler\" must declare at least one requirement under \"requires\": otherwise it would produce a permanent finding with nothing to diagnose.");
             }
         }
 
@@ -141,14 +141,14 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
             }
             else
             {
-                errors.Add($"Condition invalide : {conditionError}");
+                errors.Add($"Invalid condition: {conditionError}");
             }
         }
 
         var recommendation = definition.Recommendation;
         if (recommendation is null || string.IsNullOrWhiteSpace(recommendation.Title))
         {
-            errors.Add("Le bloc « recommendation » doit au moins contenir un « title ».");
+            errors.Add("The \"recommendation\" block must contain at least a \"title\".");
         }
 
         Template? titleTemplate = null;
@@ -160,7 +160,7 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
             if (!string.IsNullOrWhiteSpace(recommendation.Title) &&
                 !Template.TryParse(recommendation.Title, out titleTemplate, out var titleError))
             {
-                errors.Add($"« recommendation.title » invalide : {titleError}");
+                errors.Add($"Invalid \"recommendation.title\": {titleError}");
             }
 
             // Message facultatif : à défaut, le titre fait office de message.
@@ -171,34 +171,34 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
             if (!string.IsNullOrWhiteSpace(messageSource) &&
                 !Template.TryParse(messageSource, out messageTemplate, out var messageError))
             {
-                errors.Add($"« recommendation.message » invalide : {messageError}");
+                errors.Add($"Invalid \"recommendation.message\": {messageError}");
             }
 
             if (!string.IsNullOrWhiteSpace(recommendation.Sql) &&
                 !Template.TryParse(recommendation.Sql, out sqlTemplate, out var remediationError))
             {
-                errors.Add($"« recommendation.sql » invalide : {remediationError}");
+                errors.Add($"Invalid \"recommendation.sql\": {remediationError}");
             }
 
             if (recommendation.Impact is not null && !IsQualifier(recommendation.Impact))
             {
-                errors.Add("« recommendation.impact » doit valoir low, medium ou high.");
+                errors.Add("\"recommendation.impact\" must be low, medium or high.");
             }
 
             if (recommendation.Confidence is not null && !IsQualifier(recommendation.Confidence))
             {
-                errors.Add("« recommendation.confidence » doit valoir low, medium ou high.");
+                errors.Add("\"recommendation.confidence\" must be low, medium or high.");
             }
 
             if (!string.IsNullOrWhiteSpace(recommendation.Documentation))
             {
                 if (!Uri.TryCreate(recommendation.Documentation, UriKind.Absolute, out var documentationUri))
                 {
-                    errors.Add("« recommendation.documentation » doit être une URL absolue.");
+                    errors.Add("\"recommendation.documentation\" must be an absolute URL.");
                 }
                 else if (documentationUri.Scheme != Uri.UriSchemeHttp && documentationUri.Scheme != Uri.UriSchemeHttps)
                 {
-                    errors.Add("« recommendation.documentation » doit utiliser http ou https.");
+                    errors.Add("\"recommendation.documentation\" must use http or https.");
                 }
             }
         }
@@ -209,7 +209,7 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
         {
             if (pair.Value is IEnumerable<object> or IDictionary<object, object>)
             {
-                errors.Add($"Le paramètre « {pair.Key} » doit être une valeur scalaire.");
+                errors.Add($"Parameter \"{pair.Key}\" must be a scalar value.");
                 continue;
             }
 
@@ -249,7 +249,7 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
 
         if (!Directory.Exists(directory))
         {
-            logger.LogInformation("Répertoire de règles {Directory} absent : ignoré.", directory);
+            logger.LogInformation("Rules directory {Directory} does not exist: skipped.", directory);
             return (rules, errors);
         }
 
@@ -268,7 +268,7 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
             }
             catch (IOException ex)
             {
-                errors.Add(new RuleLoadError(file, null, $"Lecture impossible : {ex.Message}", origin));
+                errors.Add(new RuleLoadError(file, null, $"Cannot read the file: {ex.Message}", origin));
                 continue;
             }
 

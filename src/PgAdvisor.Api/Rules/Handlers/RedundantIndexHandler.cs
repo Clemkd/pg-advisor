@@ -12,7 +12,7 @@ public sealed class RedundantIndexHandler : IRuleHandler
     public string Name => "indexes.redundant";
 
     public string Description =>
-        "Index couverts par un autre index de la même table (colonnes : schemaname, tablename, " +
+        "Indexes covered by another index on the same table (columns: schemaname, tablename, " +
         "indexname, covering_index, index_bytes, columns).";
 
     private const string Sql = """

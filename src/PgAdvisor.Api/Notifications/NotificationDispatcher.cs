@@ -33,7 +33,7 @@ public sealed class NotificationDispatcher(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Traitement de la notification {Event} du finding {FindingId} en échec.",
+                    logger.LogError(ex, "Handling of notification {Event} for finding {FindingId} failed.",
                         request.Event, request.FindingId);
                 }
             }
@@ -85,7 +85,7 @@ public sealed class NotificationDispatcher(
 
             if (alreadyNotified)
             {
-                logger.LogDebug("Notification {Event} du finding {FindingId} déjà envoyée à {Webhook} : ignorée.",
+                logger.LogDebug("Notification {Event} for finding {FindingId} already sent to {Webhook}: skipped.",
                     request.Event, finding.Id, configuration.Key);
                 continue;
             }
@@ -159,7 +159,7 @@ public sealed class NotificationDispatcher(
             if (!success && attempts < Math.Max(1, _options.MaxRetries))
             {
                 var delay = _options.RetryDelay * attempts;
-                logger.LogWarning("Webhook {Webhook} en échec ({Error}) ; nouvelle tentative dans {Delay}.",
+                logger.LogWarning("Webhook {Webhook} failed ({Error}); retrying in {Delay}.",
                     configuration.Key, error, delay);
 
                 try
@@ -204,17 +204,17 @@ public sealed class NotificationDispatcher(
         catch (DbUpdateException ex)
         {
             // Course avec un autre envoi du même événement : la contrainte d'unicité a joué son rôle.
-            logger.LogDebug(ex, "Historique de notification déjà enregistré pour le finding {FindingId}.", finding.Id);
+            logger.LogDebug(ex, "Notification history already recorded for finding {FindingId}.", finding.Id);
         }
 
         if (success)
         {
-            logger.LogInformation("Notification {Event} du finding {FindingId} envoyée à {Webhook}.",
+            logger.LogInformation("Notification {Event} for finding {FindingId} sent to {Webhook}.",
                 request.Event, finding.Id, configuration.Key);
         }
         else
         {
-            logger.LogWarning("Notification {Event} du finding {FindingId} abandonnée après {Attempts} tentative(s) : {Error}",
+            logger.LogWarning("Notification {Event} for finding {FindingId} given up after {Attempts} attempt(s): {Error}",
                 request.Event, finding.Id, attempts, error);
         }
     }

@@ -89,7 +89,7 @@ public sealed record PlanNode
 
             if (IndexName is not null)
             {
-                target = target is null ? IndexName : $"{IndexName} sur {target}";
+                target = target is null ? IndexName : $"{IndexName} on {target}";
             }
 
             return target is null ? NodeType : $"{NodeType} — {target}";
@@ -133,7 +133,7 @@ public static class ExplainPlanParser
 
         if (!root.TryGetProperty("Plan", out var planElement))
         {
-            throw new InvalidOperationException("Plan JSON inattendu : propriété « Plan » absente.");
+            throw new InvalidOperationException("Unexpected JSON plan: the \"Plan\" property is missing.");
         }
 
         var nodes = new List<PlanNode>();
@@ -311,16 +311,16 @@ public static class ExplainPlanParser
             warnings.Add(new PlanWarning(
                 "seq-scan",
                 "warning",
-                $"Parcours séquentiel sur {node.RelationName ?? "une relation"} volumineuse : un index ciblé éviterait la lecture complète."));
+                $"Sequential scan over a large {node.RelationName ?? "relation"}: a targeted index would avoid reading it in full."));
         }
 
         if (node.EstimationFactor is { } factor && Math.Abs(factor) >= BadEstimateFactor)
         {
-            var direction = factor > 0 ? "sous-estimé" : "surestimé";
+            var direction = factor > 0 ? "underestimated" : "overestimated";
             warnings.Add(new PlanWarning(
                 "bad-estimate",
                 "warning",
-                $"Nombre de lignes {direction} d'un facteur {Math.Abs(factor):0.#} : des statistiques fraîches ou étendues corrigeraient le plan."));
+                $"Row count {direction} by a factor of {Math.Abs(factor):0.#}: fresh or extended statistics would fix the plan."));
         }
 
         if (node.SelfSharePercent is > SelfTimeShareAlert * 100)
@@ -328,7 +328,7 @@ public static class ExplainPlanParser
             warnings.Add(new PlanWarning(
                 "hotspot",
                 "info",
-                $"Ce nœud concentre {node.SelfSharePercent:0.#} % du temps d'exécution."));
+                $"This node accounts for {node.SelfSharePercent:0.#}% of the execution time."));
         }
 
         if (node.SortSpaceType is not null &&
@@ -337,7 +337,7 @@ public static class ExplainPlanParser
             warnings.Add(new PlanWarning(
                 "sort-on-disk",
                 "warning",
-                $"Tri déversé sur disque ({node.SortSpaceUsedKb} kB) : work_mem est insuffisant pour cette requête."));
+                $"Sort spilled to disk ({node.SortSpaceUsedKb} kB): work_mem is too small for this query."));
         }
 
         if (node.TempWrittenBlocks is > 0)
@@ -345,7 +345,7 @@ public static class ExplainPlanParser
             warnings.Add(new PlanWarning(
                 "temp-blocks",
                 "info",
-                $"{node.TempWrittenBlocks} blocs temporaires écrits : l'opération a débordé de la mémoire de travail."));
+                $"{node.TempWrittenBlocks} temporary blocks written: the operation spilled out of working memory."));
         }
 
         if (node.NodeType == "Nested Loop" && node.ActualLoops is > 10_000)
@@ -353,7 +353,7 @@ public static class ExplainPlanParser
             warnings.Add(new PlanWarning(
                 "many-loops",
                 "warning",
-                $"{node.ActualLoops:0} itérations de boucle imbriquée : une jointure par hachage serait probablement plus efficace."));
+                $"{node.ActualLoops:0} nested loop iterations: a hash join would most likely be more efficient."));
         }
 
         if (node.HeapFetches is > 100_000)
@@ -361,7 +361,7 @@ public static class ExplainPlanParser
             warnings.Add(new PlanWarning(
                 "heap-fetches",
                 "info",
-                $"{node.HeapFetches:0} accès au heap depuis un index only scan : la carte de visibilité est peu à jour, un VACUUM aiderait."));
+                $"{node.HeapFetches:0} heap fetches from an index only scan: the visibility map is stale, a VACUUM would help."));
         }
 
         return warnings;

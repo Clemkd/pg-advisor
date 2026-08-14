@@ -43,7 +43,7 @@ public sealed record LoadedRule
     {
         if (capabilities is null)
         {
-            return new RuleApplicability(false, "Capabilities de l'instance encore inconnues.");
+            return new RuleApplicability(false, "Instance capabilities are not known yet.");
         }
 
         var requires = Definition.Requires;
@@ -56,7 +56,7 @@ public sealed record LoadedRule
         {
             if (!capabilities.HasView(view))
             {
-                return new RuleApplicability(false, $"Vue « {view} » non lisible.");
+                return new RuleApplicability(false, $"View {view} is not readable.");
             }
         }
 
@@ -64,7 +64,7 @@ public sealed record LoadedRule
         {
             if (!capabilities.HasExtension(extension))
             {
-                return new RuleApplicability(false, $"Extension « {extension} » non installée.");
+                return new RuleApplicability(false, $"Extension {extension} is not installed.");
             }
         }
 
@@ -72,28 +72,28 @@ public sealed record LoadedRule
         {
             if (capabilities.HasExtension(extension))
             {
-                return new RuleApplicability(false, $"Extension « {extension} » déjà installée.");
+                return new RuleApplicability(false, $"Extension {extension} is already installed.");
             }
         }
 
         if (requires.MinVersion is int min && !capabilities.MeetsVersion(min))
         {
-            return new RuleApplicability(false, $"PostgreSQL {min} minimum requis (instance {capabilities.ServerVersion}).");
+            return new RuleApplicability(false, $"PostgreSQL {min} or later required (instance runs {capabilities.ServerVersion}).");
         }
 
         if (requires.MaxVersion is int max && capabilities.ServerVersionNum >= (max + 1) * 10_000)
         {
-            return new RuleApplicability(false, $"Règle limitée à PostgreSQL {max} et antérieur.");
+            return new RuleApplicability(false, $"Rule limited to PostgreSQL {max} and earlier.");
         }
 
         if (requires.MonitorRole == true && !capabilities.HasPgMonitor && !capabilities.IsSuperuser)
         {
-            return new RuleApplicability(false, "Rôle pg_monitor ou superutilisateur requis.");
+            return new RuleApplicability(false, "The pg_monitor role or superuser is required.");
         }
 
         if (requires.Primary == true && capabilities.InRecovery)
         {
-            return new RuleApplicability(false, "Instance en recovery : règle réservée au primaire.");
+            return new RuleApplicability(false, "Instance is in recovery: this rule only applies to a primary.");
         }
 
         return RuleApplicability.Applicable;

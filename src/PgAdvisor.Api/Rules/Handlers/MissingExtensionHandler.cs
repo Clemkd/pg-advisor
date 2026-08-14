@@ -9,8 +9,8 @@ public sealed class MissingExtensionHandler : IRuleHandler
     public string Name => "capabilities.missing-extension";
 
     public string Description =>
-        "Une ligne par extension absente listée dans requires.missingExtensions " +
-        "(colonnes : extension, installable, server_version).";
+        "One row per missing extension listed in requires.missingExtensions " +
+        "(columns: extension, installable, server_version).";
 
     public Task<IReadOnlyList<RuleRow>> ExecuteAsync(RuleHandlerContext context, CancellationToken cancellationToken)
     {

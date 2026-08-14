@@ -54,7 +54,7 @@ public sealed class ConnectionsController(
     {
         if (await db.PostgresConnections.AnyAsync(c => c.Name == request.Name, ct))
         {
-            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Ce nom d'instance est déjà utilisé.");
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "This instance name is already taken.");
         }
 
         var connection = new PostgresConnection
@@ -74,7 +74,7 @@ public sealed class ConnectionsController(
         db.PostgresConnections.Add(connection);
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Instance « {Name} » ajoutée ({Host}:{Port}/{Database})",
+        logger.LogInformation("Instance {Name} added ({Host}:{Port}/{Database})",
             connection.Name, connection.Host, connection.Port, connection.Database);
 
         return CreatedAtAction(nameof(Get), new { id = connection.Id }, presenter.ToResponse(connection));
@@ -92,7 +92,7 @@ public sealed class ConnectionsController(
 
         if (await db.PostgresConnections.AnyAsync(c => c.Name == request.Name && c.Id != id, ct))
         {
-            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Ce nom d'instance est déjà utilisé.");
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "This instance name is already taken.");
         }
 
         var targetChanged =
@@ -144,7 +144,7 @@ public sealed class ConnectionsController(
         await db.SaveChangesAsync(ct);
         states.Remove(id);
 
-        logger.LogInformation("Instance « {Name} » supprimée", connection.Name);
+        logger.LogInformation("Instance {Name} deleted", connection.Name);
         return NoContent();
     }
 
@@ -192,7 +192,7 @@ public sealed class ConnectionsController(
         }
         else if (string.IsNullOrEmpty(password))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Mot de passe requis pour tester une nouvelle cible.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "A password is required to test a new target.");
         }
 
         try
@@ -217,7 +217,7 @@ public sealed class ConnectionsController(
         catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
         {
             // Le message d'erreur PostgreSQL ne contient pas le secret ; il est utile à l'opérateur.
-            logger.LogWarning("Test de connexion vers {Host}:{Port}/{Database} en échec : {Reason}",
+            logger.LogWarning("Connection test to {Host}:{Port}/{Database} failed: {Reason}",
                 probe.Host, probe.Port, probe.Database, ex.Message);
 
             return Ok(new TestConnectionResponse { Success = false, Error = ex.Message });
@@ -230,22 +230,22 @@ public sealed class ConnectionsController(
 
         if (!capabilities.HasView("pg_stat_activity"))
         {
-            warnings.Add("pg_stat_activity n'est pas lisible : les règles de connexions et de transactions longues seront désactivées.");
+            warnings.Add("pg_stat_activity is not readable: connection and long-transaction rules will be disabled.");
         }
 
         if (!capabilities.HasView("pg_stat_user_tables"))
         {
-            warnings.Add("pg_stat_user_tables n'est pas lisible : les règles de vacuum et d'index seront désactivées.");
+            warnings.Add("pg_stat_user_tables is not readable: vacuum and index rules will be disabled.");
         }
 
         if (!capabilities.HasExtension("pg_stat_statements"))
         {
-            warnings.Add("pg_stat_statements n'est pas installée : l'analyse des requêtes restera limitée.");
+            warnings.Add("pg_stat_statements is not installed: query analysis will remain limited.");
         }
 
         if (!capabilities.IsSuperuser && !capabilities.HasPgMonitor)
         {
-            warnings.Add("L'utilisateur n'appartient pas à pg_monitor : certaines statistiques des autres sessions resteront masquées.");
+            warnings.Add("The user does not belong to pg_monitor: some statistics from other sessions will stay hidden.");
         }
 
         return warnings;

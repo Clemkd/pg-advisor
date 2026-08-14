@@ -35,7 +35,7 @@ public sealed class ConnectionPresenter(InstanceStateStore states, ILogger<Conne
         }
         catch (JsonException ex)
         {
-            logger.LogDebug(ex, "Capabilities persistées illisibles pour l'instance {ConnectionId}.", connection.Id);
+            logger.LogDebug(ex, "Persisted capabilities are unreadable for instance {ConnectionId}.", connection.Id);
             return null;
         }
     }

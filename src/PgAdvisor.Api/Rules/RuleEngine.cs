@@ -65,7 +65,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
 
         if (!effective.Enabled)
         {
-            return new RuleExecutionResult { RuleId = rule.Id, SkipReason = "Règle désactivée." };
+            return new RuleExecutionResult { RuleId = rule.Id, SkipReason = "Rule is disabled." };
         }
 
         var applicability = rule.EvaluateApplicability(capabilities);
@@ -81,7 +81,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         }
         catch (Exception ex) when (ex is PostgresException or NpgsqlException or TimeoutException or InvalidOperationException)
         {
-            logger.LogWarning("Règle {RuleId} en échec sur l'instance {Instance} : {Message}",
+            logger.LogWarning("Rule {RuleId} failed on instance {Instance}: {Message}",
                 rule.Id, instance.Name, ex.Message);
 
             return new RuleExecutionResult
@@ -113,7 +113,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
                 return new RuleExecutionResult
                 {
                     RuleId = rule.Id,
-                    Error = $"Évaluation de la condition impossible : {ex.Message}",
+                    Error = $"Cannot evaluate the condition: {ex.Message}",
                     RowCount = rows.Count,
                     Duration = stopwatch.Elapsed,
                 };
@@ -131,7 +131,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         if (truncated)
         {
             logger.LogInformation(
-                "Règle {RuleId} : {Limit} findings retenus sur l'instance {Instance}, résultats suivants ignorés (limit).",
+                "Rule {RuleId}: {Limit} findings kept on instance {Instance}, remaining rows ignored (limit).",
                 rule.Id, limit, instance.Name);
         }
 
@@ -160,7 +160,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         if (!string.IsNullOrWhiteSpace(rule.Definition.Handler))
         {
             var handler = handlers.Find(rule.Definition.Handler!)
-                ?? throw new InvalidOperationException($"Handler « {rule.Definition.Handler} » introuvable.");
+                ?? throw new InvalidOperationException($"Handler \"{rule.Definition.Handler}\" not found.");
 
             var context = new RuleHandlerContext(effective, connection, capabilities, instance);
             return await handler.ExecuteAsync(context, cancellationToken);
@@ -322,7 +322,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         DateTimeOffset dateTimeOffset => dateTimeOffset.ToUniversalTime().ToString("o"),
         TimeSpan span => span.ToString(),
         Guid guid => guid.ToString(),
-        byte[] bytes => $"({bytes.Length} octets)",
+        byte[] bytes => $"({bytes.Length} bytes)",
         System.Collections.IEnumerable enumerable => string.Join(", ",
             enumerable.Cast<object?>().Select(item => ValueOps.ToInvariantString(item))),
         _ => ValueOps.ToInvariantString(value),

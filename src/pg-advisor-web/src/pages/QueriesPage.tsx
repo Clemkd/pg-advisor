@@ -359,9 +359,11 @@ function AnalysisModal({
                     key={index}
                     label={suggestion?.column ? `$${index + 1} · ${suggestion.column}` : `$${index + 1}`}
                     hint={
-                      suggestion?.source === 'statistiques'
+                      // `source` est une donnée de l'API, en anglais comme tout le backend ;
+                      // seul le libellé affiché dépend de la langue de l'interface.
+                      suggestion?.source === 'statistics'
                         ? 'valeur la plus fréquente'
-                        : suggestion?.source === 'échantillon'
+                        : suggestion?.source === 'sample'
                           ? 'valeur existante'
                           : undefined
                     }

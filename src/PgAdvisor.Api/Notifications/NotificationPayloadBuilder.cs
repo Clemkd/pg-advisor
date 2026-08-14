@@ -40,18 +40,18 @@ public static class NotificationPayloadBuilder
             NotificationFormats.Discord => new
             {
                 username = "PostgreSQL Advisor",
-                content = $"Test d'envoi depuis PostgreSQL Advisor (webhook « {configuration.Key} »).",
+                content = $"Test delivery from PostgreSQL Advisor (webhook \"{configuration.Key}\").",
             },
             NotificationFormats.Slack => new
             {
-                text = $"Test d'envoi depuis PostgreSQL Advisor (webhook « {configuration.Key} »).",
+                text = $"Test delivery from PostgreSQL Advisor (webhook \"{configuration.Key}\").",
             },
             _ => new
             {
                 webhook = configuration.Key,
                 @event = "test",
                 at = DateTimeOffset.UtcNow,
-                message = "Test d'envoi depuis PostgreSQL Advisor.",
+                message = "Test delivery from PostgreSQL Advisor.",
             },
         };
 
@@ -102,16 +102,16 @@ public static class NotificationPayloadBuilder
         var fields = new List<object>
         {
             new { name = "Instance", value = Truncate(instance.Name, DiscordFieldValueMax), inline = true },
-            new { name = "Catégorie", value = finding.Category, inline = true },
-            new { name = "Sévérité", value = finding.Severity, inline = true },
+            new { name = "Category", value = finding.Category, inline = true },
+            new { name = "Severity", value = finding.Severity, inline = true },
         };
 
         if (!string.IsNullOrWhiteSpace(finding.TargetKey))
         {
-            fields.Add(new { name = "Objet", value = Truncate(finding.TargetKey, DiscordFieldValueMax), inline = false });
+            fields.Add(new { name = "Target", value = Truncate(finding.TargetKey, DiscordFieldValueMax), inline = false });
         }
 
-        fields.Add(new { name = "Règle", value = Truncate(finding.RuleId, DiscordFieldValueMax), inline = true });
+        fields.Add(new { name = "Rule", value = Truncate(finding.RuleId, DiscordFieldValueMax), inline = true });
 
         if (!string.IsNullOrWhiteSpace(finding.Impact))
         {
@@ -122,10 +122,10 @@ public static class NotificationPayloadBuilder
         {
             // Bloc de code Discord : les backticks encadrent le SQL correctif.
             var sql = Truncate(finding.RemediationSql, DiscordFieldValueMax - 12);
-            fields.Add(new { name = "Correctif proposé", value = $"```sql\n{sql}\n```", inline = false });
+            fields.Add(new { name = "Suggested fix", value = $"```sql\n{sql}\n```", inline = false });
         }
 
-        var prefix = resolved ? "Résolu" : Prefix(finding.Severity);
+        var prefix = resolved ? "Resolved" : Prefix(finding.Severity);
 
         return new
         {
@@ -149,24 +149,24 @@ public static class NotificationPayloadBuilder
     private static object BuildSlack(Finding finding, PostgresConnection instance, string @event)
     {
         var resolved = @event == NotificationEvents.FindingResolved;
-        var prefix = resolved ? "Résolu" : Prefix(finding.Severity);
+        var prefix = resolved ? "Resolved" : Prefix(finding.Severity);
 
         var fields = new List<object>
         {
             new { title = "Instance", value = instance.Name, @short = true },
-            new { title = "Catégorie", value = finding.Category, @short = true },
-            new { title = "Règle", value = finding.RuleId, @short = true },
-            new { title = "Sévérité", value = finding.Severity, @short = true },
+            new { title = "Category", value = finding.Category, @short = true },
+            new { title = "Rule", value = finding.RuleId, @short = true },
+            new { title = "Severity", value = finding.Severity, @short = true },
         };
 
         if (!string.IsNullOrWhiteSpace(finding.TargetKey))
         {
-            fields.Add(new { title = "Objet", value = finding.TargetKey, @short = false });
+            fields.Add(new { title = "Target", value = finding.TargetKey, @short = false });
         }
 
         if (!resolved && !string.IsNullOrWhiteSpace(finding.RemediationSql))
         {
-            fields.Add(new { title = "Correctif proposé", value = $"```{finding.RemediationSql}```", @short = false });
+            fields.Add(new { title = "Suggested fix", value = $"```{finding.RemediationSql}```", @short = false });
         }
 
         return new
@@ -190,9 +190,9 @@ public static class NotificationPayloadBuilder
 
     private static string Prefix(string severity) => severity switch
     {
-        Severities.Critical => "Critique",
-        Severities.Warning => "Avertissement",
-        _ => "Information",
+        Severities.Critical => "Critical",
+        Severities.Warning => "Warning",
+        _ => "Info",
     };
 
     private static int Color(string severity) => severity switch

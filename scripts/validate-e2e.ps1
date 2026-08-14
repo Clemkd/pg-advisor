@@ -28,7 +28,8 @@ $ErrorActionPreference = 'Continue'
 $repository = Split-Path -Parent $PSScriptRoot
 Set-Location $repository
 
-# Les libellés sont accentués : sans cela, la sortie est illisible sur une console en page de code héritée.
+# Les textes renvoyés par l'API sont en UTF-8 : sans cela, la sortie est illisible sur une
+# console en page de code héritée.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # 127.0.0.1 plutôt que localhost : ce dernier résout d'abord en ::1, et le mappage IPv6 de
@@ -45,36 +46,36 @@ function Show([string]$label, $value) {
 }
 
 # --- Prérequis ---------------------------------------------------------------
-Step 'Prérequis'
+Step 'Prerequisites'
 $daemon = docker version --format '{{.Server.Version}}' 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Output '  Le daemon Docker ne répond pas. Démarrez Docker Desktop puis relancez.'
+    Write-Output '  The Docker daemon is not responding. Start Docker Desktop, then run again.'
     exit 1
 }
-Show 'daemon Docker' $daemon
+Show 'Docker daemon' $daemon
 
 $testInstances = @(docker compose -f docker-compose.test.yml ps --format '{{.Service}}:{{.State}}' 2>&1)
 # Parenthèses indispensables : « $tableau -notmatch » renvoie les éléments non concordants,
 # ce qui serait toujours vrai dès qu'un autre service est listé.
 if (-not ($testInstances -match 'pg-full:running')) {
-    Write-Output '  Instances de test absentes. Lancez : docker compose -f docker-compose.test.yml up -d'
+    Write-Output '  Test instances are missing. Run: docker compose -f docker-compose.test.yml up -d'
     exit 1
 }
-Show 'instances de test' ($testInstances -join ' ')
+Show 'test instances' ($testInstances -join ' ')
 
 # --- Jeu de données ----------------------------------------------------------
 if (-not $SkipSeed) {
-    Step 'Alimentation de l''instance de test'
+    Step 'Seeding the test instance'
     Get-Content (Join-Path $PSScriptRoot 'seed-test-data.sql') -Raw |
         docker exec -i pg-advisor-pg-full-1 psql -U postgres -d shop 2>&1 |
         Select-String -Pattern 'ERROR|ERREUR' |
         Select-Object -First 5 |
-        ForEach-Object { Show 'erreur SQL' $_.Line }
-    Show 'jeu de données appliqué' 'oui'
+        ForEach-Object { Show 'SQL error' $_.Line }
+    Show 'seed data applied' 'yes'
 }
 
 # --- Image et conteneur ------------------------------------------------------
-Step 'Construction de l''image et démarrage du conteneur'
+Step 'Building the image and starting the container'
 docker compose up -d --build 2>&1 | Select-Object -Last 5 | ForEach-Object { Show 'compose' $_ }
 
 $ready = $false
@@ -85,19 +86,19 @@ for ($i = 0; $i -lt 60; $i++) {
         break
     } catch { Start-Sleep -Seconds 3 }
 }
-Show 'API disponible' $ready
+Show 'API available' $ready
 if (-not $ready) {
     docker compose logs --tail 40 pg-advisor
     exit 1
 }
 
 # --- Authentification --------------------------------------------------------
-Step 'Authentification'
+Step 'Authentication'
 $logs = docker compose logs pg-advisor 2>&1 | Out-String
-$match = [regex]::Match($logs, 'mot de passe : (\S+)')
+$match = [regex]::Match($logs, 'password: (\S+)')
 if (-not $match.Success) {
-    Write-Output '  Mot de passe de bootstrap introuvable dans les journaux.'
-    Write-Output '  Si le conteneur a déjà servi, réutilisez le mot de passe existant ou supprimez le volume.'
+    Write-Output '  Bootstrap password not found in the logs.'
+    Write-Output '  If the container has already been used, reuse the existing password or delete the volume.'
     exit 1
 }
 
@@ -105,8 +106,8 @@ $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $login = Invoke-RestMethod 'http://127.0.0.1:8080/api/auth/login' -Method Post `
     -Body (@{ username = 'admin'; password = $match.Groups[1].Value } | ConvertTo-Json) `
     -ContentType 'application/json' -WebSession $session -TimeoutSec 15
-Show 'compte' ($login.username + ' (' + $login.role + ')')
-Show 'changement de mot de passe imposé' $login.mustChangePassword
+Show 'account' ($login.username + ' (' + $login.role + ')')
+Show 'password change required' $login.mustChangePassword
 
 # --- Test de connexion -------------------------------------------------------
 # host.docker.internal : les PostgreSQL de test tournent dans une autre stack compose.
@@ -115,7 +116,7 @@ $targets = @(
     @{ Name = 'Staging'; Port = 55433; Database = 'billing' }
 )
 
-Step 'Test de connexion et détection des capacités'
+Step 'Connection test and capability detection'
 foreach ($target in $targets) {
     $probe = @{
         host = 'host.docker.internal'; port = $target.Port; database = $target.Database
@@ -125,19 +126,19 @@ foreach ($target in $targets) {
     $result = Invoke-RestMethod 'http://127.0.0.1:8080/api/connections/test' -Method Post `
         -Body $probe -ContentType 'application/json' -WebSession $session -TimeoutSec 30
 
-    Show $target.Name ('succès=' + $result.success + ' PostgreSQL ' + $result.serverVersion +
-        ' TimescaleDB=' + $result.timescaleVersion + ' lecture seule=' + $result.readOnlyEnforced)
-    if ($result.error) { Show '  erreur' $result.error }
+    Show $target.Name ('success=' + $result.success + ' PostgreSQL ' + $result.serverVersion +
+        ' TimescaleDB=' + $result.timescaleVersion + ' read only=' + $result.readOnlyEnforced)
+    if ($result.error) { Show '  error' $result.error }
 
     $available = ($result.capabilities | Where-Object { $_.available })
     $missing = ($result.capabilities | Where-Object { -not $_.available })
-    Show '  capacités' ($available.Count.ToString() + ' disponibles, ' + $missing.Count + ' absentes')
-    Show '  absentes' (($missing | ForEach-Object { $_.name }) -join ', ')
-    foreach ($warning in $result.warnings) { Show '  avertissement' $warning }
+    Show '  capabilities' ($available.Count.ToString() + ' available, ' + $missing.Count + ' missing')
+    Show '  missing' (($missing | ForEach-Object { $_.name }) -join ', ')
+    foreach ($warning in $result.warnings) { Show '  warning' $warning }
 }
 
 # --- Enregistrement ----------------------------------------------------------
-Step 'Enregistrement des instances'
+Step 'Registering the instances'
 $ids = @{}
 foreach ($target in $targets) {
     $payload = @{
@@ -150,16 +151,16 @@ foreach ($target in $targets) {
         $created = Invoke-RestMethod 'http://127.0.0.1:8080/api/connections' -Method Post `
             -Body $payload -ContentType 'application/json' -WebSession $session -TimeoutSec 20
         $ids[$target.Name] = $created.id
-        Show $target.Name ('enregistrée, id=' + $created.id)
+        Show $target.Name ('registered, id=' + $created.id)
     } catch {
         # Une instance du même nom existe déjà : on récupère son identifiant.
         $existing = (Invoke-RestMethod 'http://127.0.0.1:8080/api/connections' -WebSession $session) |
             Where-Object { $_.name -eq $target.Name }
         if ($existing) {
             $ids[$target.Name] = $existing.id
-            Show $target.Name ('déjà enregistrée, id=' + $existing.id)
+            Show $target.Name ('already registered, id=' + $existing.id)
         } else {
-            Show ('ERREUR ' + $target.Name) $_
+            Show ('ERROR ' + $target.Name) $_
         }
     }
 }
@@ -174,17 +175,17 @@ try {
 
     $webhook = Invoke-RestMethod 'http://127.0.0.1:8080/api/notifications' -Method Post `
         -Body $hook -ContentType 'application/json' -WebSession $session -TimeoutSec 15
-    Show 'webhook enregistré' $webhook.key
+    Show 'webhook registered' $webhook.key
 
     $test = Invoke-RestMethod ('http://127.0.0.1:8080/api/notifications/' + $webhook.id + '/test') `
         -Method Post -WebSession $session -TimeoutSec 20
-    Show 'test d''envoi' ('succès=' + $test.success + ' HTTP ' + $test.statusCode)
+    Show 'test delivery' ('success=' + $test.success + ' HTTP ' + $test.statusCode)
 } catch {
-    Show 'webhook' 'déjà configuré ou en erreur'
+    Show 'webhook' 'already configured or failing'
 }
 
 # --- Analyse -----------------------------------------------------------------
-Step 'Attente de la première analyse complète'
+Step 'Waiting for the first full analysis'
 $deadline = (Get-Date).AddMinutes($AnalysisTimeoutMinutes)
 $dashboard = $null
 
@@ -195,43 +196,43 @@ while ((Get-Date) -lt $deadline) {
     } catch { continue }
 
     $collected = ($dashboard.instances | Where-Object { $_.lastCollectedAt }).Count
-    Show 'progression' ('instances collectées=' + $collected + '/' + $targets.Count +
-        ' findings actifs=' + $dashboard.summary.active + ' santé=' + $dashboard.globalHealth)
+    Show 'progress' ('instances collected=' + $collected + '/' + $targets.Count +
+        ' active findings=' + $dashboard.summary.active + ' health=' + $dashboard.globalHealth)
 
     if ($dashboard.summary.active -gt 0 -and $collected -eq $targets.Count) { break }
 }
 
 # --- Résultat ----------------------------------------------------------------
-Step 'Résultat'
+Step 'Result'
 if ($dashboard) {
-    Show 'santé globale' ($dashboard.globalHealth.ToString() + '/100')
-    Show 'findings actifs' ('critiques=' + $dashboard.summary.critical +
-        ' avertissements=' + $dashboard.summary.warning + ' informations=' + $dashboard.summary.info)
-    Show 'règles' ($dashboard.rules.total.ToString() + ' chargées, ' +
-        $dashboard.rules.errors.Count + ' en erreur')
+    Show 'global health' ($dashboard.globalHealth.ToString() + '/100')
+    Show 'active findings' ('critical=' + $dashboard.summary.critical +
+        ' warnings=' + $dashboard.summary.warning + ' info=' + $dashboard.summary.info)
+    Show 'rules' ($dashboard.rules.total.ToString() + ' loaded, ' +
+        $dashboard.rules.errors.Count + ' in error')
     foreach ($ruleError in $dashboard.rules.errors) {
-        Show '  règle refusée' ($ruleError.ruleId + ' : ' + $ruleError.message)
+        Show '  rejected rule' ($ruleError.ruleId + ': ' + $ruleError.message)
     }
 
     foreach ($instance in $dashboard.instances) {
         $timescale = $instance.timescaleVersion ? (' / TimescaleDB ' + $instance.timescaleVersion) : ''
         Write-Output ''
         Write-Output ('  --- ' + $instance.name + ' (PostgreSQL ' + $instance.serverVersion + $timescale + ')')
-        Show '  état' $instance.collectionState
-        if ($instance.lastError) { Show '  erreur' $instance.lastError }
-        Show '  santé' ($instance.health.global.ToString() + '/100')
+        Show '  state' $instance.collectionState
+        if ($instance.lastError) { Show '  error' $instance.lastError }
+        Show '  health' ($instance.health.global.ToString() + '/100')
         if ($instance.metrics) {
-            Show '  activité' ('connexions=' + $instance.metrics.connections + '/' +
+            Show '  activity' ('connections=' + $instance.metrics.connections + '/' +
                 $instance.metrics.maxConnections +
                 ' cache=' + [math]::Round($instance.metrics.cacheHitRatio * 100, 1) + '%' +
-                ' taille=' + [math]::Round($instance.metrics.databaseSizeBytes / 1MB, 1) + ' Mio')
+                ' size=' + [math]::Round($instance.metrics.databaseSizeBytes / 1MB, 1) + ' MiB')
         }
         $categories = $instance.health.categories.PSObject.Properties | Sort-Object { $_.Value }
-        Show '  catégories notées' (($categories | ForEach-Object { $_.Name + '=' + $_.Value }) -join ' ')
+        Show '  scored categories' (($categories | ForEach-Object { $_.Name + '=' + $_.Value }) -join ' ')
     }
 }
 
-Step 'Recommandations détectées'
+Step 'Detected recommendations'
 try {
     $page = Invoke-RestMethod 'http://127.0.0.1:8080/api/findings?status=active&pageSize=60' `
         -WebSession $session -TimeoutSec 20
@@ -241,17 +242,17 @@ try {
             ' | ' + $finding.ruleId)
         Write-Output ('             ' + $finding.message)
     }
-} catch { Show 'ERREUR' $_ }
+} catch { Show 'ERROR' $_ }
 
 Step 'Notifications'
 try {
     $history = Invoke-RestMethod 'http://127.0.0.1:8080/api/notifications/history' -WebSession $session -TimeoutSec 15
-    Show 'historique' ($history.Count.ToString() + ' entrées, ' +
-        ($history | Where-Object { $_.success }).Count + ' réussies')
+    Show 'history' ($history.Count.ToString() + ' entries, ' +
+        ($history | Where-Object { $_.success }).Count + ' succeeded')
     $received = docker logs pg-advisor-webhook-echo-1 2>&1 | Select-String -Pattern 'new_finding' |
         Measure-Object -Line
-    Show 'requêtes vues par le récepteur' $received.Lines
-} catch { Show 'ERREUR' $_ }
+    Show 'requests seen by the receiver' $received.Lines
+} catch { Show 'ERROR' $_ }
 
 # --- Aperçus de règles -------------------------------------------------------
 # Chaque règle est exécutée à blanc sur les deux instances : c'est la seule façon de vérifier
@@ -259,7 +260,7 @@ try {
 $allRules = Invoke-RestMethod 'http://127.0.0.1:8080/api/rules' -WebSession $session -TimeoutSec 20
 
 foreach ($target in $targets) {
-    Step ('Exécution à blanc des ' + $allRules.Count + ' règles sur ' + $target.Name)
+    Step ('Dry run of the ' + $allRules.Count + ' rules on ' + $target.Name)
     $failures = 0
     $skipped = 0
 
@@ -271,41 +272,41 @@ foreach ($target in $targets) {
 
             if ($dry.error) {
                 $failures++
-                Show $rule.id ('ERREUR SQL : ' + $dry.error)
+                Show $rule.id ('SQL ERROR: ' + $dry.error)
             } elseif ($dry.skipReason) {
                 $skipped++
-                Show $rule.id ('ignorée — ' + $dry.skipReason)
+                Show $rule.id ('skipped - ' + $dry.skipReason)
             } else {
-                Show $rule.id ('lignes=' + $dry.rowCount + ' findings=' + $dry.findings.Count +
-                    ' en ' + [math]::Round($dry.durationMs) + ' ms')
+                Show $rule.id ('rows=' + $dry.rowCount + ' findings=' + $dry.findings.Count +
+                    ' in ' + [math]::Round($dry.durationMs) + ' ms')
             }
         } catch {
             $failures++
-            Show $rule.id ('appel en échec : ' + $_)
+            Show $rule.id ('call failed: ' + $_)
         }
     }
 
     Write-Output ''
-    Show 'bilan' ($allRules.Count.ToString() + ' règles, ' + $skipped + ' ignorées faute de capacité, ' +
-        $failures + ' en erreur SQL')
+    Show 'summary' ($allRules.Count.ToString() + ' rules, ' + $skipped + ' skipped for missing capability, ' +
+        $failures + ' with SQL errors')
 }
 
 # --- Zero-touch --------------------------------------------------------------
-Step 'Vérification du principe zero-touch'
+Step 'Zero-touch verification'
 $extensions = docker exec pg-advisor-pg-full-1 psql -U postgres -d shop -At `
     -c "SELECT string_agg(extname, ', ' ORDER BY extname) FROM pg_extension" 2>&1
-Show 'extensions présentes' $extensions
-Show 'attendu' 'plpgsql, timescaledb, pg_stat_statements (créées par le jeu de test uniquement)'
+Show 'extensions present' $extensions
+Show 'expected' 'plpgsql, timescaledb, pg_stat_statements (created by the test seed only)'
 
 $settings = docker exec pg-advisor-pg-full-1 psql -U postgres -d shop -At `
     -c "SELECT count(*) FROM pg_settings WHERE source NOT IN ('default', 'override', 'command line', 'configuration file', 'environment variable', 'client')" 2>&1
-Show 'paramètres modifiés hors configuration' $settings
+Show 'settings changed outside configuration' $settings
 
-Step 'Journaux du conteneur'
+Step 'Container logs'
 docker compose logs pg-advisor 2>&1 |
     Select-String -Pattern 'warn|fail|Unhandled|Exception' |
     Select-Object -Last 12 |
     ForEach-Object { Write-Output ('  ' + $_.Line) }
 
 Write-Output ''
-Write-Output 'Validation terminée. Interface : http://localhost:8080'
+Write-Output 'Validation complete. UI: http://localhost:8080'

@@ -66,7 +66,7 @@ public sealed class EventsController(EventBus bus, ILogger<EventsController> log
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Flux SSE interrompu.");
+            logger.LogDebug(ex, "SSE stream interrupted.");
         }
     }
 

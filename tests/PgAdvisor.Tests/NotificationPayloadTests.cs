@@ -84,10 +84,10 @@ public class NotificationPayloadTests
             .ToDictionary(f => f.GetProperty("name").GetString()!, f => f.GetProperty("value").GetString()!);
 
         Assert.Equal("Production", fields["Instance"]);
-        Assert.Equal("vacuum", fields["Catégorie"]);
-        Assert.Equal("public/commandes", fields["Objet"]);
-        Assert.Equal("vacuum.dead-tuples", fields["Règle"]);
-        Assert.Contains("VACUUM (ANALYZE)", fields["Correctif proposé"]);
+        Assert.Equal("vacuum", fields["Category"]);
+        Assert.Equal("public/commandes", fields["Target"]);
+        Assert.Equal("vacuum.dead-tuples", fields["Rule"]);
+        Assert.Contains("VACUUM (ANALYZE)", fields["Suggested fix"]);
     }
 
     [Fact]
@@ -99,14 +99,14 @@ public class NotificationPayloadTests
 
         var embed = json.GetProperty("embeds").EnumerateArray().Single();
         Assert.Equal(0x059669, embed.GetProperty("color").GetInt32());
-        Assert.StartsWith("Résolu", embed.GetProperty("title").GetString());
+        Assert.StartsWith("Resolved", embed.GetProperty("title").GetString());
 
         var names = embed.GetProperty("fields").EnumerateArray()
             .Select(f => f.GetProperty("name").GetString())
             .ToList();
 
         // Proposer un correctif pour un problème déjà résolu n'aurait pas de sens.
-        Assert.DoesNotContain("Correctif proposé", names);
+        Assert.DoesNotContain("Suggested fix", names);
     }
 
     [Theory]

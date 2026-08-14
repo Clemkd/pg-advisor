@@ -23,8 +23,8 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
         // Message identique quel que soit le motif : pas d'énumération des comptes.
         if (user is null || !PasswordHasher.Verify(request.Password, user.PasswordHash, out var needsRehash))
         {
-            logger.LogWarning("Échec d'authentification pour « {Username} »", request.Username);
-            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Identifiants invalides.");
+            logger.LogWarning("Authentication failed for {Username}", request.Username);
+            return Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Invalid credentials.");
         }
 
         if (needsRehash)
@@ -36,7 +36,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
         await db.SaveChangesAsync(ct);
 
         await SignInAsync(user);
-        logger.LogInformation("Connexion de « {Username} »", user.Username);
+        logger.LogInformation("{Username} signed in", user.Username);
 
         return Ok(new CurrentUserResponse(user.Id, user.Username, user.Role, user.MustChangePassword));
     }
@@ -74,14 +74,14 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
 
         if (!PasswordHasher.Verify(request.CurrentPassword, user.PasswordHash, out _))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Mot de passe actuel incorrect.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Current password is incorrect.");
         }
 
         user.PasswordHash = PasswordHasher.Hash(request.NewPassword);
         user.MustChangePassword = false;
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Mot de passe changé pour « {Username} »", user.Username);
+        logger.LogInformation("Password changed for {Username}", user.Username);
         return NoContent();
     }
 
@@ -103,12 +103,12 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
     {
         if (!Roles.IsValid(request.Role))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Rôle inconnu.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Unknown role.");
         }
 
         if (await db.Users.AnyAsync(u => u.Username == request.Username, ct))
         {
-            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Cet identifiant est déjà utilisé.");
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "This username is already taken.");
         }
 
         var user = new User
@@ -140,7 +140,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
         {
             if (!Roles.IsValid(request.Role))
             {
-                return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Rôle inconnu.");
+                return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Unknown role.");
             }
 
             // Ne pas se retrouver sans administrateur.
@@ -148,7 +148,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
                 await db.Users.CountAsync(u => u.Role == Roles.Admin, ct) == 1)
             {
                 return Problem(statusCode: StatusCodes.Status400BadRequest,
-                    title: "Le dernier administrateur ne peut pas être rétrogradé.");
+                    title: "The last administrator cannot be demoted.");
             }
 
             user.Role = request.Role;
@@ -177,7 +177,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
         if (user.Role == Roles.Admin && await db.Users.CountAsync(u => u.Role == Roles.Admin, ct) == 1)
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: "Le dernier administrateur ne peut pas être supprimé.");
+                title: "The last administrator cannot be deleted.");
         }
 
         db.Users.Remove(user);

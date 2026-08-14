@@ -55,8 +55,8 @@ public sealed class QueriesController(
             return Ok(new
             {
                 available = false,
-                reason = "pg_stat_statements n'est pas installée sur cette instance : le classement des requêtes " +
-                         "n'est pas disponible. Vous pouvez analyser une requête saisie manuellement.",
+                reason = "pg_stat_statements is not installed on this instance: the query ranking is not " +
+                         "available. You can still analyze a query you type in manually.",
                 items = Array.Empty<TopQuery>(),
             });
         }
@@ -64,7 +64,7 @@ public sealed class QueriesController(
         if (!QueryAnalysisService.SortKeys.Contains(sort, StringComparer.OrdinalIgnoreCase))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Critère de tri inconnu. Valeurs acceptées : {string.Join(", ", QueryAnalysisService.SortKeys)}.");
+                title: $"Unknown sort key. Accepted values: {string.Join(", ", QueryAnalysisService.SortKeys)}.");
         }
 
         try
@@ -75,7 +75,7 @@ public sealed class QueriesController(
         }
         catch (PostgresException ex)
         {
-            logger.LogWarning("Classement des requêtes impossible sur {Instance} : {Message}", connection.Name, ex.MessageText);
+            logger.LogWarning("Cannot rank queries on {Instance}: {Message}", connection.Name, ex.MessageText);
             return Ok(new { available = false, reason = ex.MessageText, items = Array.Empty<TopQuery>() });
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
@@ -109,13 +109,13 @@ public sealed class QueriesController(
         if (requested.Count == 0)
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: "Indiquez au moins une instance.");
+                title: "Specify at least one instance.");
         }
 
         if (!QueryAnalysisService.SortKeys.Contains(sort, StringComparer.OrdinalIgnoreCase))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Critère de tri inconnu. Valeurs acceptées : {string.Join(", ", QueryAnalysisService.SortKeys)}.");
+                title: $"Unknown sort key. Accepted values: {string.Join(", ", QueryAnalysisService.SortKeys)}.");
         }
 
         var connections = await db.PostgresConnections
@@ -133,7 +133,7 @@ public sealed class QueriesController(
             if (capabilities is not null && !capabilities.HasExtension("pg_stat_statements"))
             {
                 return (Connection: connection, Items: (IReadOnlyList<TopQuery>)[],
-                    Reason: (string?)"pg_stat_statements n'est pas installée sur cette instance.");
+                    Reason: (string?)"pg_stat_statements is not installed on this instance.");
             }
 
             try
@@ -144,7 +144,7 @@ public sealed class QueriesController(
             }
             catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
             {
-                logger.LogWarning("Classement indisponible sur {Instance} : {Message}", connection.Name, ex.Message);
+                logger.LogWarning("Ranking unavailable on {Instance}: {Message}", connection.Name, ex.Message);
                 return (Connection: connection, Items: (IReadOnlyList<TopQuery>)[],
                     Reason: (string?)(ex is PostgresException postgres ? postgres.MessageText : ex.Message));
             }
@@ -194,14 +194,14 @@ public sealed class QueriesController(
             if (sql is null)
             {
                 return Problem(statusCode: StatusCodes.Status404NotFound,
-                    title: "Cette requête n'est plus présente dans pg_stat_statements.");
+                    title: "This query is no longer present in pg_stat_statements.");
             }
         }
 
         if (string.IsNullOrWhiteSpace(sql))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: "Fournissez une requête à analyser, ou l'identifiant d'une requête connue.");
+                title: "Provide a query to analyze, or the identifier of a known query.");
         }
 
         try
@@ -238,7 +238,7 @@ public sealed class QueriesController(
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or OperationCanceledException)
         {
             return Problem(statusCode: StatusCodes.Status504GatewayTimeout,
-                title: "L'analyse n'a pas abouti dans le délai imparti.", detail: ex.Message);
+                title: "The analysis did not complete within the allotted time.", detail: ex.Message);
         }
     }
 
@@ -266,7 +266,7 @@ public sealed class QueriesController(
         if (string.IsNullOrWhiteSpace(sql))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: "Fournissez une requête, ou l'identifiant d'une requête connue.");
+                title: "Provide a query, or the identifier of a known query.");
         }
 
         try
@@ -276,10 +276,10 @@ public sealed class QueriesController(
         }
         catch (Exception ex) when (ex is NpgsqlException or TimeoutException or InvalidOperationException)
         {
-            logger.LogWarning("Valeurs de paramètres non proposables sur {Instance} : {Message}",
+            logger.LogWarning("Cannot suggest parameter values on {Instance}: {Message}",
                 connection.Name, ex.Message);
             return Problem(statusCode: StatusCodes.Status502BadGateway,
-                title: "Impossible de proposer des valeurs pour cette requête.", detail: ex.Message);
+                title: "Cannot suggest values for this query.", detail: ex.Message);
         }
     }
 

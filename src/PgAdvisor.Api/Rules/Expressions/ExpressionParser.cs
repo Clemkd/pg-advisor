@@ -28,7 +28,7 @@ public static class ExpressionParser
 
         if (tokens[position].Kind != TokenKind.End)
         {
-            throw new ExpressionException($"Élément inattendu « {tokens[position].Text} » à la position {tokens[position].Position}.");
+            throw new ExpressionException($"Unexpected token \"{tokens[position].Text}\" at position {tokens[position].Position}.");
         }
 
         return expression;
@@ -184,7 +184,7 @@ public static class ExpressionParser
             var type = tokens[position];
             if (type.Kind is not (TokenKind.Identifier or TokenKind.Keyword))
             {
-                throw new ExpressionException($"Type attendu après :: à la position {type.Position}.");
+                throw new ExpressionException($"A type is expected after :: at position {type.Position}.");
             }
 
             position++;
@@ -234,8 +234,8 @@ public static class ExpressionParser
             default:
                 throw new ExpressionException(
                     token.Kind == TokenKind.End
-                        ? "Expression incomplète."
-                        : $"Élément inattendu « {token.Text} » à la position {token.Position}.");
+                        ? "Incomplete expression."
+                        : $"Unexpected token \"{token.Text}\" at position {token.Position}.");
         }
     }
 
@@ -244,7 +244,7 @@ public static class ExpressionParser
         if (!KnownFunctions.Contains(name.Text))
         {
             throw new ExpressionException(
-                $"Fonction inconnue « {name.Text} ». Disponibles : {string.Join(", ", KnownFunctions.Order())}.");
+                $"Unknown function \"{name.Text}\". Available: {string.Join(", ", KnownFunctions.Order())}.");
         }
 
         position++; // consomme '('
@@ -280,7 +280,7 @@ public static class ExpressionParser
         if (!Match(tokens, ref position, kind, text))
         {
             throw new ExpressionException(
-                $"« {text} » attendu à la position {tokens[position].Position} mais « {tokens[position].Text} » trouvé.");
+                $"Expected \"{text}\" at position {tokens[position].Position} but found \"{tokens[position].Text}\".");
         }
     }
 
@@ -341,7 +341,7 @@ public static class ExpressionParser
                 var text = source[start..index];
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
                 {
-                    throw new ExpressionException($"Nombre invalide « {text} » à la position {start}.");
+                    throw new ExpressionException($"Invalid number \"{text}\" at position {start}.");
                 }
 
                 tokens.Add(new Token(TokenKind.Number, text, start));
@@ -371,7 +371,7 @@ public static class ExpressionParser
 
                 if (index >= source.Length)
                 {
-                    throw new ExpressionException($"Chaîne non terminée à la position {start}.");
+                    throw new ExpressionException($"Unterminated string at position {start}.");
                 }
 
                 index++; // consomme le délimiteur fermant
@@ -425,10 +425,10 @@ public static class ExpressionParser
                 continue;
             }
 
-            throw new ExpressionException($"Caractère inattendu « {c} » à la position {index}.");
+            throw new ExpressionException($"Unexpected character \"{c}\" at position {index}.");
         }
 
-        tokens.Add(new Token(TokenKind.End, "fin d'expression", source.Length));
+        tokens.Add(new Token(TokenKind.End, "end of expression", source.Length));
         return tokens;
     }
 }

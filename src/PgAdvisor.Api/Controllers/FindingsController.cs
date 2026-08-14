@@ -170,7 +170,7 @@ public sealed class FindingsController(
         if (status is not (FindingStatus.Active or FindingStatus.Resolved or FindingStatus.Ignored))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Statut inconnu. Valeurs acceptées : {FindingStatus.Active}, {FindingStatus.Resolved}, {FindingStatus.Ignored}.");
+                title: $"Unknown status. Accepted values: {FindingStatus.Active}, {FindingStatus.Resolved}, {FindingStatus.Ignored}.");
         }
 
         var actor = User.FindFirstValue(ClaimTypes.Name);
@@ -218,7 +218,7 @@ public sealed class FindingsController(
         {
             return Ok(new VerifyFindingResponse
             {
-                Message = $"La règle « {finding.RuleId} » n'est plus chargée : impossible de vérifier ce diagnostic.",
+                Message = $"Rule \"{finding.RuleId}\" is no longer loaded: this finding cannot be verified.",
                 Finding = ToResponse(finding),
             });
         }
@@ -235,7 +235,7 @@ public sealed class FindingsController(
                 return Ok(new VerifyFindingResponse
                 {
                     SkipReason = result.SkipReason,
-                    Message = $"La règle n'est pas exécutable sur cette instance : {result.SkipReason}",
+                    Message = $"The rule cannot run on this instance: {result.SkipReason}",
                     Finding = ToResponse(finding),
                 });
             }
@@ -245,7 +245,7 @@ public sealed class FindingsController(
                 return Ok(new VerifyFindingResponse
                 {
                     Error = result.Error,
-                    Message = $"La vérification a échoué : {result.Error}",
+                    Message = $"Verification failed: {result.Error}",
                     Finding = ToResponse(finding),
                 });
             }
@@ -261,14 +261,14 @@ public sealed class FindingsController(
                     Verified = true,
                     StillPresent = true,
                     DurationMs = result.Duration.TotalMilliseconds,
-                    Message = "Le diagnostic est toujours constaté sur l'instance.",
+                    Message = "The finding is still present on the instance.",
                     Finding = ToResponse(finding),
                 });
             }
 
             var actor = User.FindFirstValue(ClaimTypes.Name);
             var resolved = await findings.ChangeStatusAsync(
-                finding.Id, FindingStatus.Resolved, actor, "Vérifié : le diagnostic n'est plus constaté", ct);
+                finding.Id, FindingStatus.Resolved, actor, "Verified: the finding is no longer present", ct);
 
             bus.Publish(AdvisorEventTypes.FindingResolved, new
             {
@@ -279,7 +279,7 @@ public sealed class FindingsController(
             }, finding.ConnectionId);
 
             logger.LogInformation(
-                "Finding {FindingId} ({RuleId}) vérifié par {Actor} : plus constaté, marqué résolu.",
+                "Finding {FindingId} ({RuleId}) verified by {Actor}: no longer present, marked as resolved.",
                 finding.Id, finding.RuleId, actor ?? "?");
 
             if (resolved is not null)
@@ -293,7 +293,7 @@ public sealed class FindingsController(
                 StillPresent = false,
                 Resolved = true,
                 DurationMs = result.Duration.TotalMilliseconds,
-                Message = "Le diagnostic n'est plus constaté : la recommandation est marquée résolue.",
+                Message = "The finding is no longer present: the recommendation is marked as resolved.",
                 Finding = ToResponse(resolved ?? finding),
             });
         }
@@ -302,7 +302,7 @@ public sealed class FindingsController(
             return Ok(new VerifyFindingResponse
             {
                 Error = ex.Message,
-                Message = $"La vérification n'a pas abouti : {ex.Message}",
+                Message = $"Verification did not complete: {ex.Message}",
                 Finding = ToResponse(finding),
             });
         }

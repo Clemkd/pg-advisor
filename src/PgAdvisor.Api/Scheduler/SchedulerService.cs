@@ -31,7 +31,7 @@ public sealed class SchedulerService(
     {
         if (!_options.Enabled)
         {
-            logger.LogWarning("Scheduler désactivé par configuration : aucune collecte automatique.");
+            logger.LogWarning("Scheduler disabled by configuration: no automatic collection.");
             return;
         }
 
@@ -54,7 +54,7 @@ public sealed class SchedulerService(
         ruleStore.Changed += _ => _purgeRequested = true;
 
         logger.LogInformation(
-            "Scheduler démarré : santé {Health}, statistiques {Statistics}, recommandations {Recommendations}, configuration {Configuration}.",
+            "Scheduler started: health {Health}, statistics {Statistics}, recommendations {Recommendations}, configuration {Configuration}.",
             _options.Intervals.Health, _options.Intervals.Statistics,
             _options.Intervals.Recommendations, _options.Intervals.Configuration);
 
@@ -69,7 +69,7 @@ public sealed class SchedulerService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Cycle du scheduler en échec ; nouvelle tentative au prochain tick.");
+                    logger.LogError(ex, "Scheduler cycle failed; retrying on the next tick.");
                 }
             }
         }
@@ -146,12 +146,12 @@ public sealed class SchedulerService(
         }
         catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
         {
-            logger.LogWarning("Analyse de l'instance « {Name} » interrompue après {Timeout} ; les autres instances continuent.",
+            logger.LogWarning("Analysis of instance {Name} aborted after {Timeout}; the other instances carry on.",
                 name, _options.PerInstanceTimeout);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "Analyse de l'instance « {Name} » en échec.", name);
+            logger.LogError(ex, "Analysis of instance {Name} failed.", name);
         }
         finally
         {
@@ -202,7 +202,7 @@ public sealed class SchedulerService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Purge des findings orphelins impossible ; poursuite du démarrage.");
+            logger.LogWarning(ex, "Cannot purge orphan findings; startup continues.");
         }
     }
 
