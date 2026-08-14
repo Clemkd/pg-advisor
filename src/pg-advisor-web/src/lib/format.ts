@@ -1,13 +1,10 @@
-import { currentLocale, hasTranslation, translate } from './i18n'
-import type { Locale } from './i18n'
+import { currentLocale, hasTranslation, INTL_LOCALES, translate } from './i18n'
 
 /**
  * Formatages partagés par les vues. Unités binaires pour les octets, et tout ce qui dépend de la
  * langue est lu au moment de l'appel : un changement de locale re-rend l'arbre, donc les valeurs
  * déjà affichées se reformatent.
  */
-
-const INTL_LOCALES: Record<Locale, string> = { fr: 'fr-FR', en: 'en-GB' }
 
 function t(key: string, vars?: Record<string, string | number>): string {
   return translate(currentLocale(), key, vars)

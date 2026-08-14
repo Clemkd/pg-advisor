@@ -16,6 +16,7 @@ import { useEffect } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Check, ChevronDown, Loader2, X } from 'lucide-react'
 import { Bubble, BubbleItem } from '@/components/ui/Bubble'
+import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 /* ------------------------------------------------------------------ Bouton */
@@ -90,6 +91,7 @@ export function SplitButton({
   loading?: boolean
   variant?: NonNullable<VariantProps<typeof buttonStyles>['variant']>
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
 
@@ -111,7 +113,7 @@ export function SplitButton({
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Autres actions"
+        aria-label={t('common.moreActions')}
         className="w-8 rounded-l-none border-l border-black/10 px-0 dark:border-white/15"
       >
         <ChevronDown className="size-3.5" aria-hidden />
@@ -389,7 +391,8 @@ export function MultiSelect({
   options,
   onChange,
   label,
-  unit = 'élément',
+  unit,
+  unitPlural,
   className,
   disabled,
 }: {
@@ -399,19 +402,28 @@ export function MultiSelect({
   label: string
   /** Nom de ce qui est sélectionné, au singulier : « instance », « catégorie »… */
   unit?: string
+  /** Pluriel, quand un `s` ne suffit pas. */
+  unitPlural?: string
   className?: string
   disabled?: boolean
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLButtonElement>(null)
 
   const selected = options.filter((option) => values.includes(option.value))
+  const singular = unit ?? t('common.item')
+  // Le cas vide évite de nommer l'unité : « Aucune élément » guettait la moindre unité
+  // masculine, et le pluriel anglais ne se forme pas toujours par un « s ».
   const summary =
     selected.length === 0
-      ? `Aucune ${unit}`
+      ? t('multiSelect.empty')
       : selected.length === 1
         ? selected[0].label
-        : `${selected.length} ${unit}s`
+        : t('multiSelect.count', {
+            count: selected.length,
+            unit: unitPlural ?? `${singular}s`,
+          })
 
   const toggle = (value: string) => {
     onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value])
@@ -446,7 +458,7 @@ export function MultiSelect({
               }
             >
               <span className="text-ink-faint text-xs">
-                {values.length === options.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+                {values.length === options.length ? t('common.clearAll') : t('common.selectAll')}
               </span>
             </BubbleItem>
             <div className="border-border-subtle my-1 border-t" />
@@ -588,11 +600,13 @@ export function Spinner({ className }: { className?: string }) {
   return <Loader2 className={cn('text-ink-faint size-4 animate-spin', className)} aria-hidden />
 }
 
-export function LoadingBlock({ label = 'Chargement…' }: { label?: string }) {
+export function LoadingBlock({ label }: { label?: string }) {
+  const t = useT()
+
   return (
     <div className="text-ink-muted flex items-center justify-center gap-2 py-16 text-sm">
       <Spinner className="size-5" />
-      {label}
+      {label ?? t('common.loading')}
     </div>
   )
 }
@@ -642,6 +656,8 @@ export function Notice({
   onDismiss?: () => void
   className?: string
 }) {
+  const t = useT()
+
   return (
     <div className={cn(noticeStyles({ tone }), 'flex items-start gap-3', className)}>
       <div className="min-w-0 flex-1">
@@ -652,7 +668,7 @@ export function Notice({
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Masquer"
+          aria-label={t('common.dismiss')}
           className="text-ink-faint hover:text-ink shrink-0"
         >
           <X className="size-4" aria-hidden />
@@ -685,6 +701,8 @@ export function Modal({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
+  const t = useT()
+
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-3">
       {/* Une modale large occupe presque toute la fenêtre : un diagramme de plan ou un tableau
@@ -699,7 +717,7 @@ export function Modal({
       >
         <div className="border-border-subtle flex shrink-0 items-start justify-between gap-3 border-b px-5 py-3">
           <h2 className="text-ink min-w-0 text-sm font-semibold">{title}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fermer" className="shrink-0">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('common.close')} className="shrink-0">
             <X className="size-4" aria-hidden />
           </Button>
         </div>

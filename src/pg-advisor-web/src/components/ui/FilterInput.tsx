@@ -1,14 +1,15 @@
 import { useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { Bubble, BubbleItem } from '@/components/ui/Bubble'
+import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 export type FilterOperator = '>=' | '<=' | '='
 
-const OPERATORS: { value: FilterOperator; symbol: string; label: string }[] = [
-  { value: '>=', symbol: '≥', label: 'supérieur ou égal' },
-  { value: '<=', symbol: '≤', label: 'inférieur ou égal' },
-  { value: '=', symbol: '=', label: 'égal' },
+const OPERATORS: { value: FilterOperator; symbol: string; labelKey: string }[] = [
+  { value: '>=', symbol: '≥', labelKey: 'filter.operator.gte' },
+  { value: '<=', symbol: '≤', labelKey: 'filter.operator.lte' },
+  { value: '=', symbol: '=', labelKey: 'filter.operator.eq' },
 ]
 
 /**
@@ -36,6 +37,7 @@ export function FilterInput({
   label: string
   className?: string
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
   const numeric = operator !== undefined && onOperatorChange !== undefined
@@ -57,8 +59,8 @@ export function FilterInput({
             onClick={() => setOpen((current) => !current)}
             aria-haspopup="menu"
             aria-expanded={open}
-            aria-label={`Opérateur de filtre pour ${label} : ${current.label}`}
-            title={current.label}
+            aria-label={`${t('filter.operatorFor', { label })} : ${t(current.labelKey)}`}
+            title={t(current.labelKey)}
             className="text-ink-muted hover:text-ink hover:bg-surface-sunken flex h-full shrink-0 items-center gap-0.5 rounded-l-[calc(var(--radius-control)-1px)] pl-1.5 pr-1 text-xs font-semibold"
           >
             {current.symbol}
@@ -72,7 +74,7 @@ export function FilterInput({
             open={open}
             onClose={() => setOpen(false)}
             width={176}
-            label={`Opérateur de filtre pour ${label}`}
+            label={t('filter.operatorFor', { label })}
           >
             {OPERATORS.map((item) => (
               <BubbleItem
@@ -84,7 +86,7 @@ export function FilterInput({
                 }}
               >
                 <span className="w-3 font-semibold">{item.symbol}</span>
-                <span className="flex-1 truncate">{item.label}</span>
+                <span className="flex-1 truncate">{t(item.labelKey)}</span>
                 {item.value === operator && <Check className="size-3 shrink-0" aria-hidden />}
               </BubbleItem>
             ))}
@@ -96,7 +98,7 @@ export function FilterInput({
         value={value}
         onChange={(event) => onValueChange(event.target.value)}
         placeholder={placeholder}
-        aria-label={`Filtre ${label}`}
+        aria-label={t('filter.fieldFor', { label })}
         inputMode={numeric ? 'decimal' : undefined}
         className={cn(
           'text-ink placeholder:text-ink-faint h-full w-full min-w-0 bg-transparent px-1.5 text-xs focus:outline-none',

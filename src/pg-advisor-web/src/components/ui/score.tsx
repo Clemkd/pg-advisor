@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import { scoreTone } from '@/lib/format'
+import { useT } from '@/lib/i18n'
 
 const SCORE_COLORS: Record<string, { text: string; stroke: string; bar: string }> = {
   good: { text: 'text-success', stroke: 'stroke-success', bar: 'bg-success' },
@@ -17,6 +18,7 @@ export function ScoreRing({
   size?: number
   className?: string
 }) {
+  const t = useT()
   const colors = SCORE_COLORS[score === null ? 'warn' : scoreTone(score)]
   const radius = size / 2 - 8
   const circumference = 2 * Math.PI * radius
@@ -59,7 +61,7 @@ export function ScoreRing({
           {score === null ? '—' : score}
         </span>
         {size >= 96 && (
-          <span className="text-ink-faint mt-1 text-[10px] tracking-wide uppercase">sur 100</span>
+          <span className="text-ink-faint mt-1 text-[10px] tracking-wide uppercase">{t('score.outOf')}</span>
         )}
       </div>
     </div>

@@ -51,10 +51,44 @@ export function translate(locale: Locale, key: string, vars?: TranslateVars): st
 
 export type Translator = (key: string, vars?: TranslateVars) => string
 
+/** Correspondance avec les locales Intl, partagée avec lib/format.ts. */
+export const INTL_LOCALES: Record<Locale, string> = { fr: 'fr-FR', en: 'en-GB' }
+
+const pluralRules = new Map<Locale, Intl.PluralRules>()
+
+/**
+ * Accord en nombre. Les catégories viennent d'Intl plutôt que d'une règle écrite à la main :
+ * le français range le zéro avec le singulier, l'anglais avec le pluriel, et les deux ont des
+ * cas particuliers qu'on aurait tort de deviner. `count` est toujours injecté comme variable.
+ */
+export function translatePlural(
+  locale: Locale,
+  key: string,
+  count: number,
+  vars?: TranslateVars,
+): string {
+  let rules = pluralRules.get(locale)
+  if (!rules) {
+    rules = new Intl.PluralRules(INTL_LOCALES[locale])
+    pluralRules.set(locale, rules)
+  }
+
+  const category = rules.select(count)
+  const withCount = { count, ...vars }
+  const candidate = `${key}.${category}`
+  return hasTranslation(locale, candidate)
+    ? translate(locale, candidate, withCount)
+    : translate(locale, `${key}.other`, withCount)
+}
+
+export type PluralTranslator = (key: string, count: number, vars?: TranslateVars) => string
+
 interface LocaleState {
   locale: Locale
   setLocale: (locale: Locale) => void
   t: Translator
+  /** Variante accordée en nombre : `tc('dashboard.instances', instances.length)`. */
+  tc: PluralTranslator
 }
 
 const LocaleContext = createContext<LocaleState | null>(null)
@@ -86,6 +120,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       locale,
       setLocale,
       t: (key, vars) => translate(locale, key, vars),
+      tc: (key, count, vars) => translatePlural(locale, key, count, vars),
     }),
     [locale, setLocale],
   )
@@ -108,4 +143,9 @@ export function useLocale(): LocaleState {
 /** Raccourci de loin le plus utilisé : `const t = useT()` puis `t('findings.title')`. */
 export function useT(): Translator {
   return useLocaleState().t
+}
+
+/** Accord en nombre : `const tc = useTc()` puis `tc('dashboard.instances', 3)`. */
+export function useTc(): PluralTranslator {
+  return useLocaleState().tc
 }

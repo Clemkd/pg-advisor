@@ -25,6 +25,8 @@ import {
   formatRelative,
   formatSeconds,
 } from '@/lib/format'
+import { useT, useTc } from '@/lib/i18n'
+import type { Translator } from '@/lib/i18n'
 
 const LIVE_EVENTS = [
   'finding.created',
@@ -37,6 +39,8 @@ const LIVE_EVENTS = [
 ]
 
 export function DashboardPage() {
+  const t = useT()
+  const tc = useTc()
   const [data, setData] = useState<Dashboard | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,7 +50,7 @@ export function DashboardPage() {
       setData(await api.dashboard())
       setError(null)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Chargement impossible.')
+      setError(cause instanceof Error ? cause.message : t('common.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -66,7 +70,7 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <Page title="Vue d’ensemble">
+      <Page title={t('nav.overview')}>
         <LoadingBlock />
       </Page>
     )
@@ -74,8 +78,8 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <Page title="Vue d’ensemble">
-        <Notice tone="danger" title="Erreur">
+      <Page title={t('nav.overview')}>
+        <Notice tone="danger" title={t('common.error')}>
           {error}
         </Notice>
       </Page>
@@ -89,35 +93,39 @@ export function DashboardPage() {
 
   return (
     <Page
-      title="Vue d’ensemble"
-      description={`${instances.length} instance${instances.length > 1 ? 's' : ''} supervisée${
-        instances.length > 1 ? 's' : ''
-      } · ${rules.total} règles chargées`}
+      title={t('nav.overview')}
+      description={`${tc('dashboard.supervised', instances.length)} · ${tc(
+        'dashboard.rulesLoaded',
+        rules.total,
+      )}`}
       wide
     >
       <div className="space-y-4">
         <StatGrid>
           <Stat
-            label="Santé globale"
+            label={t('dashboard.globalHealth')}
             value={globalHealth === null ? '—' : `${globalHealth}/100`}
-            hint={globalHealth === null ? 'en attente de la première collecte' : undefined}
+            hint={globalHealth === null ? t('dashboard.awaitingFirstCollection') : undefined}
           />
           <Stat
-            label="Critiques"
+            label={t('dashboard.criticals')}
             value={summary.critical}
             tone={summary.critical > 0 ? 'danger' : 'default'}
             icon={<CircleAlert className="size-4" />}
           />
           <Stat
-            label="Avertissements"
+            label={t('dashboard.warnings')}
             value={summary.warning}
             tone={summary.warning > 0 ? 'warning' : 'default'}
             icon={<AlertTriangle className="size-4" />}
           />
           <Stat
-            label="Informations"
+            label={t('dashboard.infos')}
             value={summary.info}
-            hint={`${summary.resolved} résolues · ${summary.ignored} ignorées`}
+            hint={t('dashboard.resolvedIgnored', {
+              resolved: summary.resolved,
+              ignored: summary.ignored,
+            })}
             icon={<Info className="size-4" />}
           />
         </StatGrid>
@@ -125,19 +133,19 @@ export function DashboardPage() {
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader
-              title="Scores par catégorie"
-              description="Moyenne sur les instances où la catégorie est évaluable."
+              title={t('dashboard.categoryScores')}
+              description={t('dashboard.categoryScoresHint')}
               action={
                 <Link to="/findings" className="text-brand text-xs font-medium hover:underline">
-                  Traiter les recommandations
+                  {t('dashboard.handleFindings')}
                 </Link>
               }
             />
             <CardBody>
               {categories.length === 0 ? (
                 <EmptyState
-                  title="Pas encore de score par catégorie"
-                  description="Les catégories sont notées dès qu'une règle applicable a été exécutée sur au moins une instance."
+                  title={t('dashboard.noCategoryScore')}
+                  description={t('dashboard.noCategoryScoreHint')}
                 />
               ) : (
                 <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
@@ -151,29 +159,29 @@ export function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Règles"
+              title={t('nav.rules')}
               action={
                 <Link to="/rules" className="text-brand text-xs font-medium hover:underline">
-                  Gérer
+                  {t('dashboard.manage')}
                 </Link>
               }
             />
             <CardBody className="space-y-3">
               <div className="flex items-baseline gap-2">
                 <span className="text-ink text-3xl font-semibold tabular-nums">{rules.total}</span>
-                <span className="text-ink-muted text-sm">chargées</span>
+                <span className="text-ink-muted text-sm">{t('dashboard.loaded')}</span>
               </div>
 
               <div className="flex flex-wrap gap-1.5">
-                <Badge tone="neutral">{rules.provided} intégrées</Badge>
-                <Badge tone="brand">{rules.user} personnalisées</Badge>
+                <Badge tone="neutral">{t('dashboard.bundled', { count: rules.provided })}</Badge>
+                <Badge tone="brand">{t('dashboard.custom', { count: rules.user })}</Badge>
                 <Badge tone={rules.errors.length > 0 ? 'danger' : 'success'}>
-                  {rules.errors.length} en erreur
+                  {t('dashboard.failing', { count: rules.errors.length })}
                 </Badge>
               </div>
 
               <p className="text-ink-faint text-xs" title={formatDateTime(rules.loadedAt)}>
-                Dernier chargement {formatRelative(rules.loadedAt)}
+                {t('dashboard.lastLoad', { when: formatRelative(rules.loadedAt) })}
               </p>
 
               {rules.errors.slice(0, 3).map((ruleError, index) => (
@@ -187,10 +195,10 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader
-            title={`Instances supervisées (${instances.length})`}
+            title={t('dashboard.supervisedInstances', { count: instances.length })}
             action={
               <Link to="/instances" className="text-brand text-xs font-medium hover:underline">
-                Gérer les instances
+                {t('dashboard.manageInstances')}
               </Link>
             }
           />
@@ -198,13 +206,13 @@ export function DashboardPage() {
           {instances.length === 0 ? (
             <EmptyState
               icon={<Database className="size-6" />}
-              title="Aucune instance"
+              title={t('dashboard.noInstance')}
               description={
                 <>
                   <Link to="/instances" className="text-brand font-medium hover:underline">
-                    Ajoutez une connexion PostgreSQL
+                    {t('dashboard.addConnection')}
                   </Link>{' '}
-                  pour lancer la première analyse.
+                  {t('dashboard.addConnectionSuffix')}
                 </>
               }
             />
@@ -221,7 +229,7 @@ export function DashboardPage() {
                         >
                           {instance.name}
                         </Link>
-                        <StateBadge instance={instance} />
+                        <StateBadge instance={instance} t={t} />
                       </div>
 
                       <p className="text-ink-muted mt-0.5 truncate text-xs">
@@ -242,15 +250,23 @@ export function DashboardPage() {
                       {instance.health && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {instance.health.critical > 0 && (
-                            <Badge tone="danger">{instance.health.critical} critiques</Badge>
+                            <Badge tone="danger">
+                              {t('dashboard.criticalCount', { count: instance.health.critical })}
+                            </Badge>
                           )}
                           {instance.health.warning > 0 && (
-                            <Badge tone="warning">{instance.health.warning} avertissements</Badge>
+                            <Badge tone="warning">
+                              {t('dashboard.warningCount', { count: instance.health.warning })}
+                            </Badge>
                           )}
                           {instance.health.info > 0 && (
-                            <Badge tone="brand">{instance.health.info} informations</Badge>
+                            <Badge tone="brand">
+                              {t('dashboard.infoCount', { count: instance.health.info })}
+                            </Badge>
                           )}
-                          {instance.health.total === 0 && <Badge tone="success">aucun finding</Badge>}
+                          {instance.health.total === 0 && (
+                            <Badge tone="success">{t('dashboard.noFinding')}</Badge>
+                          )}
                         </div>
                       )}
                     </div>
@@ -259,18 +275,18 @@ export function DashboardPage() {
                   </div>
 
                   <dl className="border-border-subtle text-ink-muted mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3 text-xs sm:grid-cols-4">
-                    <Metric label="Connexions">
+                    <Metric label={t('dashboard.connections')}>
                       {instance.metrics
                         ? `${formatNumber(instance.metrics.connections)} / ${formatNumber(
                             instance.metrics.maxConnections,
                           )}`
                         : '—'}
                     </Metric>
-                    <Metric label="Cache">{formatPercent(instance.metrics?.cacheHitRatio ?? null)}</Metric>
-                    <Metric label="Plus longue tx">
+                    <Metric label={t('dashboard.cache')}>{formatPercent(instance.metrics?.cacheHitRatio ?? null)}</Metric>
+                    <Metric label={t('dashboard.longestTx')}>
                       {instance.metrics ? formatSeconds(instance.metrics.longestTransactionSeconds) : '—'}
                     </Metric>
-                    <Metric label="Taille">
+                    <Metric label={t('dashboard.size')}>
                       {instance.metrics ? formatBytes(instance.metrics.databaseSizeBytes) : '—'}
                     </Metric>
                   </dl>
@@ -282,10 +298,10 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader
-            title="Findings actifs par catégorie"
+            title={t('dashboard.activeByCategory')}
             action={
               <Link to="/findings" className="text-brand text-xs font-medium hover:underline">
-                Voir tout
+                {t('dashboard.seeAll')}
               </Link>
             }
           />
@@ -293,8 +309,8 @@ export function DashboardPage() {
             {Object.keys(summary.byCategory).length === 0 ? (
               <EmptyState
                 icon={<ScrollText className="size-6" />}
-                title="Aucun finding actif"
-                description="Rien à traiter pour le moment sur les instances supervisées."
+                title={t('dashboard.noActiveFinding')}
+                description={t('dashboard.noActiveFindingHint')}
               />
             ) : (
               <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
@@ -345,15 +361,17 @@ function Metric({ label, children }: { label: string; children: React.ReactNode 
   )
 }
 
-function StateBadge({ instance }: { instance: Connection }) {
-  if (!instance.enabled) return <Badge>désactivée</Badge>
+function StateBadge({ instance, t }: { instance: Connection; t: Translator }) {
+  if (!instance.enabled) return <Badge>{t('instances.disabledBadge')}</Badge>
 
   const tone =
     instance.collectionState === 'error' ? 'danger' : instance.collectionState === 'idle' ? 'success' : 'brand'
 
   const label =
     instance.collectionState === 'analyzing' && instance.analysisProgress !== null
-      ? `analyse ${Math.round(instance.analysisProgress * 100)} %`
+      ? t('instances.analysisProgress', {
+          percent: Math.round(instance.analysisProgress * 100),
+        })
       : collectionStateLabel(instance.collectionState)
 
   return <Badge tone={tone}>{label}</Badge>
