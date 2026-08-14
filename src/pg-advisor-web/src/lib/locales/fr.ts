@@ -195,4 +195,34 @@ export const fr: Record<string, string> = {
   'dashboard.noActiveFindingHint':
     'Rien à traiter pour le moment sur les instances supervisées.',
   'common.loadFailed': 'Chargement impossible.',
+
+  // --- Règles ---------------------------------------------------------------
+  'rules.subtitle':
+    'Le YAML fait référence. Les règles modifiées depuis l’interface sont écrites dans le volume de données et rechargées à chaud.',
+  'rules.reloadFailed': 'Rechargement impossible.',
+  'rules.reloadedAt': 'rechargées {when}',
+  'rules.reload': 'Recharger',
+  'rules.failingTitle': 'Règles en erreur ({count})',
+  'rules.customRule': 'règle personnalisée',
+  'rules.bundledRule': 'règle intégrée',
+  'rules.failingHint':
+    'Une règle invalide est écartée sans interrompre l’application. Corrigez le fichier ou la règle depuis l’éditeur : elle sera rechargée automatiquement.',
+  'rules.countOf.one': '{count} règle sur {total}',
+  'rules.countOf.other': '{count} règles sur {total}',
+  'rules.origin': 'Origine',
+  'rules.bundled': 'Intégrées',
+  'rules.custom': 'Personnalisées',
+  'rules.searchPlaceholder': 'identifiant, nom, description',
+  'rules.noMatch': 'Aucune règle pour ces filtres',
+  'rules.rule': 'Règle',
+  'rules.requirements': 'Prérequis',
+  'rules.customTag': 'personnalisée',
+  'rules.bundledTag': 'intégrée',
+  'rules.replacesBundled': 'remplace la version intégrée',
+  'rules.enabledTag': 'activée',
+  'rules.disabledTag': 'désactivée',
+  'rules.overrides.one': '{count} surcharge',
+  'rules.overrides.other': '{count} surcharges',
+  'rules.without': 'sans {name}',
+  'rules.viewCount': '{count} vue(s)',
 }

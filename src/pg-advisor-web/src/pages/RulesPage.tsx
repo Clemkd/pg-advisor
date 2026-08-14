@@ -19,9 +19,13 @@ import {
   Tag,
 } from '../components/ui'
 import { categoryLabel, formatRelative } from '../lib/format'
+import { useT, useTc } from '../lib/i18n'
+import type { Translator } from '../lib/i18n'
 
 export function RulesPage() {
   const { isAdmin } = useAuth()
+  const t = useT()
+  const tc = useTc()
   const [rules, setRules] = useState<Rule[]>([])
   const [errors, setErrors] = useState<RuleError[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,7 +44,7 @@ export function RulesPage() {
       setErrors(ruleErrors)
       setFailure(null)
     } catch (cause) {
-      setFailure(cause instanceof Error ? cause.message : 'Chargement impossible.')
+      setFailure(cause instanceof Error ? cause.message : t('common.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -82,7 +86,7 @@ export function RulesPage() {
       setLoadedAt(status.loadedAt)
       await load()
     } catch (cause) {
-      setFailure(cause instanceof Error ? cause.message : 'Rechargement impossible.')
+      setFailure(cause instanceof Error ? cause.message : t('rules.reloadFailed'))
     } finally {
       setReloading(false)
     }
@@ -91,25 +95,25 @@ export function RulesPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Règles"
-        subtitle="Le YAML fait référence. Les règles modifiées depuis l'interface sont écrites dans le volume de données et rechargées à chaud."
+        title={t('nav.rules')}
+        subtitle={t('rules.subtitle')}
         actions={
           <>
             {loadedAt && (
               <span className="hidden text-xs text-ink-muted sm:inline">
-                rechargées {formatRelative(loadedAt)}
+                {t('rules.reloadedAt', { when: formatRelative(loadedAt) })}
               </span>
             )}
             {isAdmin && (
               <>
                 <Button onClick={reload} disabled={reloading}>
-                  {reloading && <Spinner />} Recharger
+                  {reloading && <Spinner />} {t('rules.reload')}
                 </Button>
                 <Link
                   to="/rules/new"
                   className="bg-brand text-brand-ink hover:bg-brand-hover inline-flex h-8 items-center rounded-[var(--radius-control)] px-3 text-sm font-medium"
                 >
-                  Nouvelle règle
+                  {t('breadcrumbs.newRule')}
                 </Link>
               </>
             )}
@@ -117,32 +121,35 @@ export function RulesPage() {
         }
       />
 
-      {failure && <Alert title="Erreur">{failure}</Alert>}
+      {failure && <Alert title={t('common.error')}>{failure}</Alert>}
 
       {errors.length > 0 && (
-        <Card title={`Règles en erreur (${errors.length})`}>
+        <Card title={t('rules.failingTitle', { count: errors.length })}>
           <div className="space-y-2">
             {errors.map((ruleError, index) => (
               <Alert key={`${ruleError.file}-${index}`} title={ruleError.ruleId ?? ruleError.file}>
                 <p className="text-xs">{ruleError.message}</p>
                 <p className="text-xs opacity-70">
-                  {ruleError.file} · {ruleError.origin === 'user' ? 'règle personnalisée' : 'règle intégrée'}
+                  {ruleError.file} ·{' '}
+                  {ruleError.origin === 'user' ? t('rules.customRule') : t('rules.bundledRule')}
                 </p>
               </Alert>
             ))}
           </div>
           <p className="mt-3 text-xs text-ink-muted">
-            Une règle invalide est écartée sans interrompre l'application. Corrigez le fichier ou la
-            règle depuis l'éditeur : elle sera rechargée automatiquement.
+            {t('rules.failingHint')}
           </p>
         </Card>
       )}
 
-      <Card title={`${filtered.length} règle${filtered.length > 1 ? 's' : ''} sur ${rules.length}`} padded={false}>
+      <Card
+        title={tc('rules.countOf', filtered.length, { total: rules.length })}
+        padded={false}
+      >
         <div className="grid gap-3 border-b border-border-subtle p-4 sm:grid-cols-3">
-          <Field label="Catégorie">
+          <Field label={t('common.category')}>
             <Select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="">Toutes</option>
+              <option value="">{t('common.all')}</option>
               {categories.map((item) => (
                 <option key={item} value={item}>
                   {categoryLabel(item)}
@@ -151,18 +158,18 @@ export function RulesPage() {
             </Select>
           </Field>
 
-          <Field label="Origine">
+          <Field label={t('rules.origin')}>
             <Select value={origin} onChange={(event) => setOrigin(event.target.value)}>
-              <option value="">Toutes</option>
-              <option value="provided">Intégrées</option>
-              <option value="user">Personnalisées</option>
+              <option value="">{t('common.all')}</option>
+              <option value="provided">{t('rules.bundled')}</option>
+              <option value="user">{t('rules.custom')}</option>
             </Select>
           </Field>
 
-          <Field label="Recherche">
+          <Field label={t('common.search')}>
             <Input
               value={search}
-              placeholder="identifiant, nom, description"
+              placeholder={t('rules.searchPlaceholder')}
               onChange={(event) => setSearch(event.target.value)}
             />
           </Field>
@@ -174,7 +181,7 @@ export function RulesPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-4">
-            <EmptyState title="Aucune règle pour ces filtres" />
+            <EmptyState title={t('rules.noMatch')} />
           </div>
         ) : (
           <>
@@ -183,12 +190,12 @@ export function RulesPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-surface-sunken text-left text-xs uppercase tracking-wide text-ink-muted">
                     <tr>
-                      <th className="px-4 py-2 font-medium">Règle</th>
-                      <th className="px-4 py-2 font-medium">Catégorie</th>
-                      <th className="px-4 py-2 font-medium">Sévérité</th>
-                      <th className="px-4 py-2 font-medium">Prérequis</th>
-                      <th className="px-4 py-2 font-medium">Origine</th>
-                      <th className="px-4 py-2 font-medium">État</th>
+                      <th className="px-4 py-2 font-medium">{t('rules.rule')}</th>
+                      <th className="px-4 py-2 font-medium">{t('common.category')}</th>
+                      <th className="px-4 py-2 font-medium">{t('common.severity')}</th>
+                      <th className="px-4 py-2 font-medium">{t('rules.requirements')}</th>
+                      <th className="px-4 py-2 font-medium">{t('rules.origin')}</th>
+                      <th className="px-4 py-2 font-medium">{t('common.state')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle">
@@ -210,27 +217,27 @@ export function RulesPage() {
                           <SeverityBadge severity={rule.severity} />
                         </td>
                         <td className="px-4 py-2.5">
-                          <Requirements rule={rule} />
+                          <Requirements rule={rule} t={t} />
                         </td>
                         <td className="px-4 py-2.5">
                           {rule.origin === 'user' ? (
-                            <Tag tone="accent">personnalisée</Tag>
+                            <Tag tone="accent">{t('rules.customTag')}</Tag>
                           ) : (
-                            <Tag>intégrée</Tag>
+                            <Tag>{t('rules.bundledTag')}</Tag>
                           )}
                           {rule.overridesProvided && (
-                            <p className="mt-0.5 text-xs text-ink-muted">remplace la version intégrée</p>
+                            <p className="mt-0.5 text-xs text-ink-muted">{t('rules.replacesBundled')}</p>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
                           {rule.enabled ? (
-                            <Tag tone="good">activée</Tag>
+                            <Tag tone="good">{t('rules.enabledTag')}</Tag>
                           ) : (
-                            <Tag tone="warn">désactivée</Tag>
+                            <Tag tone="warn">{t('rules.disabledTag')}</Tag>
                           )}
                           {rule.overrides.length > 0 && (
                             <p className="mt-0.5 whitespace-nowrap text-xs text-ink-muted">
-                              {rule.overrides.length} surcharge{rule.overrides.length > 1 ? 's' : ''}
+                              {tc('rules.overrides', rule.overrides.length)}
                             </p>
                           )}
                         </td>
@@ -258,11 +265,19 @@ export function RulesPage() {
 
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Tag tone="accent">{categoryLabel(rule.category)}</Tag>
-                    {rule.origin === 'user' ? <Tag tone="accent">personnalisée</Tag> : <Tag>intégrée</Tag>}
-                    {rule.enabled ? <Tag tone="good">activée</Tag> : <Tag tone="warn">désactivée</Tag>}
+                    {rule.origin === 'user' ? (
+                      <Tag tone="accent">{t('rules.customTag')}</Tag>
+                    ) : (
+                      <Tag>{t('rules.bundledTag')}</Tag>
+                    )}
+                    {rule.enabled ? (
+                      <Tag tone="good">{t('rules.enabledTag')}</Tag>
+                    ) : (
+                      <Tag tone="warn">{t('rules.disabledTag')}</Tag>
+                    )}
                     {rule.overrides.length > 0 && (
                       <Tag>
-                        {rule.overrides.length} surcharge{rule.overrides.length > 1 ? 's' : ''}
+                        {tc('rules.overrides', rule.overrides.length)}
                       </Tag>
                     )}
                   </div>
@@ -276,14 +291,14 @@ export function RulesPage() {
   )
 }
 
-function Requirements({ rule }: { rule: Rule }) {
+function Requirements({ rule, t }: { rule: Rule; t: Translator }) {
   const parts: string[] = []
 
   if (rule.requires.extensions.length > 0) {
     parts.push(...rule.requires.extensions)
   }
   if (rule.requires.missingExtensions.length > 0) {
-    parts.push(...rule.requires.missingExtensions.map((name) => `sans ${name}`))
+    parts.push(...rule.requires.missingExtensions.map((name) => t('rules.without', { name })))
   }
   if (rule.requires.minVersion) {
     parts.push(`PG ≥ ${rule.requires.minVersion}`)
@@ -299,7 +314,11 @@ function Requirements({ rule }: { rule: Rule }) {
   }
 
   if (parts.length === 0) {
-    return <span className="text-xs text-ink-faint">{rule.requires.views.length} vue(s)</span>
+    return (
+      <span className="text-xs text-ink-faint">
+        {t('rules.viewCount', { count: rule.requires.views.length })}
+      </span>
+    )
   }
 
   return (
