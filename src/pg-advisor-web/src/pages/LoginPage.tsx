@@ -4,10 +4,13 @@ import { Database } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import { useAuth } from '@/app/AuthContext'
 import { Button, Card, Field, Input, LoadingBlock, Notice } from '@/components/ui/primitives'
+import { LOCALES, LOCALE_LABELS, useLocale, useT } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
 export function LoginPage() {
   const { user, loading, login, refresh } = useAuth()
   const navigate = useNavigate()
+  const t = useT()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -38,7 +41,7 @@ export function LoginPage() {
     try {
       await login(username, password)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Connexion impossible.')
+      setError(cause instanceof ApiError ? cause.message : t('login.unreachable'))
     } finally {
       setBusy(false)
     }
@@ -49,7 +52,7 @@ export function LoginPage() {
     setError(null)
 
     if (newPassword !== confirmation) {
-      setError('Les deux saisies du nouveau mot de passe diffèrent.')
+      setError(t('login.passwordMismatch'))
       return
     }
 
@@ -59,7 +62,7 @@ export function LoginPage() {
       await refresh()
       navigate('/')
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Changement de mot de passe impossible.')
+      setError(cause instanceof ApiError ? cause.message : t('login.passwordChangeFailed'))
     } finally {
       setBusy(false)
     }
@@ -72,18 +75,18 @@ export function LoginPage() {
           <span className="bg-brand text-brand-ink mb-3 grid size-11 place-items-center rounded-[var(--radius-card)]">
             <Database className="size-5" aria-hidden />
           </span>
-          <h1 className="text-ink text-lg font-semibold tracking-tight">PostgreSQL Advisor</h1>
-          <p className="text-ink-muted mt-1 text-sm">Supervision en lecture seule de vos instances</p>
+          <h1 className="text-ink text-lg font-semibold tracking-tight">{t('login.title')}</h1>
+          <p className="text-ink-muted mt-1 text-sm">{t('login.subtitle')}</p>
         </div>
 
         <Card className="p-5">
           {user?.mustChangePassword ? (
             <form onSubmit={submitPasswordChange} className="space-y-4">
-              <Notice tone="warning" title="Mot de passe à changer">
-                Ce compte utilise le mot de passe généré au premier démarrage.
+              <Notice tone="warning" title={t('login.mustChangeTitle')}>
+                {t('login.mustChangeBody')}
               </Notice>
 
-              <Field label="Nouveau mot de passe" hint="10 caractères minimum">
+              <Field label={t('login.newPassword')} hint={t('login.passwordHint')}>
                 <Input
                   type="password"
                   value={newPassword}
@@ -94,7 +97,7 @@ export function LoginPage() {
                 />
               </Field>
 
-              <Field label="Confirmation">
+              <Field label={t('login.confirmation')}>
                 <Input
                   type="password"
                   value={confirmation}
@@ -108,12 +111,12 @@ export function LoginPage() {
               {error && <Notice tone="danger">{error}</Notice>}
 
               <Button type="submit" variant="primary" size="md" className="w-full" loading={busy}>
-                Enregistrer et continuer
+                {t('login.saveAndContinue')}
               </Button>
             </form>
           ) : (
             <form onSubmit={submitLogin} className="space-y-4">
-              <Field label="Identifiant">
+              <Field label={t('login.username')}>
                 <Input
                   value={username}
                   required
@@ -123,7 +126,7 @@ export function LoginPage() {
                 />
               </Field>
 
-              <Field label="Mot de passe">
+              <Field label={t('login.password')}>
                 <Input
                   type="password"
                   value={password}
@@ -136,17 +139,44 @@ export function LoginPage() {
               {error && <Notice tone="danger">{error}</Notice>}
 
               <Button type="submit" variant="primary" size="md" className="w-full" loading={busy}>
-                Se connecter
+                {t('login.submit')}
               </Button>
             </form>
           )}
         </Card>
 
-        <p className="text-ink-faint mt-4 text-center text-xs">
-          Le mot de passe du compte administrateur initial figure une seule fois dans les journaux du
-          conteneur.
-        </p>
+        <p className="text-ink-faint mt-4 text-center text-xs">{t('login.bootstrapHint')}</p>
+
+        {/* Le choix de la langue est offert avant la connexion : la coquille applicative, où il
+            vit ensuite, n'est pas encore accessible. */}
+        <LocalePicker />
       </div>
+    </div>
+  )
+}
+
+function LocalePicker() {
+  const { locale, setLocale } = useLocale()
+
+  return (
+    <div className="mt-4 flex items-center justify-center gap-1">
+      {LOCALES.map((option) => (
+        <button
+          key={option}
+          type="button"
+          lang={option}
+          onClick={() => setLocale(option)}
+          aria-pressed={option === locale}
+          className={cn(
+            'rounded-[var(--radius-control)] px-2 py-1 text-xs transition-colors',
+            option === locale
+              ? 'bg-surface-sunken text-ink font-medium'
+              : 'text-ink-faint hover:text-ink',
+          )}
+        >
+          {LOCALE_LABELS[option]}
+        </button>
+      ))}
     </div>
   )
 }

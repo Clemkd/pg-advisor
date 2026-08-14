@@ -11,13 +11,14 @@ import {
 
 export interface NavLeaf {
   to: string
-  label: string
+  /** Clé de traduction : la navigation est décrite une fois, traduite au rendu. */
+  labelKey: string
   icon?: LucideIcon
   adminOnly?: boolean
 }
 
 export interface NavSection {
-  label: string
+  labelKey: string
   icon: LucideIcon
   to?: string
   end?: boolean
@@ -29,23 +30,23 @@ export interface NavSection {
  * dépliée par défaut, la configuration se consulte plus rarement.
  */
 export const navigation: NavSection[] = [
-  { label: 'Vue d’ensemble', icon: Gauge, to: '/', end: true },
+  { labelKey: 'nav.overview', icon: Gauge, to: '/', end: true },
   {
-    label: 'Supervision',
+    labelKey: 'nav.supervision',
     icon: Database,
     children: [
-      { to: '/instances', label: 'Instances', icon: Database },
-      { to: '/findings', label: 'Recommandations', icon: Flag },
-      { to: '/queries', label: 'Requêtes', icon: Terminal },
+      { to: '/instances', labelKey: 'nav.instances', icon: Database },
+      { to: '/findings', labelKey: 'nav.findings', icon: Flag },
+      { to: '/queries', labelKey: 'nav.queries', icon: Terminal },
     ],
   },
   {
-    label: 'Configuration',
+    labelKey: 'nav.configuration',
     icon: ScrollText,
     children: [
-      { to: '/rules', label: 'Règles', icon: ScrollText },
-      { to: '/webhooks', label: 'Notifications', icon: Bell },
-      { to: '/users', label: 'Utilisateurs', icon: Users, adminOnly: true },
+      { to: '/rules', labelKey: 'nav.rules', icon: ScrollText },
+      { to: '/webhooks', labelKey: 'nav.webhooks', icon: Bell },
+      { to: '/users', labelKey: 'nav.users', icon: Users, adminOnly: true },
     ],
   },
 ]

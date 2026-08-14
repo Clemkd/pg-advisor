@@ -3,6 +3,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
 import { navigation, type NavLeaf, type NavSection } from './navigation'
 import { useAuth } from '@/app/AuthContext'
+import { useT } from '@/lib/i18n'
+import type { Translator } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -18,6 +20,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
   const location = useLocation()
   const { isAdmin } = useAuth()
+  const t = useT()
 
   const sections = navigation
     .map((section) => ({
@@ -28,7 +31,7 @@ export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
 
   return (
     <nav
-      aria-label="Navigation principale"
+      aria-label={t('nav.main')}
       className={cn(
         'bg-surface border-border-subtle flex h-full flex-col border-r transition-[width] duration-200',
         collapsed ? 'w-16' : 'w-64',
@@ -48,10 +51,11 @@ export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
       <div className="scrollbar-none flex-1 overflow-y-auto px-2 pb-4">
         <ul className="space-y-0.5">
           {sections.map((section) => (
-            <li key={section.label}>
+            <li key={section.labelKey}>
               <SidebarSection
                 section={section}
                 collapsed={collapsed}
+                t={t}
                 currentPath={location.pathname}
                 onNavigate={onNavigate}
               />
@@ -68,11 +72,13 @@ function SidebarSection({
   collapsed,
   currentPath,
   onNavigate,
+  t,
 }: {
   section: NavSection
   collapsed: boolean
   currentPath: string
   onNavigate?: () => void
+  t: Translator
 }) {
   const children = section.children ?? []
   const hasChildren = children.length > 0
@@ -94,11 +100,11 @@ function SidebarSection({
         to={target}
         end={section.end}
         onClick={onNavigate}
-        title={collapsed ? section.label : undefined}
+        title={collapsed ? t(section.labelKey) : undefined}
         className={({ isActive }) => itemClass(isActive, collapsed)}
       >
         <section.icon className="size-4 shrink-0" aria-hidden />
-        {!collapsed && <span className="truncate">{section.label}</span>}
+        {!collapsed && <span className="truncate">{t(section.labelKey)}</span>}
       </NavLink>
     )
   }
@@ -110,6 +116,7 @@ function SidebarSection({
         entries={children}
         containsActive={containsActive}
         onNavigate={onNavigate}
+        t={t}
       />
     )
   }
@@ -127,7 +134,7 @@ function SidebarSection({
         )}
       >
         <section.icon className="size-4 shrink-0" aria-hidden />
-        <span className="flex-1 truncate text-left">{section.label}</span>
+        <span className="flex-1 truncate text-left">{t(section.labelKey)}</span>
         <ChevronDown className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-180')} aria-hidden />
       </button>
 
@@ -141,7 +148,7 @@ function SidebarSection({
                 className={({ isActive }) => itemClass(isActive, false, true)}
               >
                 {child.icon && <child.icon className="size-3.5 shrink-0" aria-hidden />}
-                <span className="truncate">{child.label}</span>
+                <span className="truncate">{t(child.labelKey)}</span>
               </NavLink>
             </li>
           ))}
@@ -161,11 +168,13 @@ function CollapsedSection({
   entries,
   containsActive,
   onNavigate,
+  t,
 }: {
   section: NavSection
   entries: NavLeaf[]
   containsActive: boolean
   onNavigate?: () => void
+  t: Translator
 }) {
   const anchor = useRef<HTMLDivElement>(null)
   const [origin, setOrigin] = useState<{ top: number; left: number } | null>(null)
@@ -205,11 +214,11 @@ function CollapsedSection({
         type="button"
         onClick={() => (origin ? close() : open())}
         aria-expanded={origin !== null}
-        title={section.label}
+        title={t(section.labelKey)}
         className={cn(itemClass(containsActive, true), 'w-full')}
       >
         <section.icon className="size-4 shrink-0" aria-hidden />
-        <span className="sr-only">{section.label}</span>
+        <span className="sr-only">{t(section.labelKey)}</span>
       </button>
 
       {origin && (
@@ -219,10 +228,10 @@ function CollapsedSection({
           className="fixed z-50 pl-2"
           style={{ top: origin.top, left: origin.left }}
           role="group"
-          aria-label={section.label}
+          aria-label={t(section.labelKey)}
         >
           <div className="bg-surface border-border-subtle shadow-popover min-w-56 rounded-[var(--radius-card)] border p-2">
-            <p className="text-ink-faint px-2 pb-2 pt-1 text-xs font-semibold">{section.label}</p>
+            <p className="text-ink-faint px-2 pb-2 pt-1 text-xs font-semibold">{t(section.labelKey)}</p>
             <ul className="space-y-0.5">
               {entries.map((entry) => (
                 <li key={entry.to}>
@@ -235,7 +244,7 @@ function CollapsedSection({
                     className={({ isActive }) => itemClass(isActive, false, true)}
                   >
                     {entry.icon && <entry.icon className="size-3.5 shrink-0" aria-hidden />}
-                    <span className="truncate">{entry.label}</span>
+                    <span className="truncate">{t(entry.labelKey)}</span>
                   </NavLink>
                 </li>
               ))}

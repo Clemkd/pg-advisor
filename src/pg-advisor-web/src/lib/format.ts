@@ -1,12 +1,33 @@
-/** Formatages partagés par les vues. Locale française, unités binaires pour les octets. */
+import { currentLocale, hasTranslation, translate } from './i18n'
+import type { Locale } from './i18n'
 
-const numberFormat = new Intl.NumberFormat('fr-FR')
+/**
+ * Formatages partagés par les vues. Unités binaires pour les octets, et tout ce qui dépend de la
+ * langue est lu au moment de l'appel : un changement de locale re-rend l'arbre, donc les valeurs
+ * déjà affichées se reformatent.
+ */
+
+const INTL_LOCALES: Record<Locale, string> = { fr: 'fr-FR', en: 'en-GB' }
+
+function t(key: string, vars?: Record<string, string | number>): string {
+  return translate(currentLocale(), key, vars)
+}
+
+function intlLocale(): string {
+  return INTL_LOCALES[currentLocale()]
+}
+
+/** Libellé issu d'une donnée : traduit s'il est connu, rendu tel quel sinon. */
+function dataLabel(prefix: string, value: string): string {
+  const key = `${prefix}.${value}`
+  return hasTranslation(currentLocale(), key) ? t(key) : value
+}
 
 export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '—'
   }
-  return numberFormat.format(value)
+  return new Intl.NumberFormat(intlLocale()).format(value)
 }
 
 export function formatBytes(value: number | null | undefined): string {
@@ -14,7 +35,14 @@ export function formatBytes(value: number | null | undefined): string {
     return '—'
   }
 
-  const units = ['o', 'Kio', 'Mio', 'Gio', 'Tio', 'Pio']
+  const units = [
+    t('format.bytes.b'),
+    t('format.bytes.kib'),
+    t('format.bytes.mib'),
+    t('format.bytes.gib'),
+    t('format.bytes.tib'),
+    t('format.bytes.pib'),
+  ]
   let magnitude = Math.abs(value)
   let unit = 0
 
@@ -31,7 +59,9 @@ export function formatPercent(value: number | null | undefined, decimals = 1): s
   if (value === null || value === undefined || Number.isNaN(value)) {
     return '—'
   }
-  return `${(value * 100).toFixed(decimals)} %`
+  // Le français sépare le nombre du signe pour cent, l'anglais le colle.
+  const separator = currentLocale() === 'fr' ? ' ' : ''
+  return `${(value * 100).toFixed(decimals)}${separator}%`
 }
 
 export function formatSeconds(seconds: number | null | undefined): string {
@@ -43,97 +73,52 @@ export function formatSeconds(seconds: number | null | undefined): string {
   if (seconds < 60) return `${seconds.toFixed(1)} s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
   if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`
-  return `${(seconds / 86400).toFixed(1)} j`
+  return t('format.duration.days', { value: (seconds / 86400).toFixed(1) })
 }
 
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })
+  return date.toLocaleString(intlLocale(), { dateStyle: 'short', timeStyle: 'medium' })
 }
 
-/** Écart relatif lisible : « il y a 3 min », « dans 2 h ». */
+/** Écart relatif lisible : « il y a 3 min », « 3 min ago ». */
 export function formatRelative(value: string | null | undefined): string {
-  if (!value) return 'jamais'
+  if (!value) return t('common.never')
 
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'jamais'
+  if (Number.isNaN(date.getTime())) return t('common.never')
 
   const seconds = (Date.now() - date.getTime()) / 1000
   const absolute = Math.abs(seconds)
 
-  if (absolute < 10) return "à l'instant"
-  if (absolute < 60) return `il y a ${Math.round(absolute)} s`
-  if (absolute < 3600) return `il y a ${Math.round(absolute / 60)} min`
-  if (absolute < 86400) return `il y a ${Math.round(absolute / 3600)} h`
-  return `il y a ${Math.round(absolute / 86400)} j`
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  performance: 'Performance',
-  queries: 'Requêtes',
-  indexes: 'Index',
-  vacuum: 'Vacuum',
-  bloat: 'Espace perdu',
-  connections: 'Connexions',
-  locks: 'Verrous',
-  transactions: 'Transactions',
-  checkpoints: 'Checkpoints',
-  configuration: 'Configuration',
-  storage: 'Stockage',
-  statistics: 'Statistiques',
-  security: 'Sécurité',
-  timescaledb: 'TimescaleDB',
-  extensions: 'Extensions',
+  if (absolute < 10) return t('format.relative.now')
+  if (absolute < 60) return t('format.relative.seconds', { value: Math.round(absolute) })
+  if (absolute < 3600) return t('format.relative.minutes', { value: Math.round(absolute / 60) })
+  if (absolute < 86400) return t('format.relative.hours', { value: Math.round(absolute / 3600) })
+  return t('format.relative.days', { value: Math.round(absolute / 86400) })
 }
 
 export function categoryLabel(category: string): string {
-  return CATEGORY_LABELS[category] ?? category
-}
-
-const SEVERITY_LABELS: Record<string, string> = {
-  critical: 'Critique',
-  warning: 'Avertissement',
-  info: 'Information',
+  return dataLabel('category', category)
 }
 
 export function severityLabel(severity: string): string {
-  return SEVERITY_LABELS[severity] ?? severity
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  active: 'Actif',
-  resolved: 'Résolu',
-  ignored: 'Ignoré',
+  return dataLabel('severity', severity)
 }
 
 export function statusLabel(status: string): string {
-  return STATUS_LABELS[status] ?? status
-}
-
-const COLLECTION_STATE_LABELS: Record<string, string> = {
-  unknown: 'En attente',
-  collecting: 'Collecte',
-  analyzing: 'Analyse',
-  idle: 'À jour',
-  error: 'Erreur',
-  disabled: 'Désactivée',
+  return dataLabel('status', status)
 }
 
 export function collectionStateLabel(state: string): string {
-  return COLLECTION_STATE_LABELS[state] ?? state
-}
-
-const QUALIFIER_LABELS: Record<string, string> = {
-  low: 'faible',
-  medium: 'moyen',
-  high: 'élevé',
+  return dataLabel('collectionState', state)
 }
 
 export function qualifierLabel(value: string | null): string {
   if (!value) return '—'
-  return QUALIFIER_LABELS[value] ?? value
+  return dataLabel('qualifier', value)
 }
 
 /** Couleur du score : vert au-dessus de 90, ambre à partir de 70, rouge en dessous. */

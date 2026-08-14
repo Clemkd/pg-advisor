@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, X } from 'lucide-react'
+import { Languages, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, X } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Breadcrumbs } from './Breadcrumbs'
 import { useAuth } from '@/app/AuthContext'
 import { useEvents } from '@/app/EventsContext'
 import { useTheme } from '@/app/ThemeContext'
+import { Bubble, BubbleItem } from '@/components/ui/Bubble'
 import { Button } from '@/components/ui/primitives'
+import { LOCALES, LOCALE_LABELS, useLocale, useT } from '@/lib/i18n'
 import { cn, initials } from '@/lib/utils'
 
 const COLLAPSE_KEY = 'pg-advisor.sidebar.collapsed'
@@ -16,6 +18,7 @@ export function AppShell() {
   const { user, logout } = useAuth()
   const { connected } = useEvents()
   const { resolved, toggle } = useTheme()
+  const t = useT()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -42,6 +45,8 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [drawerOpen])
 
+  const themeLabel = resolved === 'dark' ? t('shell.theme.light') : t('shell.theme.dark')
+
   return (
     <div className="bg-canvas flex h-dvh overflow-hidden">
       <div className="hidden shrink-0 lg:block">
@@ -52,7 +57,7 @@ export function AppShell() {
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
             type="button"
-            aria-label="Fermer le menu"
+            aria-label={t('shell.closeMenu')}
             className="absolute inset-0 bg-black/50"
             onClick={() => setDrawerOpen(false)}
           />
@@ -70,7 +75,7 @@ export function AppShell() {
             type="button"
             onClick={() => setDrawerOpen((value) => !value)}
             className="text-ink-muted hover:bg-surface-sunken hover:text-ink grid size-9 shrink-0 place-items-center rounded-[var(--radius-control)] lg:hidden"
-            aria-label={drawerOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+            aria-label={drawerOpen ? t('shell.closeMenu') : t('shell.openMenu')}
             aria-expanded={drawerOpen}
           >
             {drawerOpen ? <X className="size-4" /> : <Menu className="size-4" />}
@@ -80,9 +85,9 @@ export function AppShell() {
             type="button"
             onClick={() => setCollapsed((value) => !value)}
             className="text-ink-muted hover:bg-surface-sunken hover:text-ink hidden size-9 shrink-0 place-items-center rounded-[var(--radius-control)] lg:grid"
-            aria-label={collapsed ? 'Déplier le menu' : 'Replier le menu'}
+            aria-label={collapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
             aria-expanded={!collapsed}
-            title={collapsed ? 'Déplier le menu' : 'Replier le menu'}
+            title={collapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
           >
             {collapsed ? (
               <PanelLeftOpen className="size-4" aria-hidden />
@@ -96,28 +101,32 @@ export function AppShell() {
           <div className="ml-auto flex items-center gap-2">
             <span
               className="text-ink-faint flex items-center gap-1.5 text-xs"
-              title={connected ? 'Flux temps réel connecté' : 'Flux temps réel interrompu'}
+              title={connected ? t('shell.connected') : t('shell.disconnected')}
             >
               <span
                 aria-hidden
                 className={cn('size-2 rounded-full', connected ? 'bg-success' : 'bg-ink-faint')}
               />
-              <span className="hidden sm:inline">{connected ? 'temps réel' : 'hors ligne'}</span>
+              <span className="hidden sm:inline">
+                {connected ? t('shell.realtime.on') : t('shell.realtime.off')}
+              </span>
             </span>
+
+            <LanguageMenu />
 
             <Button
               variant="ghost"
               size="icon"
               onClick={toggle}
-              aria-label={resolved === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'}
-              title={resolved === 'dark' ? 'Passer en thème clair' : 'Passer en thème sombre'}
+              aria-label={themeLabel}
+              title={themeLabel}
             >
               {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
 
             <span
               className="hover:bg-surface-sunken flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-2"
-              title={user?.role === 'Admin' ? 'Administrateur' : 'Lecteur'}
+              title={user?.role === 'Admin' ? t('role.admin') : t('role.viewer')}
             >
               <span className="bg-brand-subtle text-brand grid size-7 place-items-center rounded-full text-xs font-semibold">
                 {initials(user?.username)}
@@ -134,8 +143,8 @@ export function AppShell() {
                 await logout()
                 navigate('/login')
               }}
-              aria-label="Se déconnecter"
-              title="Se déconnecter"
+              aria-label={t('shell.logout')}
+              title={t('shell.logout')}
             >
               <LogOut className="size-4" />
             </Button>
@@ -153,5 +162,55 @@ export function AppShell() {
         </main>
       </div>
     </div>
+  )
+}
+
+/**
+ * Choix de la langue. Même dessin que les autres menus de l'application : une bulle d'options,
+ * et non une liste déroulante native qui ignorerait le thème.
+ */
+function LanguageMenu() {
+  const { locale, setLocale } = useLocale()
+  const t = useT()
+  const anchor = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <Button
+        ref={anchor}
+        variant="ghost"
+        size="icon"
+        onClick={() => setOpen((value) => !value)}
+        aria-label={t('shell.language')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={`${t('shell.language')} — ${LOCALE_LABELS[locale]}`}
+      >
+        <Languages className="size-4" />
+      </Button>
+
+      <Bubble
+        anchor={anchor}
+        open={open}
+        onClose={() => setOpen(false)}
+        align="end"
+        label={t('shell.language')}
+      >
+        {LOCALES.map((option) => (
+          <BubbleItem
+            key={option}
+            selected={option === locale}
+            onSelect={() => {
+              setLocale(option)
+              setOpen(false)
+            }}
+          >
+            <span className="w-6 text-xs font-semibold uppercase">{option}</span>
+            <span className="truncate">{LOCALE_LABELS[option]}</span>
+          </BubbleItem>
+        ))}
+      </Bubble>
+    </>
   )
 }

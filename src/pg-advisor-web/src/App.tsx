@@ -5,6 +5,7 @@ import { EventsProvider } from '@/app/EventsContext'
 import { ThemeProvider } from '@/app/ThemeContext'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoadingBlock } from '@/components/ui/primitives'
+import { LocaleProvider } from '@/lib/i18n'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { FindingsPage } from '@/pages/FindingsPage'
 import { InstanceDetailPage } from '@/pages/InstanceDetailPage'
@@ -32,33 +33,35 @@ function Protected({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <EventsProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              element={
-                <Protected>
-                  <AppShell />
-                </Protected>
-              }
-            >
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/instances" element={<InstancesPage />} />
-              <Route path="/instances/:id" element={<InstanceDetailPage />} />
-              <Route path="/findings" element={<FindingsPage />} />
-              <Route path="/queries" element={<QueriesPage />} />
-              <Route path="/rules" element={<RulesPage />} />
-              <Route path="/rules/new" element={<RuleEditorPage />} />
-              <Route path="/rules/:id" element={<RuleEditorPage />} />
-              <Route path="/webhooks" element={<WebhooksPage />} />
-              <Route path="/users" element={<UsersPage />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </EventsProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <LocaleProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <EventsProvider>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                element={
+                  <Protected>
+                    <AppShell />
+                  </Protected>
+                }
+              >
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/instances" element={<InstancesPage />} />
+                <Route path="/instances/:id" element={<InstanceDetailPage />} />
+                <Route path="/findings" element={<FindingsPage />} />
+                <Route path="/queries" element={<QueriesPage />} />
+                <Route path="/rules" element={<RulesPage />} />
+                <Route path="/rules/new" element={<RuleEditorPage />} />
+                <Route path="/rules/:id" element={<RuleEditorPage />} />
+                <Route path="/webhooks" element={<WebhooksPage />} />
+                <Route path="/users" element={<UsersPage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </EventsProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </LocaleProvider>
   )
 }
