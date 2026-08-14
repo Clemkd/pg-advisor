@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { en } from './locales/en'
+import { enInstances } from './locales/en.instances'
+import { enQueries } from './locales/en.queries'
+import { enRules } from './locales/en.rules'
 import { fr } from './locales/fr'
+import { frInstances } from './locales/fr.instances'
+import { frQueries } from './locales/fr.queries'
+import { frRules } from './locales/fr.rules'
 
 export type Locale = 'fr' | 'en'
 
@@ -12,7 +18,12 @@ export const LOCALE_LABELS: Record<Locale, string> = { fr: 'Français', en: 'Eng
 
 const STORAGE_KEY = 'pg-advisor.locale'
 
-const CATALOGUES: Record<Locale, Record<string, string>> = { fr, en }
+// Un catalogue par zone, fusionné ici : les vues d'une zone se traduisent sans toucher au
+// fichier des autres.
+const CATALOGUES: Record<Locale, Record<string, string>> = {
+  fr: { ...fr, ...frQueries, ...frInstances, ...frRules },
+  en: { ...en, ...enQueries, ...enInstances, ...enRules },
+}
 
 /**
  * Locale courante lisible hors React. Les formatages de lib/format.ts sont appelés depuis
