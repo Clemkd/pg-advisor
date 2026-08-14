@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Database } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import type { Connection, TestConnectionResult } from '../api/types'
 import { useAuth } from '../app/AuthContext'
@@ -11,6 +12,7 @@ import {
   Checkbox,
   EmptyState,
   Field,
+  FormSection,
   Input,
   Modal,
   PageHeader,
@@ -20,6 +22,8 @@ import {
   Tag,
 } from '../components/ui'
 import { collectionStateLabel, formatDateTime, formatRelative } from '../lib/format'
+import { tr, useT, useTc } from '../lib/i18n'
+import type { Translator } from '../lib/i18n'
 
 interface FormState {
   id: number | null
@@ -64,9 +68,9 @@ function toForm(connection: Connection): FormState {
   }
 }
 
-function StateTag({ connection }: { connection: Connection }) {
+function StateTag({ connection, t }: { connection: Connection; t: Translator }) {
   if (!connection.enabled) {
-    return <Tag>désactivée</Tag>
+    return <Tag>{t('instances.disabledBadge')}</Tag>
   }
 
   const tone =
@@ -81,6 +85,8 @@ function StateTag({ connection }: { connection: Connection }) {
 
 export function InstancesPage() {
   const { isAdmin } = useAuth()
+  const t = useT()
+  const tc = useTc()
   const [connections, setConnections] = useState<Connection[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -92,7 +98,7 @@ export function InstancesPage() {
       setConnections(await api.connections.list())
       setError(null)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Chargement impossible.')
+      setError(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -104,24 +110,24 @@ export function InstancesPage() {
 
   useEventListener(['collection.state', 'instance.changed', 'health.changed'], () => void load())
 
+  const addButton = isAdmin && (
+    <Button variant="primary" onClick={() => setForm(EMPTY_FORM)}>
+      {t('instances.add')}
+    </Button>
+  )
+
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Instances PostgreSQL"
-        subtitle="Chaque instance est supervisée en lecture seule et notée indépendamment."
-        actions={
-          isAdmin && (
-            <Button variant="primary" onClick={() => setForm(EMPTY_FORM)}>
-              Ajouter une instance
-            </Button>
-          )
-        }
+        title={t('nav.instances')}
+        subtitle={t('instances.subtitle')}
+        actions={addButton}
       />
 
-      <Card title={`${connections.length} instance${connections.length > 1 ? 's' : ''}`} padded={false}>
+      <Card title={tc('instances.count', connections.length)} padded={false}>
         {error && (
           <div className="p-4">
-            <Alert title="Erreur">{error}</Alert>
+            <Alert title={t('common.error')}>{error}</Alert>
           </div>
         )}
 
@@ -130,12 +136,13 @@ export function InstancesPage() {
             <Spinner className="size-6" />
           </div>
         ) : connections.length === 0 ? (
-          <div className="p-4">
-            <EmptyState title="Aucune instance supervisée">
-              Ajoutez une connexion en lecture seule. L'Advisor ne modifie jamais l'instance
-              PostgreSQL : la session est forcée en lecture seule.
-            </EmptyState>
-          </div>
+          <EmptyState
+            title={t('instances.empty.title')}
+            icon={<Database className="size-6" aria-hidden />}
+            action={addButton}
+          >
+            {t('instances.empty.body')}
+          </EmptyState>
         ) : (
           <>
             {/* Tableau à partir de md ; en dessous, une liste de cartes reste lisible sans
@@ -145,13 +152,19 @@ export function InstancesPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-surface-sunken text-left text-xs uppercase tracking-wide text-ink-muted">
                     <tr>
-                      <th className="px-4 py-2 font-medium">Nom</th>
-                      <th className="px-4 py-2 font-medium">Cible</th>
-                      <th className="px-4 py-2 font-medium">Version</th>
-                      <th className="px-4 py-2 font-medium">État</th>
-                      <th className="px-4 py-2 font-medium whitespace-nowrap">Dernière collecte</th>
-                      <th className="px-4 py-2 font-medium">Santé</th>
-                      <th className="px-4 py-2" />
+                      <th className="px-4 py-2 font-medium">{t('common.name')}</th>
+                      <th className="px-4 py-2 font-medium">{t('instances.column.target')}</th>
+                      <th className="px-4 py-2 font-medium">{t('instanceDetail.version')}</th>
+                      <th className="px-4 py-2 font-medium">{t('common.state')}</th>
+                      <th className="px-4 py-2 font-medium whitespace-nowrap">
+                        {t('instances.column.lastCollection')}
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium">
+                        {t('instanceDetail.health')}
+                      </th>
+                      <th className="px-4 py-2">
+                        <span className="sr-only">{t('common.actions')}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle">
@@ -176,7 +189,7 @@ export function InstancesPage() {
                           <span className="whitespace-nowrap">{connection.serverVersion ?? '—'}</span>
                         </td>
                         <td className="px-4 py-2.5">
-                          <StateTag connection={connection} />
+                          <StateTag connection={connection} t={t} />
                           {connection.lastError && (
                             <p
                               className="mt-1 line-clamp-2 max-w-56 text-xs text-danger"
@@ -192,7 +205,9 @@ export function InstancesPage() {
                         >
                           {formatRelative(connection.lastCollectedAt)}
                         </td>
-                        <td className="px-4 py-2.5">
+                        {/* Les scores se comparent d'une ligne à l'autre : alignés à droite,
+                            en chiffres de largeur fixe. */}
+                        <td className="px-4 py-2.5 text-right">
                           <span className="whitespace-nowrap font-semibold tabular-nums text-ink">
                             {connection.health ? `${connection.health.global}/100` : '—'}
                           </span>
@@ -201,10 +216,14 @@ export function InstancesPage() {
                           {isAdmin && (
                             <div className="flex justify-end gap-1">
                               <Button variant="ghost" onClick={() => setForm(toForm(connection))}>
-                                Modifier
+                                {t('common.edit')}
                               </Button>
-                              <Button variant="ghost" onClick={() => setConfirmDelete(connection)}>
-                                Supprimer
+                              <Button
+                                variant="ghost"
+                                className="text-danger hover:text-danger"
+                                onClick={() => setConfirmDelete(connection)}
+                              >
+                                {t('common.delete')}
                               </Button>
                             </div>
                           )}
@@ -236,23 +255,31 @@ export function InstancesPage() {
                     </span>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <StateTag connection={connection} />
+                  {/* État, version et date de collecte sur une même ligne d'étiquettes : trois
+                      informations courtes n'ont pas besoin de trois lignes. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <StateTag connection={connection} t={t} />
                     {connection.serverVersion && <Tag>PostgreSQL {connection.serverVersion}</Tag>}
+                    <span className="text-xs text-ink-muted">
+                      {t('instances.collectedAt', {
+                        when: formatRelative(connection.lastCollectedAt),
+                      })}
+                    </span>
                   </div>
 
-                  <p className="mt-2 text-xs text-ink-muted">
-                    Collecte {formatRelative(connection.lastCollectedAt)}
-                  </p>
-
                   {connection.lastError && (
-                    <p className="mt-1 line-clamp-2 text-xs text-danger">{connection.lastError}</p>
+                    <p className="mt-1.5 line-clamp-2 text-xs text-danger">{connection.lastError}</p>
                   )}
 
                   {isAdmin && (
                     <div className="mt-2 flex gap-2">
-                      <Button onClick={() => setForm(toForm(connection))}>Modifier</Button>
-                      <Button onClick={() => setConfirmDelete(connection)}>Supprimer</Button>
+                      <Button onClick={() => setForm(toForm(connection))}>{t('common.edit')}</Button>
+                      <Button
+                        className="text-danger hover:text-danger"
+                        onClick={() => setConfirmDelete(connection)}
+                      >
+                        {t('common.delete')}
+                      </Button>
                     </div>
                   )}
                 </li>
@@ -275,11 +302,12 @@ export function InstancesPage() {
 
       {confirmDelete && (
         <Modal
-          title={`Supprimer « ${confirmDelete.name} » ?`}
+          title={t('instances.delete.title', { name: confirmDelete.name })}
           onClose={() => setConfirmDelete(null)}
+          size="sm"
           footer={
             <>
-              <Button onClick={() => setConfirmDelete(null)}>Annuler</Button>
+              <Button onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
               <Button
                 variant="danger"
                 onClick={async () => {
@@ -288,15 +316,12 @@ export function InstancesPage() {
                   void load()
                 }}
               >
-                Supprimer
+                {t('common.delete')}
               </Button>
             </>
           }
         >
-          <p className="text-sm text-ink">
-            L'instance PostgreSQL n'est pas touchée : seuls la connexion enregistrée, ses findings et
-            son historique sont supprimés de l'Advisor.
-          </p>
+          <p className="text-sm text-ink">{t('instances.delete.body')}</p>
         </Modal>
       )}
     </div>
@@ -312,6 +337,7 @@ function ConnectionForm({
   onClose: () => void
   onSaved: () => void
 }) {
+  const t = useT()
   const [form, setForm] = useState(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -342,7 +368,7 @@ function ConnectionForm({
         }),
       )
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Test impossible.')
+      setError(cause instanceof ApiError ? cause.message : t('instances.form.testFailed'))
     } finally {
       setBusy(false)
     }
@@ -378,7 +404,7 @@ function ConnectionForm({
         setError(cause.message)
         setDetails(cause.details ?? [])
       } else {
-        setError('Enregistrement impossible.')
+        setError(t('instances.form.saveFailed'))
       }
     } finally {
       setBusy(false)
@@ -387,24 +413,37 @@ function ConnectionForm({
 
   return (
     <Modal
-      title={editing ? `Modifier « ${initial.name} »` : 'Ajouter une instance PostgreSQL'}
+      title={
+        editing ? t('instances.form.editTitle', { name: initial.name }) : t('instances.form.addTitle')
+      }
       onClose={onClose}
-      wide
+      size="lg"
       footer={
         <>
-          <Button onClick={onClose}>Annuler</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button onClick={runTest} disabled={busy || !form.host || !form.username}>
-            {busy && <Spinner />} Tester la connexion
+            {busy && <Spinner />} {t('instances.form.test')}
           </Button>
           <Button form="connection-form" type="submit" variant="primary" disabled={busy}>
-            Enregistrer
+            {t('common.save')}
           </Button>
         </>
       }
     >
-      <form id="connection-form" onSubmit={save} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nom" hint="Libellé affiché dans le dashboard">
+      {/* Trois ensembles au lieu d'une grille de huit champs : la cible, l'identification, puis
+          le rythme de collecte. Chacun tient sur une ou deux lignes. */}
+      <form id="connection-form" onSubmit={save} className="space-y-5">
+        <FormSection
+          title={t('instances.form.target')}
+          action={
+            <Checkbox
+              label={t('instances.form.enabled')}
+              checked={form.enabled}
+              onChange={(event) => update('enabled', event.target.checked)}
+            />
+          }
+        >
+          <Field label={t('common.name')} hint={t('instances.form.nameHint')}>
             <Input
               value={form.name}
               required
@@ -413,84 +452,87 @@ function ConnectionForm({
             />
           </Field>
 
-          <Field label="Base de données">
-            <Input
-              value={form.database}
-              required
-              onChange={(event) => update('database', event.target.value)}
-            />
-          </Field>
+          {/* L'hôte prend la place que son contenu réclame ; le port et la base gardent la
+              leur, plus courte. */}
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,2fr)]">
+            <Field label={t('instances.form.host')}>
+              <Input
+                value={form.host}
+                required
+                placeholder={t('instances.form.hostPlaceholder')}
+                onChange={(event) => update('host', event.target.value)}
+              />
+            </Field>
 
-          <Field label="Hôte">
-            <Input
-              value={form.host}
-              required
-              placeholder="db.exemple.local"
-              onChange={(event) => update('host', event.target.value)}
-            />
-          </Field>
+            <Field label={t('instances.form.port')}>
+              <Input
+                type="number"
+                min={1}
+                max={65535}
+                value={form.port}
+                required
+                onChange={(event) => update('port', Number(event.target.value))}
+              />
+            </Field>
 
-          <Field label="Port">
-            <Input
-              type="number"
-              min={1}
-              max={65535}
-              value={form.port}
-              required
-              onChange={(event) => update('port', Number(event.target.value))}
-            />
-          </Field>
+            <Field label={t('instances.form.database')}>
+              <Input
+                value={form.database}
+                required
+                onChange={(event) => update('database', event.target.value)}
+              />
+            </Field>
+          </div>
+        </FormSection>
 
-          <Field label="Utilisateur" hint="Un rôle en lecture, membre de pg_monitor si possible">
-            <Input
-              value={form.username}
-              required
-              onChange={(event) => update('username', event.target.value)}
-            />
-          </Field>
+        <FormSection title={t('instances.form.authentication')}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label={t('instances.form.username')} hint={t('instances.form.usernameHint')}>
+              <Input
+                value={form.username}
+                required
+                onChange={(event) => update('username', event.target.value)}
+              />
+            </Field>
 
-          <Field
-            label="Mot de passe"
-            hint={editing ? 'Laisser vide pour conserver le mot de passe enregistré' : undefined}
-          >
-            <Input
-              type="password"
-              value={form.password}
-              required={!editing}
-              autoComplete="new-password"
-              onChange={(event) => update('password', event.target.value)}
-            />
-          </Field>
+            <Field
+              label={t('instances.form.password')}
+              hint={editing ? t('instances.form.passwordHint') : undefined}
+            >
+              <Input
+                type="password"
+                value={form.password}
+                required={!editing}
+                autoComplete="new-password"
+                onChange={(event) => update('password', event.target.value)}
+              />
+            </Field>
 
-          <Field label="Mode SSL">
-            <Select value={form.sslMode} onChange={(event) => update('sslMode', event.target.value)}>
-              {SSL_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {mode}
-                </option>
-              ))}
-            </Select>
-          </Field>
+            <Field label={t('instanceDetail.sslMode')}>
+              <Select value={form.sslMode} onChange={(event) => update('sslMode', event.target.value)}>
+                {SSL_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </FormSection>
 
-          <Field
-            label="Intervalle de collecte (s)"
-            hint="0 pour suivre la périodicité globale du scheduler"
-          >
-            <Input
-              type="number"
-              min={0}
-              max={86400}
-              value={form.collectionIntervalSeconds}
-              onChange={(event) => update('collectionIntervalSeconds', Number(event.target.value))}
-            />
-          </Field>
-        </div>
-
-        <Checkbox
-          label="Instance active"
-          checked={form.enabled}
-          onChange={(event) => update('enabled', event.target.checked)}
-        />
+        <FormSection title={t('instances.form.collection')}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label={t('instances.form.interval')} hint={t('instances.form.intervalHint')}>
+              <Input
+                type="number"
+                min={0}
+                max={86400}
+                value={form.collectionIntervalSeconds}
+                onChange={(event) => update('collectionIntervalSeconds', Number(event.target.value))}
+              />
+            </Field>
+          </div>
+        </FormSection>
 
         {error && (
           <Alert title={error}>
@@ -504,15 +546,15 @@ function ConnectionForm({
           </Alert>
         )}
 
-        {test && <TestResult result={test} />}
+        {test && <TestResult result={test} t={t} />}
       </form>
     </Modal>
   )
 }
 
-function TestResult({ result }: { result: TestConnectionResult }) {
+function TestResult({ result, t }: { result: TestConnectionResult; t: Translator }) {
   if (!result.success) {
-    return <Alert title="Connexion impossible">{result.error}</Alert>
+    return <Alert title={t('instances.test.failedTitle')}>{result.error}</Alert>
   }
 
   const available = result.capabilities.filter((capability) => capability.available)
@@ -520,10 +562,21 @@ function TestResult({ result }: { result: TestConnectionResult }) {
 
   return (
     <div className="space-y-3">
-      <Alert tone="success" title={`Connexion établie — PostgreSQL ${result.serverVersion}`}>
-        {result.timescaleVersion && <p className="text-xs">TimescaleDB {result.timescaleVersion}</p>}
+      <Alert
+        tone="success"
+        title={t('instances.test.successTitle', { version: result.serverVersion ?? '—' })}
+      >
+        {/* Les précisions du test tiennent sur une ligne : elles se lisent d'un coup d'œil
+            avant de refermer la modale. */}
         <p className="text-xs">
-          Session en lecture seule : {result.readOnlyEnforced ? 'confirmée' : 'non confirmée'}
+          {t('instances.test.readOnly', {
+            state: result.readOnlyEnforced
+              ? t('instances.test.readOnlyConfirmed')
+              : t('instances.test.readOnlyUnconfirmed'),
+          })}
+          {result.timescaleVersion && (
+            <> · {t('instances.test.timescale', { version: result.timescaleVersion })}</>
+          )}
         </p>
       </Alert>
 
@@ -534,8 +587,16 @@ function TestResult({ result }: { result: TestConnectionResult }) {
       ))}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <CapabilityList title={`Disponible (${available.length})`} items={available.map((c) => c.name)} available />
-        <CapabilityList title={`Absent (${missing.length})`} items={missing.map((c) => c.name)} available={false} />
+        <CapabilityList
+          title={t('instances.test.available', { count: available.length })}
+          items={available.map((capability) => capability.name)}
+          available
+        />
+        <CapabilityList
+          title={t('instances.test.missing', { count: missing.length })}
+          items={missing.map((capability) => capability.name)}
+          available={false}
+        />
       </div>
     </div>
   )
@@ -551,7 +612,7 @@ function CapabilityList({
   available: boolean
 }) {
   return (
-    <div className="rounded-md border border-border-subtle p-3">
+    <div className="rounded-[var(--radius-control)] border border-border-subtle p-3">
       <p className="mb-1.5 text-xs font-semibold text-ink-muted">{title}</p>
       <ul className="max-h-40 space-y-0.5 overflow-y-auto font-mono text-xs">
         {items.length === 0 && <li className="text-ink-faint">—</li>}

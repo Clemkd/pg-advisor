@@ -16,6 +16,7 @@ import { useEffect } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Check, ChevronDown, Loader2, X } from 'lucide-react'
 import { Bubble, BubbleItem } from '@/components/ui/Bubble'
+import { severityLabel } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -125,7 +126,7 @@ export function SplitButton({
         onClose={() => setOpen(false)}
         align="end"
         width={MENU_WIDTH}
-        label="Autres actions"
+        label={t('common.moreActions')}
       >
         {options.map((option) => (
           <BubbleItem
@@ -345,12 +346,14 @@ export function Field({
   children: ReactNode
 }) {
   return (
-    <div className={cn('min-w-0', className)}>
+    <div className={cn('flex min-w-0 flex-col', className)}>
       {/* Association implicite : le champ est enveloppé par le libellé, ce qui lui donne un nom
           accessible sans imposer un `id` à chacun des appelants.
           Indication et erreur partagent la ligne du libellé : même information, une ligne de
-          moins par champ — ce qui compte dès qu'une vue aligne une barre de filtres. */}
-      <label className="block">
+          moins par champ — ce qui compte dès qu'une vue aligne une barre de filtres.
+          Le contrôle est poussé en bas de la cellule : sur une même rangée de grille, une
+          indication qui se replie sur deux lignes ne décale plus la saisie voisine. */}
+      <label className="flex flex-1 flex-col">
         <span className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2">
           <span className="text-ink-muted text-xs font-medium">{label}</span>
           {error ? (
@@ -359,25 +362,108 @@ export function Field({
             <span className="text-ink-faint text-xs">{hint}</span>
           ) : null}
         </span>
-        {children}
+        <span className="mt-auto block">{children}</span>
       </label>
     </div>
   )
 }
 
+/**
+ * Groupe de champs d'un formulaire, avec un intitulé de rang inférieur au titre de la modale.
+ * Un formulaire de dix champs se lit comme trois ensembles courts au lieu d'une pile : l'œil
+ * trouve « où se règle la sévérité » sans relire chaque libellé.
+ */
+export function FormSection({
+  title,
+  action,
+  className,
+  children,
+}: {
+  title: ReactNode
+  /** Contrôle rattaché au groupe — un interrupteur d'activation, par exemple. */
+  action?: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <section className={cn('min-w-0', className)}>
+      <div className="border-border-subtle mb-3 flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b pb-1.5">
+        <h3 className="text-ink-faint text-[11px] font-semibold tracking-wider uppercase">
+          {title}
+        </h3>
+        {action}
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  )
+}
+
+/**
+ * Groupe de cases à cocher. La légende est dessinée comme un libellé de champ, et les cases se
+ * répartissent en colonnes : deux options tiennent alors sur une ligne au lieu d'une pile.
+ */
+export function Fieldset({
+  legend,
+  hint,
+  columns = 2,
+  className,
+  children,
+}: {
+  legend: ReactNode
+  hint?: ReactNode
+  columns?: 1 | 2 | 3
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <fieldset className={cn('min-w-0', className)}>
+      <legend className="mb-0.5 flex w-full flex-wrap items-baseline justify-between gap-x-2">
+        <span className="text-ink-muted text-xs font-medium">{legend}</span>
+        {hint && <span className="text-ink-faint text-xs">{hint}</span>}
+      </legend>
+      <div
+        className={cn(
+          'grid gap-x-5',
+          columns === 2 && 'sm:grid-cols-2',
+          columns === 3 && 'sm:grid-cols-3',
+        )}
+      >
+        {children}
+      </div>
+    </fieldset>
+  )
+}
+
+/**
+ * Case à cocher. La hauteur minimale sert de cible de clic : deux cases empilées ne se touchent
+ * plus, et le libellé entier reste cliquable. L'indication éventuelle suit le libellé sur la
+ * même ligne plutôt que de s'empiler dessous — une case, une ligne.
+ */
 export function Checkbox({
   label,
+  hint,
   className,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode }) {
+}: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode; hint?: ReactNode }) {
   return (
-    <label className={cn('text-ink inline-flex items-center gap-2 text-sm', className)}>
+    <label
+      className={cn(
+        'text-ink flex min-h-8 items-center gap-2.5 text-sm select-none',
+        props.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+        className,
+      )}
+    >
+      {/* `accent-brand` teinte la case native aux couleurs de l'application, dans les deux
+          thèmes, sans avoir à redessiner un contrôle. */}
       <input
         type="checkbox"
         {...props}
-        className="border-border-strong text-brand focus:ring-brand size-4 rounded"
+        className="accent-brand border-border-strong size-4 shrink-0 rounded"
       />
-      {label}
+      <span className="min-w-0">
+        {label}
+        {hint && <span className="text-ink-faint ml-1.5 text-xs">{hint}</span>}
+      </span>
     </label>
   )
 }
@@ -570,16 +656,10 @@ const SEVERITY_TONE: Record<string, VariantProps<typeof badgeStyles>['tone']> = 
   info: 'brand',
 }
 
-const SEVERITY_LABEL: Record<string, string> = {
-  critical: 'Critique',
-  warning: 'Avertissement',
-  info: 'Information',
-}
-
 export function SeverityBadge({ severity }: { severity: string }) {
-  return (
-    <Badge tone={SEVERITY_TONE[severity] ?? 'neutral'}>{SEVERITY_LABEL[severity] ?? severity}</Badge>
-  )
+  // Le libellé vient du catalogue partagé : une sévérité s'écrit de la même façon dans un
+  // badge, un filtre ou une ligne d'historique, et suit la langue choisie.
+  return <Badge tone={SEVERITY_TONE[severity] ?? 'neutral'}>{severityLabel(severity)}</Badge>
 }
 
 const DOT_TONES: Record<string, string> = {
@@ -623,11 +703,15 @@ export function EmptyState({
   action?: ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-      {icon && <div className="text-ink-faint mb-3">{icon}</div>}
+    // Assez d'air pour que l'état vide se distingue d'un contenu manquant, pas au point de
+    // repousser hors de l'écran ce qui suit la carte.
+    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+      {icon && <div className="text-ink-faint mb-2">{icon}</div>}
       <p className="text-ink text-sm font-medium">{title}</p>
-      {description && <div className="text-ink-muted mt-1 max-w-md text-xs">{description}</div>}
-      {action && <div className="mt-4">{action}</div>}
+      {description && (
+        <div className="text-ink-muted mt-1 max-w-md text-xs leading-relaxed">{description}</div>
+      )}
+      {action && <div className="mt-3">{action}</div>}
     </div>
   )
 }
@@ -680,17 +764,41 @@ export function Notice({
 
 /* ------------------------------------------------------------------ Modale */
 
+/**
+ * Largeurs de modale. Le contenu commande : une confirmation d'une phrase n'a pas besoin de la
+ * largeur d'un formulaire à deux colonnes, et un formulaire à deux colonnes n'a rien à faire
+ * dans une colonne de 512 px où chaque champ tombe l'un sous l'autre.
+ */
+const MODAL_WIDTHS = {
+  /** Confirmation, message court, un champ. */
+  sm: 'sm:max-w-md',
+  /** Formulaire simple, une colonne. */
+  md: 'sm:max-w-xl',
+  /** Formulaire à deux colonnes, listes côte à côte. */
+  lg: 'sm:max-w-3xl',
+  /** Plan de requête, tableau : presque toute la fenêtre. */
+  full: 'sm:h-[94dvh] sm:max-w-[1600px]',
+} as const
+
+export type ModalSize = keyof typeof MODAL_WIDTHS
+
 export function Modal({
   title,
+  description,
   onClose,
   children,
   footer,
+  size = 'md',
   wide = false,
 }: {
   title: ReactNode
+  /** Contexte de la modale, sur la ligne sous le titre : évite d'ouvrir le corps par un pavé. */
+  description?: ReactNode
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
+  size?: ModalSize
+  /** Forme historique de `size="full"`, conservée pour les vues déjà écrites. */
   wide?: boolean
 }) {
   useEffect(() => {
@@ -702,28 +810,49 @@ export function Modal({
   }, [onClose])
 
   const t = useT()
+  const titleId = useId()
+  const resolved: ModalSize = wide ? 'full' : size
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-3">
-      {/* Une modale large occupe presque toute la fenêtre : un diagramme de plan ou un tableau
-          n'a rien à gagner à être regardé par un hublot. */}
+    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
       <div
         className={cn(
           'bg-surface shadow-popover flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[var(--radius-card)] sm:rounded-[var(--radius-card)]',
-          wide ? 'sm:h-[94dvh] sm:max-w-[1600px]' : 'sm:max-h-[88dvh] sm:max-w-lg',
+          resolved === 'full' ? MODAL_WIDTHS.full : cn('sm:max-h-[88dvh]', MODAL_WIDTHS[resolved]),
         )}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
       >
-        <div className="border-border-subtle flex shrink-0 items-start justify-between gap-3 border-b px-5 py-3">
-          <h2 className="text-ink min-w-0 text-sm font-semibold">{title}</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('common.close')} className="shrink-0">
+        {/* Le titre et le bouton de fermeture partagent une ligne, centrés l'un sur l'autre :
+            le titre est tronqué plutôt que de se replier sous la croix, et il reste lisible en
+            entier au survol. Le descriptif éventuel s'aligne dessous, dans la même colonne. */}
+        <div className="border-border-subtle flex shrink-0 items-center gap-3 border-b px-5 py-3">
+          <div className="min-w-0 flex-1">
+            <h2
+              id={titleId}
+              className="text-ink truncate text-base leading-6 font-semibold"
+              title={typeof title === 'string' ? title : undefined}
+            >
+              {title}
+            </h2>
+            {description && (
+              <p className="text-ink-muted mt-0.5 text-xs leading-snug">{description}</p>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            className="-mr-1.5 shrink-0"
+          >
             <X className="size-4" aria-hidden />
           </Button>
         </div>
 
         {/* min-h-0 : indispensable pour que la zone défilante se limite à la hauteur restante. */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
 
         {footer && (
           <div className="border-border-subtle bg-surface-sunken flex shrink-0 flex-wrap items-center justify-end gap-2 border-t px-5 py-3">

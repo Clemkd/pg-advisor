@@ -159,10 +159,12 @@ export function BubbleItem({
       disabled={disabled}
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-left text-[13px] transition-colors disabled:pointer-events-none disabled:opacity-50',
+        // Une entrée de menu est du contenu de premier plan, pas une légende : elle s'écrit à
+        // l'encre pleine. La hauteur tient la cible de clic sans allonger les longues listes.
+        'flex min-h-8 w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-1.5 text-left text-[13px] transition-colors disabled:pointer-events-none disabled:opacity-50',
         selected
           ? 'bg-brand-subtle text-brand font-medium'
-          : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
+          : 'text-ink hover:bg-surface-sunken',
       )}
     >
       {children}

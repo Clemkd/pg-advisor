@@ -124,8 +124,10 @@ export function AppShell() {
               {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
 
+            {/* Bloc informatif, pas un bouton : aucun effet de survol, qui laisserait croire
+                à un menu de compte inexistant. */}
             <span
-              className="hover:bg-surface-sunken flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-2"
+              className="flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-1.5"
               title={user?.role === 'Admin' ? t('role.admin') : t('role.viewer')}
             >
               <span className="bg-brand-subtle text-brand grid size-7 place-items-center rounded-full text-xs font-semibold">

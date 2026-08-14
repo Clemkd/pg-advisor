@@ -17,6 +17,8 @@ import {
   Dot as BaseDot,
   EmptyState as BaseEmptyState,
   Field as BaseField,
+  Fieldset as BaseFieldset,
+  FormSection as BaseFormSection,
   Input as BaseInput,
   Modal as BaseModal,
   Notice,
@@ -25,6 +27,7 @@ import {
   Spinner as BaseSpinner,
   SplitButton as BaseSplitButton,
   TableScroll as BaseTableScroll,
+  Textarea as BaseTextarea,
 } from './ui/primitives'
 import { ScoreBar as BaseScoreBar, ScoreRing as BaseScoreRing } from './ui/score'
 import { cn } from '@/lib/utils'
@@ -42,6 +45,9 @@ export const CodeBlock = BaseCodeBlock
 export const Modal = BaseModal
 export const Dot = BaseDot
 export const Field = BaseField
+export const Fieldset = BaseFieldset
+export const FormSection = BaseFormSection
+export const Textarea = BaseTextarea
 
 type LegacyVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline'
 
@@ -124,8 +130,22 @@ export function Tag({
   return <Badge tone={TAG_TONES[tone]}>{children}</Badge>
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
-  return <BaseEmptyState title={title} description={children} />
+/**
+ * État vide. L'icône et l'action restent facultatives : un état vide qui propose le geste
+ * attendu — « Ajouter une instance » — vaut mieux qu'un constat.
+ */
+export function EmptyState({
+  title,
+  icon,
+  action,
+  children,
+}: {
+  title: string
+  icon?: ReactNode
+  action?: ReactNode
+  children?: ReactNode
+}) {
+  return <BaseEmptyState title={title} icon={icon} action={action} description={children} />
 }
 
 /** En-tête de page des vues non encore portées sur le conteneur `Page`. */
@@ -144,11 +164,15 @@ export function PageHeader({
   meta?: ReactNode
   className?: string
 }) {
+  // Pas de marge basse ici : toutes les vues posent cet en-tête dans une pile `space-y-*`, qui
+  // règle déjà l'écart. La marge propre s'y ajoutait et creusait un trou sous chaque titre.
   return (
-    <header className={cn('mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between', className)}>
+    <header className={cn('flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between', className)}>
       <div className="min-w-0">
         {breadcrumb && <p className="text-ink-faint mb-0.5 truncate text-xs">{breadcrumb}</p>}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {/* Titre, descriptif et méta sur la même ligne tant qu'il y a la place : l'en-tête
+            garde tout son contenu en coûtant une ligne au lieu de trois. */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="text-ink text-lg font-semibold tracking-tight">{title}</h1>
           {subtitle && <p className="text-ink-muted text-sm">{subtitle}</p>}
           {meta && <div className="flex flex-wrap items-center gap-1.5">{meta}</div>}
