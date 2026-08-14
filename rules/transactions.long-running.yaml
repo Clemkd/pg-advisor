@@ -1,10 +1,10 @@
 id: transactions.long-running
 version: 1
 
-name: Transaction de longue durée
+name: Long-running transaction
 description: >
-  Une transaction ouverte longtemps empêche le vacuum de recycler les lignes mortes de
-  l'ensemble de l'instance et fait grossir toutes les tables actives.
+  A transaction held open for a long time keeps vacuum from reclaiming dead rows across the whole
+  instance, not only on the tables it touches.
 category: transactions
 severity: warning
 group: health
@@ -14,7 +14,7 @@ requires:
     - pg_stat_activity
 
 parameters:
-  secondes_maximum: 900
+  maximum_seconds: 900
 
 query: |
   SELECT
@@ -22,26 +22,26 @@ query: |
     usename,
     application_name,
     state,
-    EXTRACT(EPOCH FROM (now() - xact_start))       AS secondes_transaction,
-    left(COALESCE(query, ''), 300)                 AS requete
+    EXTRACT(EPOCH FROM (now() - xact_start))       AS transaction_seconds,
+    left(COALESCE(query, ''), 300)                 AS query
   FROM pg_stat_activity
   WHERE xact_start IS NOT NULL
     AND backend_type = 'client backend'
     AND pid <> pg_backend_pid()
 
-condition: secondes_transaction > secondes_maximum
+condition: transaction_seconds > maximum_seconds
 
 key:
   - pid
 
 recommendation:
-  title: "Transaction ouverte depuis {{ secondes_transaction | seconds }}"
-  message: "La session {{ pid }} ({{ usename }} / {{ application_name }}) tient une transaction depuis {{ secondes_transaction | seconds }}, état {{ state }}."
+  title: "Transaction open for {{ transaction_seconds | seconds }}"
+  message: "Session {{ pid }} ({{ usename }} / {{ application_name }}) has held a transaction for {{ transaction_seconds | seconds }}, state {{ state }}."
   impact: high
   confidence: high
   evidence:
     - usename
     - application_name
     - state
-    - requete
+    - query
   documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html

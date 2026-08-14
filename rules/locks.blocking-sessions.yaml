@@ -1,10 +1,10 @@
 id: locks.blocking-sessions
 version: 1
 
-name: Session bloquée par un verrou
+name: Session blocked by a lock
 description: >
-  Requête en attente d'un verrou détenu par une autre session. Au-delà de quelques secondes,
-  l'attente devient visible par les utilisateurs.
+  A query waiting on a lock held by another session. Beyond a few seconds, the wait is usually
+  worth investigating.
 category: locks
 severity: critical
 group: health
@@ -15,34 +15,34 @@ requires:
     - pg_locks
 
 parameters:
-  secondes_maximum: 30
+  maximum_seconds: 30
 
 query: |
   SELECT
-    bloque.pid                                                   AS pid_bloque,
-    bloque.usename                                               AS utilisateur_bloque,
-    left(COALESCE(bloque.query, ''), 300)                        AS requete_bloquee,
-    EXTRACT(EPOCH FROM (now() - bloque.query_start))             AS secondes_attente,
-    bloque.wait_event_type,
-    bloque.wait_event,
+    blocked.pid                                                   AS blocked_pid,
+    blocked.usename                                               AS blocked_user,
+    left(COALESCE(blocked.query, ''), 300)                        AS blocked_query,
+    EXTRACT(EPOCH FROM (now() - blocked.query_start))             AS waiting_seconds,
+    blocked.wait_event_type,
+    blocked.wait_event,
     (SELECT string_agg(DISTINCT p::text, ', ')
-       FROM unnest(pg_blocking_pids(bloque.pid)) AS p)           AS pids_bloquants
-  FROM pg_stat_activity bloque
-  WHERE cardinality(pg_blocking_pids(bloque.pid)) > 0
+       FROM unnest(pg_blocking_pids(blocked.pid)) AS p)           AS blocking_pids
+  FROM pg_stat_activity blocked
+  WHERE cardinality(pg_blocking_pids(blocked.pid)) > 0
 
-condition: secondes_attente > secondes_maximum
+condition: waiting_seconds > maximum_seconds
 
 key:
-  - pid_bloque
+  - blocked_pid
 
 recommendation:
-  title: "Session {{ pid_bloque }} bloquée depuis {{ secondes_attente | seconds }}"
-  message: "La session {{ pid_bloque }} attend un verrou détenu par {{ pids_bloquants }} depuis {{ secondes_attente | seconds }} ({{ wait_event_type }} / {{ wait_event }})."
+  title: "Session {{ blocked_pid }} blocked for {{ waiting_seconds | seconds }}"
+  message: "Session {{ blocked_pid }} has been waiting on a lock held by {{ blocking_pids }} for {{ waiting_seconds | seconds }} ({{ wait_event_type }} / {{ wait_event }})."
   impact: high
   confidence: high
   evidence:
-    - utilisateur_bloque
-    - requete_bloquee
-    - pids_bloquants
+    - blocked_user
+    - blocked_query
+    - blocking_pids
     - wait_event
   documentation: https://www.postgresql.org/docs/current/explicit-locking.html

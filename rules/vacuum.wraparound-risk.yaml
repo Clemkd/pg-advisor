@@ -1,10 +1,10 @@
 id: vacuum.wraparound-risk
 version: 1
 
-name: Approche du wraparound des transactions
+name: Approaching transaction wraparound
 description: >
-  L'âge de la plus vieille transaction gelée approche autovacuum_freeze_max_age. Au-delà,
-  PostgreSQL déclenche des vacuums d'urgence puis refuse les écritures.
+  The age of the oldest frozen transaction is approaching autovacuum_freeze_max_age. Past it,
+  PostgreSQL triggers emergency vacuums and then refuses writes.
 category: vacuum
 severity: critical
 group: configuration
@@ -15,16 +15,16 @@ requires:
     - pg_settings
 
 parameters:
-  part_maximum: 0.7
+  maximum_share: 0.7
 
 query: |
   SELECT
     n.nspname                                                          AS schemaname,
     c.relname,
     age(c.relfrozenxid)                                                AS age_xid,
-    (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS limite,
+    (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS limit,
     age(c.relfrozenxid)::float /
-      (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS part
+      (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS share
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE c.relkind IN ('r', 'm', 't')
@@ -32,7 +32,7 @@ query: |
   ORDER BY age(c.relfrozenxid) DESC
   LIMIT 20
 
-condition: part > part_maximum
+condition: share > maximum_share
 
 key:
   - schemaname
@@ -40,12 +40,12 @@ key:
 
 recommendation:
   title: "Wraparound proche sur {{ schemaname }}.{{ relname }}"
-  message: "L'âge des transactions de {{ relname }} atteint {{ age_xid | number }}, soit {{ part | percent }} de autovacuum_freeze_max_age ({{ limite | number }})."
+  message: "Transaction age on {{ relname }} has reached {{ age_xid | number }}, that is {{ share | percent }} of autovacuum_freeze_max_age ({{ limit | number }})."
   impact: high
   confidence: high
   evidence:
     - age_xid
-    - limite
-    - part
+    - limit
+    - share
   sql: "VACUUM (FREEZE, VERBOSE) {{ schemaname }}.{{ relname }};"
   documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-WRAPAROUND

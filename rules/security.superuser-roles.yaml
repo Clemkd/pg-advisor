@@ -1,10 +1,10 @@
 id: security.superuser-roles
 version: 1
 
-name: Rôles superutilisateur nombreux
+name: Many superuser roles
 description: >
-  Un superutilisateur contourne toutes les vérifications de droits, y compris la sécurité au
-  niveau ligne. Les comptes applicatifs n'en ont normalement pas besoin.
+  A superuser bypasses every permission check, including row-level security. Each one widens the
+  blast radius of a compromise.
 category: security
 severity: warning
 group: configuration
@@ -18,20 +18,20 @@ parameters:
 
 query: |
   SELECT
-    count(*)                                       AS nombre,
+    count(*)                                       AS count,
     string_agg(rolname, ', ' ORDER BY rolname)     AS roles
   FROM pg_roles
   WHERE rolsuper
     AND rolcanlogin
 
-condition: nombre > maximum
+condition: count > maximum
 
 recommendation:
-  title: "{{ nombre }} rôles superutilisateur peuvent se connecter"
-  message: "Rôles concernés : {{ roles }}. Restreindre les droits des comptes applicatifs limite la portée d'une compromission."
+  title: "{{ count }} superuser roles can log in"
+  message: "Roles concerned: {{ roles }}. Restricting the rights of application accounts limits the reach of a compromise."
   impact: medium
   confidence: medium
   evidence:
-    - nombre
+    - count
     - roles
   documentation: https://www.postgresql.org/docs/current/role-attributes.html

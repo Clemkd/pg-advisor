@@ -1,10 +1,10 @@
 id: vacuum.dead-tuples
 version: 1
 
-name: Lignes mortes accumulées
+name: Dead rows accumulating
 description: >
-  Un ratio élevé de lignes mortes indique un autovacuum qui ne suit pas le rythme des
-  écritures. Les lectures parcourent alors des pages inutiles et la table grossit.
+  A high dead-row ratio means autovacuum is not keeping up with writes. Reads then walk over
+  useless pages, and the table grows.
 category: vacuum
 severity: warning
 group: recommendations
@@ -14,8 +14,8 @@ requires:
     - pg_stat_user_tables
 
 parameters:
-  ratio_minimum: 0.20
-  lignes_minimum: 10000
+  minimum_ratio: 0.20
+  minimum_rows: 10000
 
 query: |
   SELECT
@@ -27,10 +27,10 @@ query: |
     last_vacuum,
     n_dead_tup::float / NULLIF(n_live_tup, 0) AS ratio
   FROM pg_stat_user_tables
-  WHERE n_live_tup > @lignes_minimum
+  WHERE n_live_tup > @minimum_rows
   ORDER BY n_dead_tup DESC
 
-condition: ratio > ratio_minimum
+condition: ratio > minimum_ratio
 
 key:
   - schemaname
@@ -38,7 +38,7 @@ key:
 
 recommendation:
   title: "Autovacuum en retard sur {{ schemaname }}.{{ relname }}"
-  message: "{{ relname }} présente {{ ratio | percent }} de lignes mortes ({{ n_dead_tup | number }} sur {{ n_live_tup | number }} vivantes)."
+  message: "{{ relname }} holds {{ ratio | percent }} dead rows ({{ n_dead_tup | number }} out of {{ n_live_tup | number }} live)."
   impact: medium
   confidence: high
   evidence:

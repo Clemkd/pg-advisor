@@ -134,7 +134,7 @@ public class ExpressionTests
     [Fact]
     public void ReferencesListeLesColonnesUtilisees()
     {
-        var expression = ExpressionParser.Parse("n_dead_tup::float / n_live_tup > seuil");
-        Assert.Equal(["n_dead_tup", "n_live_tup", "seuil"], expression.References().Order().ToArray());
+        var expression = ExpressionParser.Parse("n_dead_tup::float / n_live_tup > threshold");
+        Assert.Equal(["n_dead_tup", "n_live_tup", "threshold"], expression.References().Order().ToArray());
     }
 }

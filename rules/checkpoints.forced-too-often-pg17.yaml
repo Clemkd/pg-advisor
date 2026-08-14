@@ -1,10 +1,10 @@
 id: checkpoints.forced-too-often-pg17
 version: 1
 
-name: Checkpoints déclenchés par saturation des WAL (PostgreSQL 17+)
+name: Checkpoints forced by WAL volume (PostgreSQL 17+)
 description: >
-  Même diagnostic que checkpoints.forced-too-often, sur pg_stat_checkpointer : les compteurs
-  de checkpoints ont quitté pg_stat_bgwriter en PostgreSQL 17.
+  Same diagnostic as checkpoints.forced-too-often, against pg_stat_checkpointer: the checkpoint
+  counters left pg_stat_bgwriter in PostgreSQL 17.
 category: checkpoints
 severity: warning
 group: statistics
@@ -15,26 +15,26 @@ requires:
   minVersion: 17
 
 parameters:
-  part_maximum: 0.3
-  checkpoints_minimum: 10
+  maximum_share: 0.3
+  minimum_checkpoints: 10
 
 query: |
   SELECT
     num_timed,
     num_requested,
-    num_requested::float / NULLIF(num_timed + num_requested, 0) AS part_forces
+    num_requested::float / NULLIF(num_timed + num_requested, 0) AS forced_share
   FROM pg_stat_checkpointer
 
-condition: num_timed + num_requested > checkpoints_minimum and part_forces > part_maximum
+condition: num_timed + num_requested > minimum_checkpoints and forced_share > maximum_share
 
 recommendation:
-  title: "{{ part_forces | percent }} des checkpoints sont forcés"
-  message: "{{ num_requested }} checkpoints sur {{ num_timed }} planifiés ont été déclenchés par le volume de WAL. Augmenter max_wal_size lisse les écritures."
+  title: "{{ forced_share | percent }} of checkpoints are forced"
+  message: "{{ num_requested }} checkpoints out of {{ num_timed }} scheduled were triggered by WAL volume. Raising max_wal_size smooths the writes."
   impact: medium
   confidence: high
   evidence:
     - num_timed
     - num_requested
-    - part_forces
+    - forced_share
   sql: "ALTER SYSTEM SET max_wal_size = '4GB'; SELECT pg_reload_conf();"
   documentation: https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-CHECKPOINTER-VIEW

@@ -1,10 +1,9 @@
 id: configuration.slow-query-logging
 version: 1
 
-name: Journalisation des requêtes lentes absente
+name: Slow query logging is off
 description: >
-  Sans log_min_duration_statement, aucune trace ne subsiste des requêtes lentes une fois
-  l'incident passé.
+  Without log_min_duration_statement, no trace of slow queries survives once the incident is over.
 category: configuration
 severity: info
 group: configuration
@@ -22,8 +21,8 @@ query: |
 condition: log_min_duration < 0
 
 recommendation:
-  title: "Requêtes lentes non journalisées"
-  message: "log_min_duration_statement vaut {{ log_min_duration }} : aucune requête lente n'est tracée. Une valeur de 1000 (ms) est un point de départ courant."
+  title: "Slow queries are not logged"
+  message: "log_min_duration_statement is {{ log_min_duration }}: no slow query is traced. 1000 (ms) is a common starting point."
   impact: low
   confidence: high
   evidence:

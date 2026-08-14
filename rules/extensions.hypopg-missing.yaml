@@ -1,10 +1,10 @@
 id: extensions.hypopg-missing
 version: 1
 
-name: HypoPG absente
+name: HypoPG is missing
 description: >
-  HypoPG permet de créer des index hypothétiques et de vérifier, via EXPLAIN, si le
-  planificateur les utiliserait — sans construire l'index.
+  HypoPG creates hypothetical indexes and checks, through EXPLAIN, whether the planner would use
+  them — without building the index.
 category: extensions
 severity: info
 group: configuration
@@ -19,10 +19,10 @@ key:
   - extension
 
 recommendation:
-  title: "Installer HypoPG pour valider un index avant de le créer"
+  title: "Install HypoPG to validate an index before creating it"
   message: >
-    HypoPG n'est pas disponible. Son installation permettrait de tester l'intérêt d'un index
-    sans le construire réellement.
+    HypoPG is not available. Installing it would allow testing whether an index is worth building
+    without actually building it.
   impact: low
   confidence: high
   evidence:

@@ -1,10 +1,10 @@
 id: configuration.memory-settings
 version: 1
 
-name: Paramètres mémoire laissés par défaut
+name: Memory settings left at their defaults
 description: >
-  shared_buffers à 128 Mo et work_mem à 4 Mo sont les valeurs de compilation. Elles
-  conviennent à une installation d'essai, rarement à une base de production.
+  shared_buffers at 128 MB and work_mem at 4 MB are the compile-time values. They suit a trial
+  install, rarely a production database.
 category: configuration
 severity: warning
 group: configuration
@@ -16,23 +16,23 @@ requires:
 query: |
   SELECT
     (SELECT setting::bigint FROM pg_settings WHERE name = 'shared_buffers')       AS shared_buffers_blocs,
-    (SELECT setting::bigint FROM pg_settings WHERE name = 'work_mem')              AS work_mem_ko,
+    (SELECT setting::bigint FROM pg_settings WHERE name = 'work_mem')              AS work_mem_kb,
     (SELECT setting::bigint FROM pg_settings WHERE name = 'maintenance_work_mem')  AS maintenance_work_mem_ko,
     (SELECT setting::bigint FROM pg_settings WHERE name = 'effective_cache_size')  AS effective_cache_size_blocs,
     (SELECT setting::bigint FROM pg_settings WHERE name = 'block_size')            AS block_size,
     (SELECT setting::bigint FROM pg_settings WHERE name = 'shared_buffers') *
-    (SELECT setting::bigint FROM pg_settings WHERE name = 'block_size')            AS shared_buffers_octets
+    (SELECT setting::bigint FROM pg_settings WHERE name = 'block_size')            AS shared_buffers_bytes
 
-condition: shared_buffers_octets <= 134217728 and work_mem_ko <= 4096
+condition: shared_buffers_bytes <= 134217728 and work_mem_kb <= 4096
 
 recommendation:
-  title: "Paramètres mémoire aux valeurs par défaut"
-  message: "shared_buffers vaut {{ shared_buffers_octets | bytes }} et work_mem {{ work_mem_ko }} kB. Une base de production part généralement de 25 % de la RAM pour shared_buffers."
+  title: "Memory settings at their default values"
+  message: "shared_buffers is {{ shared_buffers_bytes | bytes }} and work_mem {{ work_mem_kb }} kB. A production database usually starts from 25% of RAM for shared_buffers."
   impact: medium
   confidence: medium
   evidence:
-    - shared_buffers_octets
-    - work_mem_ko
+    - shared_buffers_bytes
+    - work_mem_kb
     - maintenance_work_mem_ko
     - effective_cache_size_blocs
   documentation: https://www.postgresql.org/docs/current/runtime-config-resource.html

@@ -1,10 +1,10 @@
 id: timescaledb.uncompressed-chunks
 version: 1
 
-name: Chunks anciens non compressés
+name: Old chunks left uncompressed
 description: >
-  Chunks dont la fenêtre est close depuis longtemps et qui restent non compressés : soit
-  aucune politique de compression n'existe, soit elle n'aboutit pas.
+  Chunks whose window closed long ago and that are still uncompressed: either no policy is in
+  place, or it is not keeping up.
 category: timescaledb
 severity: info
 group: configuration
@@ -16,7 +16,7 @@ requires:
     - timescaledb_information.chunks
 
 parameters:
-  jours_minimum: 7
+  minimum_days: 7
 
 limit: 50
 
@@ -27,25 +27,25 @@ query: |
     chunk_name,
     range_end,
     is_compressed,
-    EXTRACT(EPOCH FROM (now() - range_end)) / 86400 AS age_jours
+    EXTRACT(EPOCH FROM (now() - range_end)) / 86400 AS age_days
   FROM timescaledb_information.chunks
   WHERE range_end < now()
   ORDER BY range_end
 
-condition: is_compressed == false and age_jours > jours_minimum
+condition: is_compressed == false and age_days > minimum_days
 
 key:
   - hypertable_schema
   - chunk_name
 
 recommendation:
-  title: "Chunk non compressé depuis {{ age_jours | round }} jours"
-  message: "{{ chunk_name }} de l'hypertable {{ hypertable_name }} est clos depuis {{ age_jours | round }} jours et n'est pas compressé."
+  title: "Chunk uncompressed for {{ age_days | round }} days"
+  message: "{{ chunk_name }} of hypertable {{ hypertable_name }} closed {{ age_days | round }} days ago and is not compressed."
   impact: medium
   confidence: medium
   evidence:
     - hypertable_name
     - range_end
-    - age_jours
+    - age_days
   sql: "SELECT compress_chunk('{{ chunk_name }}');"
   documentation: https://docs.timescale.com/use-timescale/latest/compression/

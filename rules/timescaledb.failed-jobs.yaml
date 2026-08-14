@@ -1,10 +1,10 @@
 id: timescaledb.failed-jobs
 version: 1
 
-name: Tâche TimescaleDB en échec
+name: TimescaleDB job failing
 description: >
-  Les politiques de compression, de rétention et de rafraîchissement des agrégats continus
-  s'exécutent en tâches de fond. Leurs échecs sont silencieux côté application.
+  Compression, retention and continuous-aggregate refresh policies run as background jobs. Their
+  failures are silent on the application side.
 category: timescaledb
 severity: warning
 group: statistics
@@ -32,8 +32,8 @@ key:
   - job_id
 
 recommendation:
-  title: "Tâche TimescaleDB {{ job_id }} en échec"
-  message: "La tâche {{ job_id }} sur {{ hypertable_name }} est en statut {{ last_run_status }} ; {{ total_failures }} échecs sur {{ total_runs }} exécutions."
+  title: "TimescaleDB job {{ job_id }} is failing"
+  message: "Job {{ job_id }} on {{ hypertable_name }} is in status {{ last_run_status }}; {{ total_failures }} failures over {{ total_runs }} runs."
   impact: medium
   confidence: high
   evidence:

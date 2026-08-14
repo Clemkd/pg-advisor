@@ -1,10 +1,10 @@
 id: indexes.unused
 version: 1
 
-name: Index jamais utilisé
+name: Index never used
 description: >
-  Un index non scanné depuis la dernière remise à zéro des statistiques coûte en écriture et
-  en espace sans rien accélérer. Vérifier l'ancienneté des statistiques avant de conclure.
+  An index not scanned since statistics were last reset costs write time and space without
+  speeding anything up. Check how old the statistics are before concluding.
 category: indexes
 severity: info
 group: recommendations
@@ -15,7 +15,7 @@ requires:
     - pg_index
 
 parameters:
-  taille_minimum_octets: 8388608
+  minimum_size_bytes: 8388608
 
 query: |
   SELECT
@@ -28,7 +28,7 @@ query: |
   JOIN pg_index i ON i.indexrelid = s.indexrelid
   WHERE NOT i.indisunique
     AND NOT i.indisprimary
-    AND pg_relation_size(s.indexrelid) > @taille_minimum_octets
+    AND pg_relation_size(s.indexrelid) > @minimum_size_bytes
   ORDER BY pg_relation_size(s.indexrelid) DESC
 
 condition: idx_scan == 0
@@ -38,8 +38,8 @@ key:
   - indexrelname
 
 recommendation:
-  title: "Index inutilisé : {{ indexrelname }}"
-  message: "{{ indexrelname }} sur {{ schemaname }}.{{ relname }} occupe {{ index_bytes | bytes }} et n'a jamais été parcouru."
+  title: "Unused index: {{ indexrelname }}"
+  message: "{{ indexrelname }} on {{ schemaname }}.{{ relname }} takes {{ index_bytes | bytes }} and has never been scanned."
   impact: low
   confidence: medium
   evidence:

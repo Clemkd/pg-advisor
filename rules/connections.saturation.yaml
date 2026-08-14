@@ -1,11 +1,10 @@
 id: connections.saturation
 version: 1
 
-name: Slots de connexion presque épuisés
+name: Connection slots nearly exhausted
 description: >
-  Quand les slots sont saturés, les nouvelles connexions sont refusées, y compris celles de
-  l'exploitation. Un pooler est presque toujours préférable à une augmentation de
-  max_connections.
+  Once the slots are saturated, new connections are refused, including the operator's. A pooler is
+  almost always preferable to raising max_connections.
 category: connections
 severity: critical
 group: health
@@ -16,10 +15,10 @@ requires:
     - pg_settings
 
 parameters:
-  seuil: 0.85
+  threshold: 0.85
 
-# Plusieurs sous-requêtes agrégées en une ligne : la condition combine les colonnes entre elles.
-# Seules les sessions clientes sont comptées : ce sont elles que max_connections limite.
+# Several sub-queries aggregated into one row: the condition combines the columns with each other.
+# Only client sessions are counted: those are what max_connections caps.
 query: |
   SELECT
     (SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend')              AS used,
@@ -28,11 +27,11 @@ query: |
     (SELECT count(*) FROM pg_stat_activity
       WHERE backend_type = 'client backend' AND state = 'idle')                                AS idle
 
-condition: used::float / (max_connections - reserved) > seuil
+condition: used::float / (max_connections - reserved) > threshold
 
 recommendation:
-  title: "Connexions proches de la limite"
-  message: "{{ used }} connexions ouvertes sur {{ max_connections }} autorisées, dont {{ idle }} inactives. Envisager PgBouncer avant d'augmenter max_connections."
+  title: "Connexions proches de la limit"
+  message: "{{ used }} connections open out of {{ max_connections }} allowed, {{ idle }} of them idle. Consider PgBouncer before raising max_connections."
   impact: high
   confidence: high
   evidence:

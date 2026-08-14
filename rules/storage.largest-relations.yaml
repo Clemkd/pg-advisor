@@ -1,10 +1,10 @@
 id: storage.largest-relations
 version: 1
 
-name: Relations les plus volumineuses
+name: Largest relations
 description: >
-  Inventaire des tables dépassant un seuil de taille, index compris. Sert de repère pour les
-  sauvegardes, la rétention et le partitionnement.
+  An inventory of tables above a size threshold, indexes included. Serves as a reference point for
+  backups, retention and partitioning.
 category: storage
 severity: info
 group: configuration
@@ -14,7 +14,7 @@ requires:
     - pg_class
 
 parameters:
-  taille_minimum_octets: 1073741824
+  minimum_size_bytes: 1073741824
 
 limit: 20
 
@@ -22,10 +22,10 @@ query: |
   SELECT
     n.nspname                                    AS schemaname,
     c.relname,
-    pg_total_relation_size(c.oid)                AS total_octets,
+    pg_total_relation_size(c.oid)                AS total_bytes,
     pg_relation_size(c.oid)                      AS table_octets,
-    pg_indexes_size(c.oid)                       AS index_octets,
-    c.reltuples::bigint                          AS lignes_estimees
+    pg_indexes_size(c.oid)                       AS index_bytes,
+    c.reltuples::bigint                          AS estimated_rows
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE c.relkind IN ('r', 'p', 'm')
@@ -33,20 +33,20 @@ query: |
   ORDER BY pg_total_relation_size(c.oid) DESC
   LIMIT 50
 
-condition: total_octets > taille_minimum_octets
+condition: total_bytes > minimum_size_bytes
 
 key:
   - schemaname
   - relname
 
 recommendation:
-  title: "{{ schemaname }}.{{ relname }} occupe {{ total_octets | bytes }}"
-  message: "{{ relname }} totalise {{ total_octets | bytes }} dont {{ index_octets | bytes }} d'index, pour environ {{ lignes_estimees | number }} lignes."
+  title: "{{ schemaname }}.{{ relname }} occupe {{ total_bytes | bytes }}"
+  message: "{{ relname }} totals {{ total_bytes | bytes }}, of which {{ index_bytes | bytes }} is indexes, for roughly {{ estimated_rows | number }} rows."
   impact: low
   confidence: high
   evidence:
-    - total_octets
+    - total_bytes
     - table_octets
-    - index_octets
-    - lignes_estimees
+    - index_bytes
+    - estimated_rows
   documentation: https://www.postgresql.org/docs/current/disk-usage.html

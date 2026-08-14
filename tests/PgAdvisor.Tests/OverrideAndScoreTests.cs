@@ -15,11 +15,11 @@ public class OverrideTests
         category: vacuum
         severity: warning
         parameters:
-          seuil: 0.2
+          threshold: 0.2
           minimum: 1000
         query: |
           SELECT relname, ratio FROM pg_stat_user_tables
-        condition: ratio > seuil
+        condition: ratio > threshold
         recommendation:
           title: "Test"
         """;
@@ -37,7 +37,7 @@ public class OverrideTests
 
         Assert.True(effective.Enabled);
         Assert.Equal("warning", effective.Severity);
-        Assert.Equal(0.2, effective.Parameters["seuil"]);
+        Assert.Equal(0.2, effective.Parameters["threshold"]);
         Assert.Null(effective.IntervalSeconds);
     }
 
@@ -49,28 +49,28 @@ public class OverrideTests
             RuleId = "vacuum.test",
             Severity = "critical",
             IntervalSeconds = 60,
-            ParametersJson = """{"seuil": 0.5}""",
+            ParametersJson = """{"threshold": 0.5}""",
         };
 
         var effective = Rule().ApplyOverrides(global, null);
 
         Assert.Equal("critical", effective.Severity);
         Assert.Equal(60, effective.IntervalSeconds);
-        Assert.Equal(0.5, effective.Parameters["seuil"]);
-        // Un seuil non surchargé conserve la valeur du fichier.
+        Assert.Equal(0.5, effective.Parameters["threshold"]);
+        // Un threshold non surchargé conserve la valeur du fichier.
         Assert.Equal(1000L, effective.Parameters["minimum"]);
     }
 
     [Fact]
     public void SurchargeInstanceLemporteSurLaSurchargeGlobale()
     {
-        var global = new RuleOverride { Severity = "critical", ParametersJson = """{"seuil": 0.5}""" };
-        var instance = new RuleOverride { Severity = "info", ParametersJson = """{"seuil": 0.9}""" };
+        var global = new RuleOverride { Severity = "critical", ParametersJson = """{"threshold": 0.5}""" };
+        var instance = new RuleOverride { Severity = "info", ParametersJson = """{"threshold": 0.9}""" };
 
         var effective = Rule().ApplyOverrides(global, instance);
 
         Assert.Equal("info", effective.Severity);
-        Assert.Equal(0.9, effective.Parameters["seuil"]);
+        Assert.Equal(0.9, effective.Parameters["threshold"]);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class OverrideTests
         var effective = Rule().ApplyOverrides(
             new RuleOverride { ParametersJson = "{ceci n'est pas du json" }, null);
 
-        Assert.Equal(0.2, effective.Parameters["seuil"]);
+        Assert.Equal(0.2, effective.Parameters["threshold"]);
     }
 }
 

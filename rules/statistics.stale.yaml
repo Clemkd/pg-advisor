@@ -1,10 +1,10 @@
 id: statistics.stale
 version: 1
 
-name: Statistiques périmées
+name: Stale statistics
 description: >
-  Des statistiques anciennes sur une table qui a beaucoup changé depuis conduisent le
-  planificateur à sous-estimer ou surestimer les volumes.
+  Old statistics on a table that has changed a great deal since lead the planner to under- or
+  over-estimate volumes.
 category: statistics
 severity: info
 group: recommendations
@@ -14,8 +14,8 @@ requires:
     - pg_stat_user_tables
 
 parameters:
-  jours_maximum: 7
-  modifications_minimum: 10000
+  maximum_days: 7
+  minimum_modifications: 10000
 
 query: |
   SELECT
@@ -26,12 +26,12 @@ query: |
     GREATEST(
       COALESCE(EXTRACT(EPOCH FROM (now() - last_analyze)), 0),
       COALESCE(EXTRACT(EPOCH FROM (now() - last_autoanalyze)), 0)
-    ) / 86400 AS jours_depuis_analyse
+    ) / 86400 AS days_since_analyze
   FROM pg_stat_user_tables
   WHERE (last_analyze IS NOT NULL OR last_autoanalyze IS NOT NULL)
-    AND n_mod_since_analyze > @modifications_minimum
+    AND n_mod_since_analyze > @minimum_modifications
 
-condition: jours_depuis_analyse > jours_maximum
+condition: days_since_analyze > maximum_days
 
 key:
   - schemaname
@@ -39,11 +39,11 @@ key:
 
 recommendation:
   title: "Statistiques anciennes sur {{ schemaname }}.{{ relname }}"
-  message: "Dernière analyse il y a {{ jours_depuis_analyse | round:1 }} jours, avec {{ n_mod_since_analyze | number }} modifications depuis."
+  message: "Last analysed {{ days_since_analyze | round:1 }} days ago, with {{ n_mod_since_analyze | number }} modifications since."
   impact: medium
   confidence: medium
   evidence:
     - n_mod_since_analyze
-    - jours_depuis_analyse
+    - days_since_analyze
   sql: "ANALYZE {{ schemaname }}.{{ relname }};"
   documentation: https://www.postgresql.org/docs/current/planner-stats.html

@@ -1,10 +1,10 @@
 id: security.hba-trust
 version: 1
 
-name: Authentification trust dans pg_hba.conf
+name: trust authentication in pg_hba.conf
 description: >
-  Une ligne trust accepte toute connexion correspondante sans mot de passe. Nécessite l'accès
-  à pg_hba_file_rules, réservé aux rôles privilégiés.
+  A trust line accepts any matching connection without a password. Requires access to
+  pg_hba_file_rules, which is restricted to privileged roles.
 category: security
 severity: critical
 group: configuration
@@ -18,27 +18,27 @@ query: |
   SELECT
     line_number,
     type,
-    COALESCE(array_to_string(database, ','), 'all')  AS bases,
-    COALESCE(array_to_string(user_name, ','), 'all') AS utilisateurs,
-    COALESCE(address, 'local')                       AS adresse,
+    COALESCE(array_to_string(database, ','), 'all')  AS databases,
+    COALESCE(array_to_string(user_name, ','), 'all') AS users,
+    COALESCE(address, 'local')                       AS address,
     auth_method
   FROM pg_hba_file_rules
   WHERE auth_method = 'trust'
 
-condition: not (type == 'local' and adresse == 'local')
+condition: not (type == 'local' and address == 'local')
 
 key:
   - line_number
 
 recommendation:
   title: "Authentification trust ligne {{ line_number }} de pg_hba.conf"
-  message: "La règle {{ type }} {{ bases }} {{ utilisateurs }} depuis {{ adresse }} accepte les connexions sans mot de passe."
+  message: "The {{ type }} {{ databases }} {{ users }} rule from {{ address }} accepts connections without a password."
   impact: high
   confidence: high
   evidence:
     - type
-    - bases
-    - utilisateurs
-    - adresse
+    - databases
+    - users
+    - address
     - auth_method
   documentation: https://www.postgresql.org/docs/current/auth-pg-hba-conf.html

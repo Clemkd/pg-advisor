@@ -1,10 +1,10 @@
 id: timescaledb.compression-not-configured
 version: 1
 
-name: Hypertable volumineuse sans compression
+name: Large hypertable without compression
 description: >
-  Hypertable dépassant un certain volume sans compression activée. La compression réduit
-  fortement l'espace occupé par les données historiques.
+  A hypertable past a certain volume with no compression enabled. Compression sharply reduces the
+  space taken by historical data.
 category: timescaledb
 severity: info
 group: configuration
@@ -16,7 +16,7 @@ requires:
     - timescaledb_information.hypertables
 
 parameters:
-  taille_minimum_octets: 1073741824
+  minimum_size_bytes: 1073741824
 
 query: |
   SELECT
@@ -24,10 +24,10 @@ query: |
     hypertable_name,
     compression_enabled,
     num_chunks,
-    hypertable_size(format('%I.%I', hypertable_schema, hypertable_name)::regclass) AS taille_octets
+    hypertable_size(format('%I.%I', hypertable_schema, hypertable_name)::regclass) AS size_bytes
   FROM timescaledb_information.hypertables
 
-condition: compression_enabled == false and taille_octets > taille_minimum_octets
+condition: compression_enabled == false and size_bytes > minimum_size_bytes
 
 key:
   - hypertable_schema
@@ -35,12 +35,12 @@ key:
 
 recommendation:
   title: "Compression inactive sur {{ hypertable_name }}"
-  message: "{{ hypertable_name }} occupe {{ taille_octets | bytes }} sur {{ num_chunks }} chunks sans compression activée."
+  message: "{{ hypertable_name }} takes {{ size_bytes | bytes }} over {{ num_chunks }} chunks with no compression enabled."
   impact: medium
   confidence: medium
   evidence:
     - num_chunks
-    - taille_octets
+    - size_bytes
   sql: |
     ALTER TABLE {{ hypertable_schema }}.{{ hypertable_name }} SET (timescaledb.compress);
     SELECT add_compression_policy('{{ hypertable_schema }}.{{ hypertable_name }}', INTERVAL '30 days');

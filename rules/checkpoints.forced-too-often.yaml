@@ -1,10 +1,10 @@
 id: checkpoints.forced-too-often
 version: 1
 
-name: Checkpoints déclenchés par saturation des WAL
+name: Checkpoints forced by WAL volume
 description: >
-  Un checkpoint déclenché par le volume de WAL plutôt que par le délai indique un
-  max_wal_size trop petit : les écritures se concentrent en pics.
+  A checkpoint triggered by WAL volume rather than by elapsed time points to a max_wal_size that
+  is too small: writes bunch up into spikes.
 category: checkpoints
 severity: warning
 group: statistics
@@ -15,26 +15,26 @@ requires:
   maxVersion: 16
 
 parameters:
-  part_maximum: 0.3
-  checkpoints_minimum: 10
+  maximum_share: 0.3
+  minimum_checkpoints: 10
 
 query: |
   SELECT
     checkpoints_timed,
     checkpoints_req,
-    checkpoints_req::float / NULLIF(checkpoints_timed + checkpoints_req, 0) AS part_forces
+    checkpoints_req::float / NULLIF(checkpoints_timed + checkpoints_req, 0) AS forced_share
   FROM pg_stat_bgwriter
 
-condition: checkpoints_timed + checkpoints_req > checkpoints_minimum and part_forces > part_maximum
+condition: checkpoints_timed + checkpoints_req > minimum_checkpoints and forced_share > maximum_share
 
 recommendation:
-  title: "{{ part_forces | percent }} des checkpoints sont forcés"
-  message: "{{ checkpoints_req }} checkpoints sur {{ checkpoints_timed }} planifiés ont été déclenchés par le volume de WAL. Augmenter max_wal_size lisse les écritures."
+  title: "{{ forced_share | percent }} of checkpoints are forced"
+  message: "{{ checkpoints_req }} checkpoints out of {{ checkpoints_timed }} scheduled were triggered by WAL volume. Raising max_wal_size smooths the writes."
   impact: medium
   confidence: high
   evidence:
     - checkpoints_timed
     - checkpoints_req
-    - part_forces
+    - forced_share
   sql: "ALTER SYSTEM SET max_wal_size = '4GB'; SELECT pg_reload_conf();"
   documentation: https://www.postgresql.org/docs/current/wal-configuration.html

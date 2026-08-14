@@ -1,10 +1,10 @@
 id: extensions.pgstattuple-missing
 version: 1
 
-name: pgstattuple absente
+name: pgstattuple is missing
 description: >
-  L'estimation d'espace perdu repose sur les statistiques du planificateur. pgstattuple donne
-  la mesure exacte, au prix d'une lecture complète de la relation.
+  Bloat rules rely on planner statistics, which are an estimate. pgstattuple gives the exact
+  measure, at the cost of a full read of the relation.
 category: extensions
 severity: info
 group: configuration
@@ -19,10 +19,9 @@ key:
   - extension
 
 recommendation:
-  title: "Installer pgstattuple pour mesurer l'espace perdu exactement"
+  title: "Install pgstattuple to measure bloat exactly"
   message: >
-    pgstattuple n'est pas disponible. Les règles de bloat restent des estimations tant que
-    l'extension est absente.
+    pgstattuple is not available. Bloat rules stay estimates until it is installed.
   impact: low
   confidence: high
   evidence:

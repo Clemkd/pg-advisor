@@ -1,10 +1,10 @@
 id: indexes.missing-foreign-key
 version: 1
 
-name: Clé étrangère sans index
+name: Foreign key without an index
 description: >
-  Une clé étrangère non indexée force un parcours complet de la table fille à chaque
-  suppression ou mise à jour de la clé référencée, et allonge les verrous.
+  An unindexed foreign key forces a full scan of the child table on every delete or update of the
+  referenced key, and lengthens locks.
 category: indexes
 severity: warning
 group: configuration
@@ -16,7 +16,7 @@ requires:
     - pg_class
 
 parameters:
-  taille_minimum_octets: 1048576
+  minimum_size_bytes: 1048576
 
 query: |
   SELECT
@@ -30,9 +30,9 @@ query: |
   JOIN pg_namespace n ON n.oid = t.relnamespace
   WHERE c.contype = 'f'
     AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-    -- Aucun index dont les premières colonnes couvrent celles de la contrainte.
-    -- indkey est un int2vector indexé à partir de zéro : unnest WITH ORDINALITY évite de
-    -- dépendre de ses bornes, contrairement à un découpage de tableau.
+    -- No index whose leading columns cover those of the constraint.
+    -- indkey is a zero-based int2vector: unnest WITH ORDINALITY avoids depending on its
+    -- bounds, unlike slicing the array.
     AND NOT EXISTS (
       SELECT 1
       FROM pg_index i
@@ -44,15 +44,15 @@ query: |
           WHERE position <= array_length(c.conkey, 1)
         ) @> c.conkey
     )
-    AND pg_relation_size(t.oid) > @taille_minimum_octets
+    AND pg_relation_size(t.oid) > @minimum_size_bytes
 
 key:
   - schemaname
   - constraint_name
 
 recommendation:
-  title: "Clé étrangère non indexée sur {{ schemaname }}.{{ tablename }}"
-  message: "La contrainte {{ constraint_name }} ({{ definition }}) n'est couverte par aucun index ; la table pèse {{ table_bytes | bytes }}."
+  title: "Unindexed foreign key on {{ schemaname }}.{{ tablename }}"
+  message: "Constraint {{ constraint_name }} ({{ definition }}) is covered by no index; the table weighs {{ table_bytes | bytes }}."
   impact: medium
   confidence: high
   evidence:

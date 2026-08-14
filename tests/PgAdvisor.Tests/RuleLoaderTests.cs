@@ -23,10 +23,10 @@ public class RuleLoaderTests
             - pg_stat_user_tables
           minVersion: 14
         parameters:
-          seuil: 0.2
+          threshold: 0.2
         query: |
           SELECT schemaname, relname, ratio FROM pg_stat_user_tables
-        condition: ratio > seuil
+        condition: ratio > threshold
         key:
           - schemaname
           - relname
@@ -62,7 +62,7 @@ public class RuleLoaderTests
 
         // YamlDotNet rend « 0.2 » sous forme de chaîne ; le chargeur doit en faire un nombre
         // pour qu'il puisse servir de paramètre SQL typé.
-        Assert.Equal(0.2, Assert.IsType<double>(rule!.Definition.Parameters!["seuil"]));
+        Assert.Equal(0.2, Assert.IsType<double>(rule!.Definition.Parameters!["threshold"]));
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class RuleLoaderTests
     [Fact]
     public void ConditionInvalideEstSignalee()
     {
-        var yaml = ValidYaml.Replace("condition: ratio > seuil", "condition: ratio >");
+        var yaml = ValidYaml.Replace("condition: ratio > threshold", "condition: ratio >");
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);

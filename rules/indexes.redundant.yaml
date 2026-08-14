@@ -1,11 +1,11 @@
 id: indexes.redundant
 version: 1
 
-name: Index redondant
+name: Redundant index
 description: >
-  Index dont les colonnes forment le préfixe d'un autre index de la même table : les requêtes
-  qui l'utilisent peuvent s'appuyer sur l'index plus large. Détection confiée à un handler,
-  la comparaison portant sur plusieurs lignes entre elles.
+  An index whose columns form the prefix of another index on the same table: queries using it can
+  rely on the wider one. Detection is delegated to a handler, since it correlates rows with one
+  another.
 category: indexes
 severity: info
 group: recommendations

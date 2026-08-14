@@ -1,10 +1,10 @@
 id: indexes.invalid
 version: 1
 
-name: Index invalide
+name: Invalid index
 description: >
-  Index laissé invalide par un CREATE INDEX CONCURRENTLY interrompu. Il n'est pas utilisé par
-  le planificateur mais continue d'être maintenu à chaque écriture.
+  An index left invalid by an interrupted CREATE INDEX CONCURRENTLY. The planner does not use it,
+  yet it is still maintained on every write.
 category: indexes
 severity: warning
 group: configuration
@@ -33,7 +33,7 @@ key:
 
 recommendation:
   title: "Index invalide : {{ indexname }}"
-  message: "{{ indexname }} sur {{ schemaname }}.{{ tablename }} est invalide et occupe {{ index_bytes | bytes }} sans servir aux requêtes."
+  message: "{{ indexname }} on {{ schemaname }}.{{ tablename }} is invalid and takes {{ index_bytes | bytes }} without serving any query."
   impact: medium
   confidence: high
   evidence:

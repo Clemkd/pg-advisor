@@ -1,10 +1,10 @@
 id: extensions.pg-stat-statements-missing
 version: 1
 
-name: pg_stat_statements absente
+name: pg_stat_statements is missing
 description: >
-  Sans cette extension, l'Advisor n'a aucune visibilité sur l'historique et le classement des
-  requêtes. La règle ne se déclenche que si l'extension est absente et ne l'installe jamais.
+  Without this extension the Advisor has no visibility on query history or ranking. The rule only
+  fires when the extension is absent, and never installs it.
 category: extensions
 severity: info
 group: configuration
@@ -19,16 +19,16 @@ key:
   - extension
 
 recommendation:
-  title: "Installer pg_stat_statements pour analyser les requêtes"
+  title: "Install pg_stat_statements to analyse queries"
   message: >
-    pg_stat_statements n'est pas disponible. Son installation permettrait d'obtenir
-    l'historique et le classement des requêtes par temps d'exécution.
+    pg_stat_statements is not available. Installing it would provide query history and a ranking of
+    queries by execution time.
   impact: medium
   confidence: high
   evidence:
     - extension
     - installable
   sql: |
-    -- postgresql.conf : shared_preload_libraries = 'pg_stat_statements' (redémarrage requis)
+    -- postgresql.conf: shared_preload_libraries = 'pg_stat_statements' (restart required)
     CREATE EXTENSION pg_stat_statements;
   documentation: https://www.postgresql.org/docs/current/pgstatstatements.html

@@ -222,9 +222,9 @@ public sealed class FindingServiceTests : IAsyncLifetime
     {
         await _service.ReconcileAsync(_connectionId, ["vacuum.test"], [Candidate()], default);
 
-        var seuil = DateTimeOffset.UtcNow.AddMinutes(-5);
-        Assert.Equal(1, await _db.Findings.CountAsync(f => f.DetectedAt > seuil));
-        Assert.Equal(0, await _db.Findings.CountAsync(f => f.DetectedAt < seuil));
+        var threshold = DateTimeOffset.UtcNow.AddMinutes(-5);
+        Assert.Equal(1, await _db.Findings.CountAsync(f => f.DetectedAt > threshold));
+        Assert.Equal(0, await _db.Findings.CountAsync(f => f.DetectedAt < threshold));
     }
 
     [Fact]

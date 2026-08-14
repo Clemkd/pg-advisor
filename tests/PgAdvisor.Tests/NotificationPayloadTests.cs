@@ -30,8 +30,8 @@ public class NotificationPayloadTests
         TargetKey = "public/commandes",
         Category = "vacuum",
         Severity = severity,
-        Title = "Autovacuum en retard sur public.commandes",
-        Message = "commandes présente 55.5 % de lignes mortes.",
+        Title = "Autovacuum behind on public.orders",
+        Message = "orders holds 55.5% dead rows.",
         Impact = "medium",
         Confidence = "high",
         RemediationSql = "VACUUM (ANALYZE) public.commandes;",
@@ -67,7 +67,7 @@ public class NotificationPayloadTests
 
         var embed = embeds.EnumerateArray().Single();
         Assert.Contains("Autovacuum", embed.GetProperty("title").GetString());
-        Assert.Contains("lignes mortes", embed.GetProperty("description").GetString());
+        Assert.Contains("dead rows", embed.GetProperty("description").GetString());
         Assert.Equal(0xDC2626, embed.GetProperty("color").GetInt32());
         Assert.NotEmpty(embed.GetProperty("fields").EnumerateArray());
     }
@@ -153,7 +153,7 @@ public class NotificationPayloadTests
 
         var attachment = json.GetProperty("attachments").EnumerateArray().Single();
         Assert.Equal("#dc2626", attachment.GetProperty("color").GetString());
-        Assert.Contains("lignes mortes", attachment.GetProperty("text").GetString());
+        Assert.Contains("dead rows", attachment.GetProperty("text").GetString());
         Assert.NotEmpty(attachment.GetProperty("fields").EnumerateArray());
     }
 

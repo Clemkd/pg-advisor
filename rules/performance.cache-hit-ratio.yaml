@@ -1,10 +1,10 @@
 id: performance.cache-hit-ratio
 version: 1
 
-name: Taux de cache faible
+name: Low cache hit ratio
 description: >
-  Proportion de blocs servis depuis le cache partagé. Un taux durablement bas signale un
-  shared_buffers trop petit au regard du volume réellement consulté.
+  The share of blocks served from shared buffers. A lastingly low ratio points to a shared_buffers
+  too small for the volume actually read.
 category: performance
 severity: warning
 group: statistics
@@ -14,8 +14,8 @@ requires:
     - pg_stat_database
 
 parameters:
-  seuil: 0.95
-  lectures_minimum: 100000
+  threshold: 0.95
+  minimum_reads: 100000
 
 query: |
   SELECT
@@ -25,13 +25,13 @@ query: |
     blks_hit::float / NULLIF(blks_hit + blks_read, 0) AS ratio
   FROM pg_stat_database
   WHERE datname = current_database()
-    AND blks_hit + blks_read > @lectures_minimum
+    AND blks_hit + blks_read > @minimum_reads
 
-condition: ratio < seuil
+condition: ratio < threshold
 
 recommendation:
   title: "Taux de cache de {{ ratio | percent }}"
-  message: "Sur {{ datname }}, {{ ratio | percent }} des blocs sont servis par le cache. Un shared_buffers plus large ou des requêtes plus sélectives réduiraient les lectures disque."
+  message: "On {{ datname }}, {{ ratio | percent }} of blocks are served from cache. A larger shared_buffers or more selective queries would cut disk reads."
   impact: medium
   confidence: medium
   evidence:

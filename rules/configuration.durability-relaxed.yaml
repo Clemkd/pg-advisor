@@ -1,10 +1,10 @@
 id: configuration.durability-relaxed
 version: 1
 
-name: Garanties de durabilité affaiblies
+name: Weakened durability guarantees
 description: >
-  fsync, full_page_writes ou synchronous_commit désactivés exposent la base à une corruption
-  ou à une perte de transactions validées en cas d'arrêt brutal.
+  Disabling fsync, full_page_writes or synchronous_commit exposes the database to corruption, or
+  to losing committed transactions, on an abrupt shutdown.
 category: configuration
 severity: critical
 group: configuration
@@ -24,8 +24,8 @@ key:
   - name
 
 recommendation:
-  title: "Paramètre de durabilité désactivé : {{ name }}"
-  message: "{{ name }} vaut « off » (source : {{ source }}). Un arrêt brutal peut entraîner une perte de données ou une corruption."
+  title: "Durability setting turned off: {{ name }}"
+  message: "{{ name }} is 'off' (source: {{ source }}). An abrupt shutdown may cause data loss or corruption."
   impact: high
   confidence: high
   evidence:

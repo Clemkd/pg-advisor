@@ -1,10 +1,10 @@
 id: configuration.autovacuum-disabled
 version: 1
 
-name: Autovacuum désactivé
+name: Autovacuum disabled
 description: >
-  Sans autovacuum, les lignes mortes ne sont jamais recyclées et l'instance finit par
-  atteindre la limite de wraparound des identifiants de transaction.
+  Without autovacuum, dead rows are never reclaimed and the instance eventually runs into
+  transaction wraparound.
 category: configuration
 severity: critical
 group: configuration
@@ -24,8 +24,8 @@ key:
   - name
 
 recommendation:
-  title: "Autovacuum désactivé sur l'instance"
-  message: "Le paramètre autovacuum vaut « {{ setting }} » (source : {{ source }}). Le nettoyage des lignes mortes ne se fera plus automatiquement."
+  title: "Autovacuum is disabled on the instance"
+  message: "The autovacuum setting is '{{ setting }}' (source: {{ source }}). Dead rows will no longer be cleaned up automatically."
   impact: high
   confidence: high
   evidence:
