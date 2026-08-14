@@ -1,3 +1,5 @@
+**Français** · [English](README.en.md)
+
 # PostgreSQL Advisor
 
 Advisor PostgreSQL self-hosted, livré comme un **unique conteneur Docker**. Une seule instance
@@ -188,5 +190,6 @@ de la base, et ne sont jamais renvoyés par l'API ni écrits dans les journaux.
 ## Documentation
 
 - [Aperçu de l'interface](docs/APERCU.md) — captures commentées de chaque vue
+  ([English](docs/OVERVIEW.md))
 - [Descriptif du projet](docs/PROJECT.md) — périmètre, architecture, priorités du MVP
 - [Format des règles](docs/RULES.md) — champs, prérequis, expressions, filtres, handlers, API

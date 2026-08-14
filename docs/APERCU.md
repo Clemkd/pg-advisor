@@ -1,3 +1,5 @@
+**Français** · [English](OVERVIEW.md)
+
 # Aperçu de l'interface
 
 Captures prises sur le jeu de test du dépôt : deux instances supervisées — une PostgreSQL 17
