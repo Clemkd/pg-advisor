@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/PgAdvisor.Api/PgAdvisor.Api.csproj" />
+    <Project Path="src/PgAdvisor.AppHost/PgAdvisor.AppHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PgAdvisor.Tests/PgAdvisor.Tests.csproj" />

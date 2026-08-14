@@ -75,6 +75,7 @@ pg-advisor
 │   ├── Findings/            cycle de vie des findings, health score
 │   ├── Notifications/       file d'attente et dispatcher webhook
 │   └── Sse/                 bus d'événements temps réel
+├── src/PgAdvisor.AppHost    Aspire — orchestration de la stack de développement
 ├── src/pg-advisor-web       React + TypeScript + Vite + Tailwind, compilé vers wwwroot
 ├── tests/PgAdvisor.Tests    tests du moteur de règles et du cycle des findings
 ├── rules                    règles YAML intégrées
@@ -87,6 +88,31 @@ pg-advisor
 
 ## Développement
 
+La stack de développement est orchestrée par [Aspire](https://aka.ms/dotnet/aspire) : une seule
+commande démarre l'API, le serveur Vite, les deux PostgreSQL supervisés et le récepteur de
+webhooks, et le tableau de bord Aspire réunit leurs journaux, leurs adresses et leur état.
+
+```bash
+dotnet run --project src/PgAdvisor.AppHost
+```
+
+| Ressource | Rôle | Adresse |
+| --- | --- | --- |
+| `web` | SPA servi par Vite, avec proxy vers l'API | http://localhost:5173 |
+| `api` | API ASP.NET Core | http://localhost:5153 |
+| `pg-full` | PostgreSQL 17 + TimescaleDB + `pg_stat_statements`, base `shop` | localhost:55432 |
+| `pg-bare` | PostgreSQL 17 nu, base `billing` | localhost:55433 |
+| `webhook-echo` | Récepteur de webhooks | http://localhost:58888 |
+
+Le compte `admin` est créé au premier démarrage avec le mot de passe `advisor-dev` ; les deux
+instances s'enregistrent avec l'utilisateur `postgres` et le mot de passe `advisor-test`.
+`pg-full` est amorcée au démarrage avec
+[`scripts/seed-test-data.sql`](scripts/seed-test-data.sql) : les règles ont de quoi réagir dès la
+première analyse. Aucun volume n'est monté sur les instances de test, chaque démarrage repart donc
+d'un état connu.
+
+Les deux projets se lancent aussi séparément, sans Aspire :
+
 ```bash
 dotnet run --project src/PgAdvisor.Api
 ```
@@ -95,22 +121,22 @@ dotnet run --project src/PgAdvisor.Api
 npm --prefix src/pg-advisor-web run dev
 ```
 
-Le serveur de développement Vite écoute sur http://localhost:5173 et relaie `/api` et
-`/events` vers `http://localhost:8080`. En production, le SPA est compilé dans
-`src/PgAdvisor.Api/wwwroot` et servi par ASP.NET Core.
+Le serveur de développement Vite écoute alors sur http://localhost:5173 et relaie `/api` et
+`/events` vers l'API sur le port de son profil de lancement, surchargeable par `PGADVISOR_API_URL`.
+En production, le SPA est compilé dans `src/PgAdvisor.Api/wwwroot` et servi par ASP.NET Core.
 
 ```bash
 dotnet test
 ```
 
-Instances PostgreSQL de test (une avec TimescaleDB et `pg_stat_statements`, une sans), plus un
-récepteur de webhooks :
+### Validation de bout en bout
+
+Cette validation porte sur l'image publiée et non sur le code en cours d'édition : elle passe donc
+par Docker Compose plutôt que par Aspire. Les instances de test s'y démarrent séparément :
 
 ```bash
 docker compose -f docker-compose.test.yml up -d
 ```
-
-### Validation de bout en bout
 
 Le script suivant construit l'image, démarre le conteneur, alimente l'instance de test avec un
 jeu de données qui déclenche des règles, enregistre les deux instances, attend la première
