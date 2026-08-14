@@ -5,7 +5,7 @@ name: Large hypertable without compression
 description: >
   A hypertable past a certain volume with no compression enabled. Compression sharply reduces the
   space taken by historical data.
-category: timescaledb
+category: storage
 severity: info
 group: configuration
 

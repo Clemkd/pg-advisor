@@ -5,7 +5,7 @@ name: TimescaleDB job failing
 description: >
   Compression, retention and continuous-aggregate refresh policies run as background jobs. Their
   failures are silent on the application side.
-category: timescaledb
+category: configuration
 severity: warning
 group: statistics
 

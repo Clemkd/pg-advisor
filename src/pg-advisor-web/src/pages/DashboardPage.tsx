@@ -236,7 +236,6 @@ export function DashboardPage() {
                         {instance.serverVersion
                           ? `PostgreSQL ${instance.serverVersion}`
                           : `${instance.host}:${instance.port}`}
-                        {instance.timescaleVersion && ` · TimescaleDB ${instance.timescaleVersion}`}
                         {' · '}
                         {instance.database}
                       </p>

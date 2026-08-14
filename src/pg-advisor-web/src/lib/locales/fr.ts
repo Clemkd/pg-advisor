@@ -82,7 +82,6 @@ export const fr: Record<string, string> = {
   'category.storage': 'Stockage',
   'category.statistics': 'Statistiques',
   'category.security': 'Sécurité',
-  'category.timescaledb': 'TimescaleDB',
   'category.extensions': 'Extensions',
 
   // --- Sévérités, statuts, états de collecte --------------------------------

@@ -8,7 +8,8 @@ server side (*zero-touch*), and produces a health score and recommendations from
 that reloads without a restart and is **editable from the interface**.
 
 The tool is useful with no PostgreSQL extension at all, and grows more precise as
-`pg_stat_statements`, TimescaleDB, `pgstattuple` or HypoPG become available.
+`pg_stat_statements`, `pgstattuple` or HypoPG become available. TimescaleDB, where present,
+additionally enables the rules specific to it.
 
 ## Overview
 

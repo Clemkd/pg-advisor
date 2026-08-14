@@ -99,9 +99,6 @@ export function InstanceDetailPage() {
                 : t('instances.disabledBadge')}
             </Tag>
             {connection.serverVersion && <Tag>PostgreSQL {connection.serverVersion}</Tag>}
-            {connection.timescaleVersion && (
-              <Tag tone="accent">TimescaleDB {connection.timescaleVersion}</Tag>
-            )}
           </>
         }
         actions={

@@ -175,7 +175,7 @@ Rules must be manageable from the interface, not only through the file system:
 
 performance; queries; indexes; vacuum/autovacuum; bloat; connections; locks/blocking; long
 transactions; checkpoints; PostgreSQL configuration; storage; statistics; configuration security;
-TimescaleDB; available extensions.
+available extensions.
 
 ## Dashboard
 
@@ -194,7 +194,6 @@ Vacuum         74
 Storage        94
 Configuration  89
 Connections    96
-TimescaleDB    81
 ```
 
 Every recommendation shows: severity; title; description; evidence/metrics; estimated impact;
@@ -208,7 +207,6 @@ The Advisor supervises several instances, each with its own health score:
 ```
 Production
 PostgreSQL 18
-TimescaleDB 2.24
 Health: 91/100
 
 Staging
@@ -389,5 +387,5 @@ Webhook notifications
 ```
 
 **Fundamental principle**: the Advisor must be useful with no PostgreSQL extension at all, yet grow
-progressively more powerful as `pg_stat_statements`, HypoPG, TimescaleDB or other capabilities become
-available.
+progressively more powerful as `pg_stat_statements`, HypoPG, `pgstattuple` or other capabilities
+become available.

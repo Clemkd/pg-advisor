@@ -48,7 +48,6 @@ const CATEGORIES = [
   'storage',
   'statistics',
   'security',
-  'timescaledb',
   'extensions',
 ]
 

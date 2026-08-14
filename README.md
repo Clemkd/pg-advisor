@@ -9,7 +9,8 @@ recommandations à partir d'un moteur de règles YAML rechargeable à chaud et *
 l'interface**.
 
 L'outil est utile sans aucune extension PostgreSQL et devient plus précis à mesure que
-`pg_stat_statements`, TimescaleDB, `pgstattuple` ou HypoPG sont disponibles.
+`pg_stat_statements`, `pgstattuple` ou HypoPG sont disponibles. TimescaleDB, lorsqu'elle est
+présente, active en plus les règles qui lui sont propres.
 
 ## Aperçu
 

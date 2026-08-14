@@ -5,7 +5,7 @@ name: Old chunks left uncompressed
 description: >
   Chunks whose window closed long ago and that are still uncompressed: either no policy is in
   place, or it is not keeping up.
-category: timescaledb
+category: storage
 severity: info
 group: configuration
 

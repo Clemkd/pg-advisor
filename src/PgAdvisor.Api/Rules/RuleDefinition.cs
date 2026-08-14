@@ -16,13 +16,12 @@ public static class RuleCategories
     public const string Storage = "storage";
     public const string Statistics = "statistics";
     public const string Security = "security";
-    public const string TimescaleDb = "timescaledb";
     public const string Extensions = "extensions";
 
     public static readonly string[] All =
     [
         Performance, Queries, Indexes, Vacuum, Bloat, Connections, Locks, Transactions,
-        Checkpoints, Configuration, Storage, Statistics, Security, TimescaleDb, Extensions,
+        Checkpoints, Configuration, Storage, Statistics, Security, Extensions,
     ];
 
     public static bool IsValid(string? category) =>

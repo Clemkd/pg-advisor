@@ -82,7 +82,6 @@ export const en: Record<string, string> = {
   'category.storage': 'Storage',
   'category.statistics': 'Statistics',
   'category.security': 'Security',
-  'category.timescaledb': 'TimescaleDB',
   'category.extensions': 'Extensions',
 
   // --- Severities, statuses, collection states -------------------------------

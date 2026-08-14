@@ -167,7 +167,7 @@ shown in the editor's cheat sheet.
 ## Categories
 
 `performance`, `queries`, `indexes`, `vacuum`, `bloat`, `connections`, `locks`, `transactions`,
-`checkpoints`, `configuration`, `storage`, `statistics`, `security`, `timescaledb`, `extensions`.
+`checkpoints`, `configuration`, `storage`, `statistics`, `security`, `extensions`.
 
 ## Scheduling groups
 

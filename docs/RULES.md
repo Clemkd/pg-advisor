@@ -173,7 +173,7 @@ La liste à jour, avec la description de chaque handler, est exposée par
 
 `performance`, `queries`, `indexes`, `vacuum`, `bloat`, `connections`, `locks`,
 `transactions`, `checkpoints`, `configuration`, `storage`, `statistics`, `security`,
-`timescaledb`, `extensions`.
+`extensions`.
 
 ## Groupes de périodicité
 

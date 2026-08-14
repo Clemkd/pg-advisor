@@ -174,11 +174,6 @@ export function InstancesPage() {
                         </td>
                         <td className="px-4 py-2.5 text-ink-muted">
                           <span className="whitespace-nowrap">{connection.serverVersion ?? '—'}</span>
-                          {connection.timescaleVersion && (
-                            <p className="whitespace-nowrap text-xs text-ink-muted">
-                              TimescaleDB {connection.timescaleVersion}
-                            </p>
-                          )}
                         </td>
                         <td className="px-4 py-2.5">
                           <StateTag connection={connection} />
@@ -244,9 +239,6 @@ export function InstancesPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <StateTag connection={connection} />
                     {connection.serverVersion && <Tag>PostgreSQL {connection.serverVersion}</Tag>}
-                    {connection.timescaleVersion && (
-                      <Tag tone="accent">TimescaleDB {connection.timescaleVersion}</Tag>
-                    )}
                   </div>
 
                   <p className="mt-2 text-xs text-ink-muted">

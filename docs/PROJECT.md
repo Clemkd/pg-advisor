@@ -179,7 +179,7 @@ fichiers :
 
 performance ; requêtes ; index ; vacuum/autovacuum ; bloat ; connexions ; locks/blocking ;
 transactions longues ; checkpoints ; configuration PostgreSQL ; stockage ; statistiques ;
-sécurité de configuration ; TimescaleDB ; extensions disponibles.
+sécurité de configuration ; extensions disponibles.
 
 ## Dashboard
 
@@ -198,7 +198,6 @@ Vacuum         74
 Storage        94
 Configuration  89
 Connections    96
-TimescaleDB    81
 ```
 
 Chaque recommandation affiche : sévérité ; titre ; description ; preuves/métriques ;
@@ -212,7 +211,6 @@ L'Advisor supervise plusieurs instances, chacune avec son propre health score :
 ```
 Production
 PostgreSQL 18
-TimescaleDB 2.24
 Health: 91/100
 
 Staging
@@ -399,5 +397,5 @@ Notifications webhook
 ```
 
 **Principe fondamental** : l'Advisor doit être utile sans aucune extension PostgreSQL, mais
-devenir progressivement plus puissant lorsque `pg_stat_statements`, HypoPG, TimescaleDB ou
+devenir progressivement plus puissant lorsque `pg_stat_statements`, HypoPG, `pgstattuple` ou
 d'autres capacités sont disponibles.
