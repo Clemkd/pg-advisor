@@ -25,7 +25,7 @@ import {
   formatRelative,
   formatSeconds,
 } from '@/lib/format'
-import { useT, useTc } from '@/lib/i18n'
+import { tr, useT, useTc } from '@/lib/i18n'
 import type { Translator } from '@/lib/i18n'
 
 const LIVE_EVENTS = [
@@ -50,7 +50,7 @@ export function DashboardPage() {
       setData(await api.dashboard())
       setError(null)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('common.loadFailed'))
+      setError(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
     }

@@ -22,8 +22,10 @@ import {
   formatPercent,
   formatSeconds,
 } from '../lib/format'
+import { tr, useT } from '../lib/i18n'
 
 export function InstanceDetailPage() {
+  const t = useT()
   const { id } = useParams<{ id: string }>()
   const connectionId = Number(id)
 
@@ -36,7 +38,7 @@ export function InstanceDetailPage() {
       setDetail(await api.connections.get(connectionId))
       setError(null)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Chargement impossible.')
+      setError(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -64,7 +66,7 @@ export function InstanceDetailPage() {
   }
 
   if (error) {
-    return <Alert title="Erreur">{error}</Alert>
+    return <Alert title={t('common.error')}>{error}</Alert>
   }
 
   if (!detail) {
@@ -82,7 +84,7 @@ export function InstanceDetailPage() {
         breadcrumb={
           <>
             <Link to="/instances" className="hover:underline">
-              Instances
+              {t('nav.instances')}
             </Link>{' '}
             / {connection.name}
           </>
@@ -92,7 +94,9 @@ export function InstanceDetailPage() {
         meta={
           <>
             <Tag tone={connection.collectionState === 'error' ? 'bad' : 'accent'}>
-              {connection.enabled ? collectionStateLabel(connection.collectionState) : 'désactivée'}
+              {connection.enabled
+                ? collectionStateLabel(connection.collectionState)
+                : t('instances.disabledBadge')}
             </Tag>
             {connection.serverVersion && <Tag>PostgreSQL {connection.serverVersion}</Tag>}
             {connection.timescaleVersion && (
@@ -105,41 +109,45 @@ export function InstanceDetailPage() {
             to={`/findings?connectionId=${connection.id}`}
             className="inline-flex items-center rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken"
           >
-            Voir les recommandations
+            {t('instanceDetail.seeFindings')}
           </Link>
         }
       />
 
-      {connection.lastError && <Alert title="Dernière erreur de collecte">{connection.lastError}</Alert>}
+      {connection.lastError && (
+        <Alert title={t('instanceDetail.lastCollectionError')}>{connection.lastError}</Alert>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <Card title="Santé">
+        <Card title={t('instanceDetail.health')}>
           <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
             <ScoreRing score={connection.health?.global ?? null} />
             <dl className="w-full min-w-0 space-y-1 text-sm text-ink-muted">
               <div>
-                Critiques :{' '}
+                {t('dashboard.criticals')} :{' '}
                 <span className="font-semibold text-ink">{connection.health?.critical ?? 0}</span>
               </div>
               <div>
-                Avertissements :{' '}
+                {t('dashboard.warnings')} :{' '}
                 <span className="font-semibold text-ink">{connection.health?.warning ?? 0}</span>
               </div>
               <div>
-                Informations :{' '}
+                {t('dashboard.infos')} :{' '}
                 <span className="font-semibold text-ink">{connection.health?.info ?? 0}</span>
               </div>
               <div className="pt-1 text-xs text-ink-muted">
-                Collecte {formatDateTime(connection.lastCollectedAt)}
+                {t('instanceDetail.collectedAt', {
+                  when: formatDateTime(connection.lastCollectedAt),
+                })}
               </div>
             </dl>
           </div>
         </Card>
 
-        <Card title="Scores par catégorie" className="lg:col-span-2">
+        <Card title={t('dashboard.categoryScores')} className="lg:col-span-2">
           {!connection.health || Object.keys(connection.health.categories).length === 0 ? (
-            <EmptyState title="Pas encore de score">
-              Les catégories seront notées après la première exécution des règles applicables.
+            <EmptyState title={t('instanceDetail.noScore')}>
+              {t('instanceDetail.noScoreHint')}
             </EmptyState>
           ) : (
             <div className="space-y-2.5">
@@ -153,56 +161,91 @@ export function InstanceDetailPage() {
         </Card>
       </div>
 
-      <Card title="Activité">
+      <Card title={t('instanceDetail.activity')}>
         {!metrics ? (
-          <EmptyState title="Aucune métrique collectée">
-            Les métriques d'activité apparaissent après le premier passage du groupe « santé ».
+          <EmptyState title={t('instanceDetail.noMetrics')}>
+            {t('instanceDetail.noMetricsHint')}
           </EmptyState>
         ) : (
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             <MetricTile
-              label="Connexions"
+              label={t('dashboard.connections')}
               value={`${formatNumber(metrics.connections)} / ${formatNumber(metrics.maxConnections)}`}
               detail={formatPercent(metrics.connectionUsage)}
             />
-            <MetricTile label="Requêtes actives" value={formatNumber(metrics.activeQueries)} />
             <MetricTile
-              label="Inactives en transaction"
+              label={t('instanceDetail.activeQueries')}
+              value={formatNumber(metrics.activeQueries)}
+            />
+            <MetricTile
+              label={t('instanceDetail.idleInTransaction')}
               value={formatNumber(metrics.idleInTransaction)}
             />
-            <MetricTile label="Sessions bloquées" value={formatNumber(metrics.blockedSessions)} />
             <MetricTile
-              label="Transaction la plus longue"
+              label={t('instanceDetail.blockedSessions')}
+              value={formatNumber(metrics.blockedSessions)}
+            />
+            <MetricTile
+              label={t('instanceDetail.longestTransaction')}
               value={formatSeconds(metrics.longestTransactionSeconds)}
             />
             <MetricTile
-              label="Requête la plus longue"
+              label={t('instanceDetail.longestQuery')}
               value={formatSeconds(metrics.longestQuerySeconds)}
             />
-            <MetricTile label="Taux de cache" value={formatPercent(metrics.cacheHitRatio)} />
-            <MetricTile label="Taille de la base" value={formatBytes(metrics.databaseSizeBytes)} />
-            <MetricTile label="Commits" value={formatNumber(metrics.commits)} />
-            <MetricTile label="Rollbacks" value={formatNumber(metrics.rollbacks)} />
-            <MetricTile label="Deadlocks" value={formatNumber(metrics.deadlocks)} />
-            <MetricTile label="Fichiers temporaires" value={formatBytes(metrics.tempBytes)} />
+            <MetricTile
+              label={t('instanceDetail.cacheHitRatio')}
+              value={formatPercent(metrics.cacheHitRatio)}
+            />
+            <MetricTile
+              label={t('instanceDetail.databaseSize')}
+              value={formatBytes(metrics.databaseSizeBytes)}
+            />
+            <MetricTile label={t('instanceDetail.commits')} value={formatNumber(metrics.commits)} />
+            <MetricTile
+              label={t('instanceDetail.rollbacks')}
+              value={formatNumber(metrics.rollbacks)}
+            />
+            <MetricTile
+              label={t('instanceDetail.deadlocks')}
+              value={formatNumber(metrics.deadlocks)}
+            />
+            <MetricTile
+              label={t('instanceDetail.tempFiles')}
+              value={formatBytes(metrics.tempBytes)}
+            />
           </dl>
         )}
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Capacités détectées">
+        <Card title={t('instanceDetail.capabilities')}>
           {capabilities ? (
             <>
               <dl className="mb-3 grid grid-cols-2 gap-2 text-sm">
-                <Info label="Version" value={capabilities.serverVersion} />
-                <Info label="Utilisateur" value={capabilities.currentUser} />
-                <Info label="Superutilisateur" value={capabilities.isSuperuser ? 'oui' : 'non'} />
-                <Info label="pg_monitor" value={capabilities.hasPgMonitor ? 'oui' : 'non'} />
-                <Info label="En recovery" value={capabilities.inRecovery ? 'oui' : 'non'} />
-                <Info label="Détecté" value={formatDateTime(capabilities.detectedAt)} />
+                <Info label={t('instanceDetail.version')} value={capabilities.serverVersion} />
+                <Info label={t('instanceDetail.user')} value={capabilities.currentUser} />
+                <Info
+                  label={t('instanceDetail.superuser')}
+                  value={capabilities.isSuperuser ? t('common.yesShort') : t('common.noShort')}
+                />
+                <Info
+                  label="pg_monitor"
+                  value={capabilities.hasPgMonitor ? t('common.yesShort') : t('common.noShort')}
+                />
+                <Info
+                  label={t('instanceDetail.inRecovery')}
+                  value={capabilities.inRecovery ? t('common.yesShort') : t('common.noShort')}
+                />
+                <Info
+                  label={t('instanceDetail.detected')}
+                  value={formatDateTime(capabilities.detectedAt)}
+                />
               </dl>
 
-              <p className="mb-1.5 text-xs font-semibold text-ink-muted">Extensions</p>
+              <p className="mb-1.5 text-xs font-semibold text-ink-muted">
+                {t('category.extensions')}
+              </p>
               <ul className="mb-3 space-y-0.5 font-mono text-xs">
                 {extensions.map((extension) => (
                   <li
@@ -216,7 +259,7 @@ export function InstanceDetailPage() {
               </ul>
 
               <p className="mb-1.5 text-xs font-semibold text-ink-muted">
-                Vues lisibles ({views.length})
+                {t('instanceDetail.readableViews', { count: views.length })}
               </p>
               <ul className="max-h-56 space-y-0.5 overflow-y-auto font-mono text-xs text-success">
                 {views.map((view) => (
@@ -225,32 +268,39 @@ export function InstanceDetailPage() {
               </ul>
             </>
           ) : (
-            <EmptyState title="Capacités inconnues">
-              La détection a lieu à la première connexion réussie.
+            <EmptyState title={t('instanceDetail.unknownCapabilities')}>
+              {t('instanceDetail.unknownCapabilitiesHint')}
             </EmptyState>
           )}
         </Card>
 
-        <Card title="Paramètres de collecte">
+        <Card title={t('instanceDetail.collectionSettings')}>
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Info label="Instance active" value={connection.enabled ? 'oui' : 'non'} />
-            <Info label="Mode SSL" value={connection.sslMode} />
             <Info
-              label="Intervalle propre"
+              label={t('instanceDetail.instanceEnabled')}
+              value={connection.enabled ? t('common.yesShort') : t('common.noShort')}
+            />
+            <Info label={t('instanceDetail.sslMode')} value={connection.sslMode} />
+            <Info
+              label={t('instanceDetail.ownInterval')}
               value={
                 connection.collectionIntervalSeconds > 0
                   ? `${connection.collectionIntervalSeconds} s`
-                  : 'périodicité globale'
+                  : t('instanceDetail.globalInterval')
               }
             />
-            <Info label="Créée le" value={formatDateTime(connection.createdAt)} />
+            <Info
+              label={t('instanceDetail.createdAt')}
+              value={formatDateTime(connection.createdAt)}
+            />
           </dl>
 
           <p className="mt-4 rounded-md bg-surface-sunken p-3 text-xs text-ink-muted">
-            L'Advisor n'écrit jamais sur cette instance : la session est ouverte avec
+            {t('instanceDetail.readOnlyNoticeBefore')}
             <code className="mx-1 rounded bg-border-subtle px-1">default_transaction_read_only=on</code>
-            et un <code className="mx-1 rounded bg-border-subtle px-1">statement_timeout</code> borné. Les
-            commandes correctives proposées sont à exécuter manuellement.
+            {t('instanceDetail.readOnlyNoticeMiddle')}
+            <code className="mx-1 rounded bg-border-subtle px-1">statement_timeout</code>
+            {t('instanceDetail.readOnlyNoticeAfter')}
           </p>
         </Card>
       </div>

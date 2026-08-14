@@ -19,7 +19,7 @@ import {
   Tag,
 } from '../components/ui'
 import { categoryLabel, formatRelative } from '../lib/format'
-import { useT, useTc } from '../lib/i18n'
+import { tr, useT, useTc } from '../lib/i18n'
 import type { Translator } from '../lib/i18n'
 
 export function RulesPage() {
@@ -44,7 +44,7 @@ export function RulesPage() {
       setErrors(ruleErrors)
       setFailure(null)
     } catch (cause) {
-      setFailure(cause instanceof Error ? cause.message : t('common.loadFailed'))
+      setFailure(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -86,7 +86,7 @@ export function RulesPage() {
       setLoadedAt(status.loadedAt)
       await load()
     } catch (cause) {
-      setFailure(cause instanceof Error ? cause.message : t('rules.reloadFailed'))
+      setFailure(cause instanceof Error ? cause.message : tr('rules.reloadFailed'))
     } finally {
       setReloading(false)
     }

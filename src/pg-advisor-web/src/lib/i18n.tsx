@@ -51,6 +51,15 @@ export function translate(locale: Locale, key: string, vars?: TranslateVars): st
 
 export type Translator = (key: string, vars?: TranslateVars) => string
 
+/**
+ * Traduction hors rendu, pour les rappels stables — un chargeur mémorisé par `useCallback`, par
+ * exemple. Passer le `t` du contexte y ajouterait une dépendance qui change avec la langue, et
+ * recréerait le rappel : les vues se rechargeraient à chaque bascule de langue pour rien.
+ */
+export function tr(key: string, vars?: TranslateVars): string {
+  return translate(activeLocale, key, vars)
+}
+
 /** Correspondance avec les locales Intl, partagée avec lib/format.ts. */
 export const INTL_LOCALES: Record<Locale, string> = { fr: 'fr-FR', en: 'en-GB' }
 
