@@ -186,7 +186,8 @@ and are never returned by the API nor written to the logs.
 
 ## Documentation
 
+Every document exists in both languages.
+
 - [Interface overview](docs/OVERVIEW.md) — commented screenshots of every view
-- [Project description](docs/PROJECT.md) — scope, architecture, MVP priorities *(French)*
-- [Rule format](docs/RULES.md) — fields, prerequisites, expressions, filters, handlers, API
-  *(French)*
+- [Project description](docs/PROJECT.en.md) — scope, architecture, MVP priorities
+- [Rule format](docs/RULES.en.md) — fields, prerequisites, expressions, filters, handlers, API

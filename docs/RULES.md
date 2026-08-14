@@ -1,3 +1,5 @@
+**Français** · [English](RULES.en.md)
+
 # Format des règles
 
 Une règle est un fichier YAML unique. Les règles intégrées sont chargées depuis

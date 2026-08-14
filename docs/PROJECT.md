@@ -1,3 +1,5 @@
+**Français** · [English](PROJECT.en.md)
+
 # PostgreSQL Advisor — descriptif projet
 
 ## Objet

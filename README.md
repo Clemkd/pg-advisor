@@ -189,7 +189,11 @@ de la base, et ne sont jamais renvoyés par l'API ni écrits dans les journaux.
 
 ## Documentation
 
+Chaque document existe dans les deux langues.
+
 - [Aperçu de l'interface](docs/APERCU.md) — captures commentées de chaque vue
   ([English](docs/OVERVIEW.md))
 - [Descriptif du projet](docs/PROJECT.md) — périmètre, architecture, priorités du MVP
+  ([English](docs/PROJECT.en.md))
 - [Format des règles](docs/RULES.md) — champs, prérequis, expressions, filtres, handlers, API
+  ([English](docs/RULES.en.md))
