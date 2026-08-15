@@ -269,6 +269,28 @@ main, chacun avec ses paddings.
 - Tri : une seule colonne à la fois, direction indiquée par une icône **et** par `aria-sort`.
 - Débordement horizontal contenu par `TableScroll` : c'est le tableau qui défile, jamais la page.
 
+**Filtrer et trier se font dans l'en-tête de la colonne concernée, jamais dans une barre à part.**
+Une barre de filtres séparée oblige à rétablir mentalement le lien entre un contrôle et la colonne
+qu'il gouverne, et coûte une carte entière de hauteur pour trois champs. Le contrôle posé dans son
+en-tête supprime ce lien à établir et rend visible d'un coup d'œil ce qui est filtré.
+
+Le contrôle se choisit selon la nature de la donnée, pas selon une règle uniforme :
+
+| Donnée | Filtre | Tri |
+| --- | --- | --- |
+| Texte libre — nom, identifiant, description | zone de saisie (`FilterInput`) | alphabétique |
+| Valeur énumérée — catégorie, origine, état | sélection multiple (`MultiSelect`) | alphabétique |
+| Énumération ordonnée — sévérité, impact | sélection multiple | **selon l'ordre de gravité**, jamais l'alphabet |
+| Mesure numérique | comparateur et seuil (`FilterInput` avec opérateur) | numérique |
+| Colonne sans filtre pertinent | aucun contrôle, plutôt qu'un contrôle inventé | selon le cas |
+
+Trois obligations : l'état filtré reste lisible menu fermé — un décompte ou une marque sur
+l'en-tête concerné ; une action efface tout (`common.clearFilters`) ; et l'état vide distingue
+« rien à afficher » de « rien ne correspond à ces filtres », qui n'appellent pas la même réaction.
+
+Quand le coût est raisonnable, l'état des filtres vit dans l'URL : une vue filtrée se partage alors
+par simple lien.
+
 ### Modale
 
 ```
