@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   ArrowDown,
@@ -15,7 +15,24 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { ExplainPlan, PlanNode, PlanWarning, QueryAnalysisResult } from '../api/types'
-import { Alert, Card, CodeBlock, Select, Tag } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CodeBlock,
+  CopyButton,
+  Notice,
+  Select,
+  TBody,
+  THead,
+  Table,
+  Td,
+  Th,
+  Toolbar,
+  Tr,
+} from '@/components/ui/primitives'
 import { formatNumber } from '@/lib/format'
 import { currentLocale, hasTranslation, tr, translatePlural, useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -55,11 +72,11 @@ function formatEstimation(factor: number | null): string {
   return tr(key, { factor: absolute.toFixed(1) })
 }
 
-function estimationTone(factor: number | null): 'neutral' | 'warn' | 'bad' {
+function estimationTone(factor: number | null): 'neutral' | 'warning' | 'danger' {
   if (factor === null) return 'neutral'
   const absolute = Math.abs(factor)
-  if (absolute >= 100) return 'bad'
-  if (absolute >= 10) return 'warn'
+  if (absolute >= 100) return 'danger'
+  if (absolute >= 10) return 'warning'
   return 'neutral'
 }
 
@@ -68,6 +85,9 @@ function estimationTone(factor: number | null): 'neutral' | 'warn' | 'bad' {
  * tout le reste. Une seule barre pour l'ensemble — sélecteur de vue compris — au lieu d'une
  * rangée d'onglets suivie d'une barre propre au diagramme : chaque rangée retirée revient au
  * plan, qui est le contenu de la modale.
+ *
+ * `Toolbar` resserre d'elle-même tous les contrôles qu'elle porte au cran dense de la famille
+ * étude : aucune vue n'a de taille à répéter contrôle par contrôle.
  */
 function PlanShell({ toolbar, children }: { toolbar: ReactNode; children: ReactNode }) {
   return (
@@ -75,9 +95,9 @@ function PlanShell({ toolbar, children }: { toolbar: ReactNode; children: ReactN
       {/* Une ligne, toujours : la barre ne se replie pas sur deux rangées quand la fenêtre se
           resserre — ce sont les libellés des raccourcis qui s'abrègent. Une rangée de plus ici
           serait une rangée de moins pour le plan, et elle apparaîtrait au pire moment. */}
-      <div className="border-border-subtle flex shrink-0 items-center justify-between gap-x-3 overflow-hidden border-b px-3 py-2">
+      <Toolbar className="border-border-subtle shrink-0 flex-nowrap justify-between gap-x-3 overflow-hidden border-b px-3 py-2">
         {toolbar}
-      </div>
+      </Toolbar>
       {children}
     </div>
   )
@@ -94,10 +114,12 @@ export function PlanView({ result }: { result: QueryAnalysisResult }) {
   const plan = result.plan
 
   // Le sélecteur de vue est posé dans la barre de la vue affichée : il ne coûte donc aucune
-  // rangée supplémentaire, quelle que soit la vue.
+  // rangée supplémentaire, quelle que soit la vue. Contrôle segmenté, donc `aria-pressed` :
+  // `aria-current="page"` annonce la page courante d'une navigation, pas une vue choisie.
   const tabs = (
-    <nav
-      className="border-border-strong bg-surface flex shrink-0 rounded-[var(--radius-control)] border p-0.5"
+    <div
+      role="group"
+      className="border-border-strong bg-surface flex h-8 shrink-0 rounded-[var(--radius-control)] border p-0.5"
       aria-label={t('plan.viewLabel')}
     >
       {VIEWS.map((item) => (
@@ -105,10 +127,10 @@ export function PlanView({ result }: { result: QueryAnalysisResult }) {
           key={item}
           type="button"
           onClick={() => setView(item)}
-          aria-current={view === item ? 'true' : undefined}
+          aria-pressed={view === item}
           title={t(`plan.view.${item}Hint`)}
           className={cn(
-            'rounded-[calc(var(--radius-control)-2px)] px-2.5 py-1 text-xs font-medium transition-colors',
+            'text-meta rounded-[calc(var(--radius-control)-2px)] px-2.5 font-medium transition-colors',
             view === item
               ? 'bg-brand text-brand-ink'
               : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
@@ -117,7 +139,7 @@ export function PlanView({ result }: { result: QueryAnalysisResult }) {
           {t(`plan.view.${item}`)}
         </button>
       ))}
-    </nav>
+    </div>
   )
 
   if (view === 'graph') return <PlanDiagram plan={plan} tabs={tabs} />
@@ -128,13 +150,27 @@ export function PlanView({ result }: { result: QueryAnalysisResult }) {
         {view === 'table' ? (
           <PlanTables plan={plan} />
         ) : (
-          <div className="space-y-3">
-            {/* La requête n'est pas rappelée ici : la modale l'affiche déjà, une seule fois. */}
-            <Card title={t('plan.text.title')}>
-              <CodeBlock className="whitespace-pre">{result.planText}</CodeBlock>
+          <div className="space-y-4">
+            {/* La requête n'est pas rappelée ici : la modale l'affiche déjà, une seule fois.
+                Chaque bloc est copiable : l'Advisor ne corrige rien, tout ce qu'il produit part
+                dans un ticket ou dans un autre outil. */}
+            <Card>
+              <CardHeader
+                title={t('plan.text.title')}
+                action={<CopyButton value={result.planText} label={t('plan.text.title')} />}
+              />
+              <CardBody>
+                <CodeBlock className="whitespace-pre">{result.planText}</CodeBlock>
+              </CardBody>
             </Card>
-            <Card title={t('plan.json.title')}>
-              <CodeBlock className="whitespace-pre">{result.planJson}</CodeBlock>
+            <Card>
+              <CardHeader
+                title={t('plan.json.title')}
+                action={<CopyButton value={result.planJson} label={t('plan.json.title')} />}
+              />
+              <CardBody>
+                <CodeBlock className="whitespace-pre">{result.planJson}</CodeBlock>
+              </CardBody>
             </Card>
           </div>
         )}
@@ -151,27 +187,41 @@ export function PlanTotals({ plan }: { plan: ExplainPlan }) {
   const t = useT()
 
   return (
-    <span className="text-ink-muted flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+    <span className="text-meta flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      {/* Execution Time est le chiffre de la mesure : il ne cède jamais. Les trois autres
+          s'effacent sous 1536 px, où la rangée d'en-tête ne peut plus s'étendre qu'aux dépens
+          du titre de la modale — et un en-tête qui gagne un compteur en perdant le nom de ce
+          qu'il coiffe a fait un mauvais échange. */}
       <Metric label={t('plan.total.execution')} value={formatMs(plan.executionMs)} strong />
-      <Metric label={t('plan.total.planning')} value={formatMs(plan.planningMs)} />
-      <Metric label={t('plan.total.cost')} value={formatNumber(Math.round(plan.totalCost))} />
-      <Metric label={t('plan.total.nodes')} value={String(plan.nodes.length)} />
+      <Metric label={t('plan.total.planning')} value={formatMs(plan.planningMs)} secondary />
+      <Metric label={t('plan.total.cost')} value={formatNumber(Math.round(plan.totalCost))} secondary />
+      <Metric label={t('plan.total.nodes')} value={String(plan.nodes.length)} secondary />
     </span>
   )
 }
 
-function Metric({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Metric({
+  label,
+  value,
+  strong,
+  secondary,
+}: {
+  label: string
+  value: string
+  strong?: boolean
+  secondary?: boolean
+}) {
   return (
-    <span className="whitespace-nowrap">
-      <span className="text-ink-faint">{label} </span>
-      <span className={strong ? 'text-ink font-semibold' : 'text-ink'}>{value}</span>
+    <span className={cn('whitespace-nowrap', secondary && 'hidden 2xl:inline')}>
+      <span className="text-ink-muted">{label} </span>
+      <span className={cn('text-ink tabular-nums', strong && 'font-semibold')}>{value}</span>
     </span>
   )
 }
 
 /* ------------------------------------------------------------------ Diagramme */
 
-const NODE_W = 340
+const NODE_W = 360
 const GAP_X = 32
 const GAP_Y = 56
 const PAD = 32
@@ -179,7 +229,7 @@ const MIN_ZOOM = 0.2
 const MAX_ZOOM = 2.5
 
 /** Hauteur supposée d'une carte avant sa première mesure. */
-const ESTIMATED_H = 96
+const ESTIMATED_H = 110
 
 /** Plancher de l'ajustement automatique : en deçà, les cartes ne sont plus lisibles. */
 const FIT_FLOOR = 0.3
@@ -204,10 +254,13 @@ type Heat = 0 | 1 | 2 | 3
  * La sévérité se lit sur une pastille, jamais sur un fond de carte. Un fond teinté impose sa
  * couleur à tout le texte qu'il porte — libellés, compteurs, conditions — et son contraste
  * change avec le thème ; une pastille colore un point précis et laisse la carte neutre.
+ *
+ * Le premier cran est bleu et non violet : la marque ne dit jamais un état, elle ne signale que
+ * ce avec quoi on interagit. Peinte en violet, une étape « notable » se lisait comme un bouton.
  */
 const HEAT_DOT: Record<Heat, string> = {
   0: 'bg-ink-faint/40',
-  1: 'bg-brand',
+  1: 'bg-info',
   2: 'bg-warning',
   3: 'bg-danger',
 }
@@ -795,7 +848,7 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
     return (
       <PlanShell toolbar={tabs}>
         <div className="p-4">
-          <Alert tone="warning">{t('plan.unstructured')}</Alert>
+          <Notice tone="warning">{t('plan.unstructured')}</Notice>
         </div>
       </PlanShell>
     )
@@ -808,7 +861,7 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
           <div className="flex min-w-0 items-center gap-2">
             {tabs}
 
-            <label className="text-ink-muted flex shrink-0 items-center gap-2 text-xs">
+            <label className="text-ink-muted text-meta flex shrink-0 items-center gap-2">
               {t('plan.highlight')}
               <Select
                 value={metric}
@@ -853,8 +906,10 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2"
               onClick={() =>
                 setExpanded((current) =>
                   current.size === plan.nodes.length
@@ -862,23 +917,40 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
                     : new Set(plan.nodes.map((node) => node.id)),
                 )
               }
-              className="border-border-strong text-ink-muted hover:border-brand hover:text-brand h-7 rounded-[var(--radius-control)] border px-2 text-xs"
             >
               {expanded.size === plan.nodes.length ? t('plan.collapseAll') : t('plan.expandAll')}
-            </button>
+            </Button>
 
-            <ZoomButton label={t('plan.zoomOut')} onClick={() => zoomFromCenter(1 / ZOOM_STEP)}>
-              <Minus className="size-3.5" aria-hidden />
-            </ZoomButton>
-            <span className="text-ink-muted w-12 text-center text-xs tabular-nums">
+            <Button
+              variant="outline"
+              size="icon"
+              title={t('plan.zoomOut')}
+              aria-label={t('plan.zoomOut')}
+              onClick={() => zoomFromCenter(1 / ZOOM_STEP)}
+            >
+              <Minus className="size-4" aria-hidden />
+            </Button>
+            <span className="text-ink-muted text-meta w-12 text-center tabular-nums">
               {Math.round(box.zoom * 100)} %
             </span>
-            <ZoomButton label={t('plan.zoomIn')} onClick={() => zoomFromCenter(ZOOM_STEP)}>
-              <Plus className="size-3.5" aria-hidden />
-            </ZoomButton>
-            <ZoomButton label={t('plan.fit')} onClick={fit}>
-              <Maximize2 className="size-3.5" aria-hidden />
-            </ZoomButton>
+            <Button
+              variant="outline"
+              size="icon"
+              title={t('plan.zoomIn')}
+              aria-label={t('plan.zoomIn')}
+              onClick={() => zoomFromCenter(ZOOM_STEP)}
+            >
+              <Plus className="size-4" aria-hidden />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              title={t('plan.fit')}
+              aria-label={t('plan.fit')}
+              onClick={fit}
+            >
+              <Maximize2 className="size-4" aria-hidden />
+            </Button>
           </div>
         </>
       }
@@ -886,7 +958,7 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
       <div
         ref={viewport}
         role="application"
-        aria-label={t('plan.canvasLabel')}
+        aria-label={`${t('plan.canvasLabel')} — ${t('plan.legend.controls')}`}
         onPointerDown={startPan}
         onPointerMove={pan}
         onPointerUp={endPan}
@@ -943,8 +1015,8 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
                   x={edge.labelX + 6}
                   y={edge.labelY}
                   dominantBaseline="middle"
-                  fontSize={10}
-                  className="fill-ink-faint"
+                  fontSize={11}
+                  className="fill-ink-muted"
                   style={{
                     paintOrder: 'stroke',
                     stroke: 'var(--color-surface-sunken)',
@@ -981,14 +1053,27 @@ function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
           })}
         </div>
 
-        {/* Légende posée sur le canevas plutôt qu'en dessous : elle reste lisible sans prendre
-            une rangée au diagramme, et laisse passer le glisser puisqu'elle n'attrape pas le
-            pointeur. */}
-        <p className="border-border-subtle bg-surface/85 text-ink-faint pointer-events-none absolute bottom-2 left-2 z-10 max-w-[min(36rem,calc(100%-1rem))] rounded-[var(--radius-control)] border px-2 py-1 text-[11px] leading-snug backdrop-blur-sm">
-          {t('plan.legend.flow')} {t('plan.legend.heat')}{' '}
-          <span className="text-brand">{t('plan.legend.notable')}</span>,{' '}
-          <span className="text-warning">{t('plan.legend.heavy')}</span>,{' '}
-          <span className="text-danger">{t('plan.legend.dominant')}</span>. {t('plan.legend.controls')}
+        {/* Clé des pastilles, et rien d'autre : c'est la seule part de la légende qu'on relit.
+            Le sens de lecture du diagramme et les gestes du canevas se disent une fois, dans
+            l'infobulle et dans l'intitulé du canevas — quatre lignes de prose posées à demeure
+            sur le plan finissent par cacher ce qu'elles expliquent. */}
+        <p
+          title={t('plan.legend.flow')}
+          className="border-border-subtle bg-surface/85 text-ink-muted text-meta pointer-events-none absolute bottom-2 left-2 z-10 flex items-center gap-x-2 rounded-[var(--radius-control)] border px-2 py-1 backdrop-blur-sm"
+        >
+          <span>{t('plan.legend.heat')}</span>
+          <span className="inline-flex items-center gap-1">
+            <HeatDot heat={1} />
+            {t('plan.legend.notable')}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <HeatDot heat={2} />
+            {t('plan.legend.heavy')}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <HeatDot heat={3} />
+            {t('plan.legend.dominant')}
+          </span>
         </p>
       </div>
     </PlanShell>
@@ -1019,34 +1104,15 @@ function CulpritChip({
       type="button"
       onClick={() => onSelect(node.id)}
       title={`${label} — ${node.label} — ${value}`}
-      className="border-border-subtle bg-surface-sunken text-ink-muted hover:border-brand hover:text-brand flex h-7 min-w-0 shrink items-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-xs"
+      className="border-border-subtle bg-surface-sunken text-ink-muted hover:border-brand hover:text-brand text-meta flex h-8 min-w-0 shrink items-center gap-1.5 rounded-[var(--radius-control)] border px-2"
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
-      <span className="hidden truncate sm:inline">{label}</span>
+      {/* Ce qui cède en premier, c'est le qualificatif — « le plus lent » — et non le nom de
+          l'étape ni sa mesure : trois textes tronqués côte à côte ne disent plus rien, quand
+          « Seq Scan 1.20 s » se lit encore. L'énoncé complet reste dans l'infobulle. */}
+      <span className="hidden truncate 2xl:inline">{label}</span>
       <span className="text-ink truncate font-medium">{node.nodeType}</span>
-      <span className="text-ink-faint truncate tabular-nums">{value}</span>
-    </button>
-  )
-}
-
-function ZoomButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="border-border-strong text-ink-muted hover:border-brand hover:text-brand flex size-7 items-center justify-center rounded-[var(--radius-control)] border"
-    >
-      {children}
+      <span className="text-ink-muted shrink-0 tabular-nums">{value}</span>
     </button>
   )
 }
@@ -1116,7 +1182,7 @@ function PlanNodeCard({
     <div className="absolute" style={{ left: item.x + PAD, top: item.y + PAD, width: NODE_W }}>
       {/* Étiquette de sous-plan : une branche nommée (CTE, InitPlan) se repère avant sa carte. */}
       {node.subplanName && (
-        <span className="bg-brand-subtle text-brand mb-1 inline-block rounded-full px-2 py-0.5 font-mono text-[10px]">
+        <span className="bg-brand-subtle text-brand text-meta mb-1 inline-block rounded-full px-2 py-0.5 font-mono">
           {node.subplanName}
         </span>
       )}
@@ -1164,12 +1230,10 @@ function PlanNodeCard({
                   }
                 >
                   {highlighted && <HeatDot heat={heat} className="size-2.5" />}
-                  <span className="text-ink text-sm font-semibold">{node.nodeType}</span>
+                  <span className="text-ink text-body font-semibold">{node.nodeType}</span>
                 </span>
                 {node.joinType && (
-                  <span className="text-ink-faint text-[10px] tracking-wide uppercase">
-                    {node.joinType}
-                  </span>
+                  <span className="text-ink-muted text-meta">{node.joinType}</span>
                 )}
                 {/* « hotspot » n'apparaît pas ici : le badge de durée dit déjà la même chose,
                     et le message complet reste dans le détail de l'étape. */}
@@ -1181,13 +1245,13 @@ function PlanNodeCard({
               </span>
 
               {subtitle && (
-                <span className="text-ink-muted mt-0.5 block truncate font-mono text-[11px]">
+                <span className="text-ink-muted text-meta mt-0.5 block truncate font-mono" title={subtitle}>
                   {subtitle}
                 </span>
               )}
             </span>
 
-            <span className="text-ink-faint shrink-0 text-[11px] tabular-nums">#{node.id + 1}</span>
+            <span className="text-ink-muted text-meta shrink-0 tabular-nums">#{node.id + 1}</span>
           </span>
 
           {/* Les compteurs du nœud, chacun porteur de sa propre pastille : le coupable se voit
@@ -1263,7 +1327,8 @@ function PlanNodeCard({
           type="button"
           onClick={() => onToggleBranch(node.id)}
           title={folded ? t('plan.node.unfoldBranch') : t('plan.node.foldBranch')}
-          className="border-border-strong bg-surface text-ink-muted hover:border-brand hover:text-brand absolute -bottom-2.5 left-1/2 z-10 min-w-5 -translate-x-1/2 rounded-full border px-1.5 text-[10px] leading-4 tabular-nums"
+          aria-label={folded ? t('plan.node.unfoldBranch') : t('plan.node.foldBranch')}
+          className="border-border-strong bg-surface text-ink-muted hover:border-brand hover:text-brand text-meta absolute -bottom-3 left-1/2 z-10 min-w-6 -translate-x-1/2 rounded-full border px-1.5 leading-5 tabular-nums"
         >
           {folded ? `+${item.hidden}` : '−'}
         </button>
@@ -1291,10 +1356,10 @@ function MetricBadge({
   return (
     <span
       title={title}
-      className="border-border-subtle text-ink inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
+      className="border-border-subtle text-ink text-meta inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-medium tabular-nums"
     >
       <HeatDot heat={heat} className="size-1.5" />
-      <Icon className="text-ink-faint size-3 shrink-0" aria-hidden />
+      <Icon className="text-ink-muted size-3 shrink-0" aria-hidden />
       {label}
     </span>
   )
@@ -1305,9 +1370,11 @@ function WarningPill({ warning }: { warning: PlanWarning }) {
     <span
       title={warning.message}
       className={cn(
-        'rounded-full px-1.5 py-px text-[10px] font-medium',
+        'text-meta rounded-full px-1.5 py-px font-medium',
+        // Encre « strong » sur fond « subtle » : le jeton nu remplit une pastille, il ne porte
+        // pas de texte sur son propre fond clair, où il tombait sous 3,5:1.
         warning.severity === 'warning'
-          ? 'bg-warning-subtle text-warning'
+          ? 'bg-warning-subtle text-warning-strong'
           : 'bg-surface-sunken text-ink-muted',
       )}
     >
@@ -1433,10 +1500,11 @@ function NodeDetails({ node }: { node: PlanNode }) {
   const t = useT()
   const [tab, setTab] = useState<TabKey>('general')
   const content = tabContent(node, tab)
+  const panelId = useId()
 
   return (
     <div className="border-border-subtle border-t">
-      <p className="text-ink-muted px-3 py-2 text-[11px] leading-snug">{describe(node.nodeType)}</p>
+      <p className="text-ink-muted text-meta px-3 py-2 leading-snug">{describe(node.nodeType)}</p>
 
       {node.warnings.length > 0 && (
         <ul className="space-y-1 px-3 pb-2">
@@ -1444,8 +1512,8 @@ function NodeDetails({ node }: { node: PlanNode }) {
             <li
               key={warning.kind}
               className={cn(
-                'text-[11px] leading-snug',
-                warning.severity === 'warning' ? 'text-warning' : 'text-ink-muted',
+                'text-meta leading-snug',
+                warning.severity === 'warning' ? 'text-warning-strong' : 'text-ink-muted',
               )}
             >
               {warning.message}
@@ -1454,15 +1522,23 @@ function NodeDetails({ node }: { node: PlanNode }) {
         </ul>
       )}
 
-      <div className="border-border-subtle bg-surface-sunken flex gap-0.5 overflow-x-auto border-y px-2 py-1">
+      {/* Onglets véritables : le panneau qu'ils commandent est juste dessous, et il est nommé. */}
+      <div
+        role="tablist"
+        aria-label={t('plan.tab.label')}
+        className="border-border-subtle bg-surface-sunken flex gap-0.5 overflow-x-auto border-y px-2 py-1"
+      >
         {TABS.map((item) => (
           <button
             key={item}
             type="button"
+            role="tab"
+            id={`${panelId}-${item}`}
+            aria-selected={tab === item}
+            aria-controls={panelId}
             onClick={() => setTab(item)}
-            aria-current={tab === item ? 'true' : undefined}
             className={cn(
-              'rounded-[calc(var(--radius-control)-2px)] px-2 py-1 text-[11px] font-medium whitespace-nowrap',
+              'text-meta rounded-[calc(var(--radius-control)-2px)] px-2 py-1 font-medium whitespace-nowrap',
               tab === item ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
             )}
           >
@@ -1471,86 +1547,116 @@ function NodeDetails({ node }: { node: PlanNode }) {
         ))}
       </div>
 
-      {content.pairs.length === 0 && content.blocks.length === 0 ? (
-        <p className="text-ink-faint px-3 py-2 text-[11px]">{t('plan.detail.empty')}</p>
-      ) : (
-        <div className="px-3 py-2">
-          {content.pairs.length > 0 && (
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {content.pairs.map(([label, value]) => (
-                <Detail key={label} label={label} value={value} />
-              ))}
-            </dl>
-          )}
+      <div role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
+        {content.pairs.length === 0 && content.blocks.length === 0 ? (
+          <p className="text-ink-muted text-meta px-3 py-2">{t('plan.detail.empty')}</p>
+        ) : (
+          <div className="px-3 py-2">
+            {content.pairs.length > 0 && (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {content.pairs.map(([label, value]) => (
+                  <Detail key={label} label={label} value={value} />
+                ))}
+              </dl>
+            )}
 
-          {content.blocks.length > 0 && (
-            <dl className={cn('space-y-1.5', content.pairs.length > 0 && 'mt-2')}>
-              {content.blocks.map(([label, value]) => (
-                <div key={label}>
-                  {/* Pas de capitales forcées : ces intitulés sont les noms qu'EXPLAIN imprime,
-                      et c'est sous cette graphie qu'on les retrouve dans la documentation. */}
-                  <dt className="text-ink-faint text-[10px] font-medium">{label}</dt>
-                  <dd className="text-ink font-mono text-[11px] break-all">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
-      )}
+            {content.blocks.length > 0 && (
+              <dl className={cn('space-y-1.5', content.pairs.length > 0 && 'mt-3')}>
+                {content.blocks.map(([label, value]) => (
+                  <div key={label}>
+                    {/* Pas de capitales forcées : ces intitulés sont les noms qu'EXPLAIN imprime,
+                        et c'est sous cette graphie qu'on les retrouve dans la documentation. */}
+                    <dt className="text-ink-muted text-micro font-medium">{label}</dt>
+                    <dd className="text-ink text-body font-mono break-all">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
+/**
+ * Couple étiquette / valeur d'une étape. La valeur se lit plus gros que son nom : c'est elle
+ * qu'on est venu chercher. `KeyValue` ne convient pas ici — il met l'étiquette en capitales,
+ * quand « Rows Removed by Filter » doit garder la graphie de la sortie d'EXPLAIN.
+ */
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      {/* Graphie d'origine conservée : « Rows Removed by Filter » se cherche tel quel dans la
-          documentation de PostgreSQL, pas en capitales. */}
-      <dt className="text-ink-faint truncate text-[10px] font-medium">{label}</dt>
-      <dd className="text-ink truncate text-[11px] tabular-nums">{value}</dd>
+      <dt className="text-ink-muted text-micro truncate font-medium">{label}</dt>
+      <dd className="text-ink text-body truncate tabular-nums" title={value}>
+        {value}
+      </dd>
     </div>
   )
 }
 
-type SortKey = 'self' | 'inclusive' | 'cost' | 'rows' | 'estimation' | 'reads'
+/**
+ * En-tête de colonne portant un nom de sortie d'EXPLAIN. `Th` met ses intitulés en capitales —
+ * c'est la règle pour une étiquette d'interface, jamais pour « Actual Rows » ou « Shared Read
+ * Blocks », qu'on doit retrouver ici sous la graphie de la documentation de PostgreSQL. La
+ * taille et le contraste de l'étiquette restent ceux de la primitive.
+ */
+const PG_HEADER = 'normal-case tracking-normal'
 
-const SORTS: SortKey[] = ['self', 'inclusive', 'cost', 'rows', 'estimation', 'reads']
+type SortKey = 'node' | 'self' | 'inclusive' | 'cost' | 'rows' | 'estimation' | 'reads'
 
-/** Libellé du critère de tri des tableaux : les mêmes mots que les colonnes qu'il classe. */
-const SORT_LABELS: Record<SortKey, string> = {
-  self: 'plan.table.column.self',
-  inclusive: 'plan.table.column.inclusive',
-  cost: 'plan.table.column.cost',
-  rows: 'plan.table.column.rows',
-  estimation: 'plan.field.estimation',
-  reads: 'plan.table.column.reads',
+/** Colonnes de la vue tableaux : le tri se prend au clic sur l'en-tête, comme partout ailleurs. */
+const NODE_COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
+  { key: 'node', label: 'plan.table.column.node', numeric: false },
+  { key: 'cost', label: 'plan.table.column.cost', numeric: true },
+  { key: 'self', label: 'plan.table.column.self', numeric: true },
+  { key: 'inclusive', label: 'plan.table.column.inclusive', numeric: true },
+  { key: 'rows', label: 'plan.table.column.rows', numeric: true },
+  { key: 'estimation', label: 'plan.table.column.estimation', numeric: false },
+  { key: 'reads', label: 'plan.table.column.reads', numeric: true },
+]
+
+function sortValue(node: PlanNode, key: SortKey): number | string {
+  switch (key) {
+    case 'node':
+      return node.nodeType
+    case 'self':
+      return node.selfMs ?? 0
+    case 'inclusive':
+      return node.inclusiveMs ?? 0
+    case 'cost':
+      return node.totalCost
+    case 'rows':
+      return node.actualRows ?? node.planRows
+    case 'estimation':
+      return Math.abs(node.estimationFactor ?? 0)
+    case 'reads':
+      return node.sharedReadBlocks ?? 0
+  }
 }
 
-/** Vue tableaux : le même plan trié selon le critère qui intéresse, plus un cumul par relation. */
+/**
+ * Vue tableaux : le même plan trié selon le critère qui intéresse, plus un cumul par relation.
+ *
+ * Le critère se prend dans l'en-tête de colonne plutôt que dans une liste déroulante posée à
+ * côté : c'est le geste attendu d'un tableau, et le sens du tri se lit alors là où il s'applique.
+ */
 function PlanTables({ plan }: { plan: ExplainPlan }) {
   const t = useT()
   const [sort, setSort] = useState<SortKey>('self')
+  const [descending, setDescending] = useState(true)
 
   const sorted = useMemo(() => {
-    const nodes = [...plan.nodes]
-    const value = (node: PlanNode): number => {
-      switch (sort) {
-        case 'self':
-          return node.selfMs ?? 0
-        case 'inclusive':
-          return node.inclusiveMs ?? 0
-        case 'cost':
-          return node.totalCost
-        case 'rows':
-          return node.actualRows ?? node.planRows
-        case 'estimation':
-          return Math.abs(node.estimationFactor ?? 0)
-        case 'reads':
-          return node.sharedReadBlocks ?? 0
-      }
-    }
-    return nodes.sort((a, b) => value(b) - value(a))
-  }, [plan.nodes, sort])
+    return [...plan.nodes].sort((a, b) => {
+      const left = sortValue(a, sort)
+      const right = sortValue(b, sort)
+      const comparison =
+        typeof left === 'string'
+          ? left.localeCompare(String(right))
+          : Number(left) - Number(right)
+      return descending ? -comparison : comparison
+    })
+  }, [plan.nodes, sort, descending])
 
   const byRelation = useMemo(() => {
     const map = new Map<string, { selfMs: number; cost: number; rows: number; nodes: number }>()
@@ -1568,125 +1674,139 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
     return [...map.entries()].sort((a, b) => b[1].selfMs - a[1].selfMs || b[1].cost - a[1].cost)
   }, [plan.nodes])
 
+  function toggleSort(key: SortKey) {
+    if (key === sort) {
+      setDescending((current) => !current)
+    } else {
+      setSort(key)
+      // Une grandeur se lit du plus gros au plus petit ; un nom, de A à Z.
+      setDescending(key !== 'node')
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <Card
-        title={t('plan.table.title')}
-        actions={
-          <label className="text-ink-muted flex items-center gap-2 text-xs">
-            {t('plan.table.sortBy')}
-            <Select
-              value={sort}
-              className="w-44"
-              aria-label={t('plan.table.sortBy')}
-              onChange={(event) => setSort(event.target.value as SortKey)}
-            >
-              {SORTS.map((item) => (
-                <option key={item} value={item}>
-                  {t(SORT_LABELS[item])}
-                </option>
-              ))}
-            </Select>
-          </label>
-        }
-        padded={false}
-      >
+      <Card>
+        <CardHeader title={t('plan.table.title')} />
         <div className="w-full overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-sm">
-            <thead className="bg-surface-sunken text-ink-muted text-left text-xs">
-              <tr>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.node')}</th>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.cost')}</th>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.self')}</th>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.inclusive')}</th>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.rows')}</th>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.estimation')}</th>
-                <th className="px-3 py-2 font-medium">{t('plan.table.column.reads')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-border-subtle divide-y">
+          <Table className="min-w-[52rem]">
+            <THead>
+              <Tr className="hover:bg-transparent">
+                {NODE_COLUMNS.map((column) => (
+                  <Th
+                    key={column.key}
+                    numeric={column.numeric}
+                    sort={sort === column.key ? (descending ? 'desc' : 'asc') : null}
+                    onSort={() => toggleSort(column.key)}
+                    // `normal-case` : ces intitulés sont les noms qu'EXPLAIN imprime. « Actual
+                    // Rows » se cherche tel quel dans la documentation, pas en capitales.
+                    className={PG_HEADER}
+                  >
+                    {t(column.label)}
+                  </Th>
+                ))}
+              </Tr>
+            </THead>
+            <TBody>
               {sorted.map((node) => (
-                <tr key={node.id} className="hover:bg-surface-sunken align-top">
-                  <td className="px-3 py-2">
+                <Tr key={node.id} className="align-top">
+                  <Td>
                     <span className="text-ink font-medium">{node.nodeType}</span>
                     {node.relationName && (
-                      <p className="text-ink-muted truncate font-mono text-xs">{node.relationName}</p>
+                      <p className="text-ink-muted text-meta truncate font-mono">
+                        {node.relationName}
+                      </p>
                     )}
-                  </td>
-                  <td className="text-ink px-3 py-2 tabular-nums whitespace-nowrap">
+                  </Td>
+                  <Td numeric className="whitespace-nowrap">
                     {formatNumber(Math.round(node.totalCost))}
-                  </td>
-                  <td className="text-ink px-3 py-2 tabular-nums whitespace-nowrap">
+                  </Td>
+                  <Td numeric className="whitespace-nowrap">
                     {formatMs(node.selfMs)}
                     {node.selfSharePercent !== null && (
-                      <span className="text-ink-faint ml-1 text-xs">
+                      <span className="text-ink-muted text-meta ml-1">
                         {node.selfSharePercent.toFixed(1)} %
                       </span>
                     )}
-                  </td>
-                  <td className="text-ink px-3 py-2 tabular-nums whitespace-nowrap">
+                  </Td>
+                  <Td numeric className="whitespace-nowrap">
                     {formatMs(node.inclusiveMs)}
-                  </td>
-                  <td className="text-ink px-3 py-2 tabular-nums whitespace-nowrap">
+                  </Td>
+                  <Td numeric className="whitespace-nowrap">
                     {formatNumber(Math.round(node.actualRows ?? node.planRows))}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <Tag tone={estimationTone(node.estimationFactor)}>
-                      {formatEstimation(node.estimationFactor)}
-                    </Tag>
-                  </td>
-                  <td className="text-ink px-3 py-2 tabular-nums whitespace-nowrap">
+                  </Td>
+                  <Td className="whitespace-nowrap">
+                    {/* Une estimation juste ne mérite pas de badge : le signal ne vaut que
+                        s'il est rare. Seul l'écart s'annonce. */}
+                    {node.estimationFactor === null ? (
+                      <span className="text-ink-muted">—</span>
+                    ) : (
+                      <Badge tone={estimationTone(node.estimationFactor)}>
+                        {formatEstimation(node.estimationFactor)}
+                      </Badge>
+                    )}
+                  </Td>
+                  <Td numeric className="whitespace-nowrap">
                     {node.sharedReadBlocks === null ? '—' : formatNumber(node.sharedReadBlocks)}
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         </div>
       </Card>
 
       {byRelation.length > 0 && (
-        <Card title={t('plan.relations.title')} padded={false}>
+        <Card>
+          <CardHeader title={t('plan.relations.title')} />
           <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[32rem] text-sm">
-              <thead className="bg-surface-sunken text-ink-muted text-left text-xs">
-                <tr>
-                  <th className="px-3 py-2 font-medium">{t('plan.relations.column.relation')}</th>
-                  <th className="px-3 py-2 font-medium">{t('plan.relations.column.nodes')}</th>
-                  <th className="px-3 py-2 font-medium">{t('plan.table.column.self')}</th>
-                  <th className="px-3 py-2 font-medium">{t('plan.field.totalCost')}</th>
-                  <th className="px-3 py-2 font-medium">{t('plan.table.column.rows')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-border-subtle divide-y">
+            <Table className="min-w-[34rem]">
+              <THead>
+                <Tr className="hover:bg-transparent">
+                  <Th className={PG_HEADER}>{t('plan.relations.column.relation')}</Th>
+                  <Th numeric className={PG_HEADER}>
+                    {t('plan.relations.column.nodes')}
+                  </Th>
+                  <Th numeric className={PG_HEADER}>
+                    {t('plan.table.column.self')}
+                  </Th>
+                  <Th numeric className={PG_HEADER}>
+                    {t('plan.field.totalCost')}
+                  </Th>
+                  <Th numeric className={PG_HEADER}>
+                    {t('plan.table.column.rows')}
+                  </Th>
+                </Tr>
+              </THead>
+              <TBody>
                 {byRelation.map(([relation, totals]) => (
-                  <tr key={relation} className="hover:bg-surface-sunken">
-                    <td className="text-ink px-3 py-2 font-mono text-xs">{relation}</td>
-                    <td className="text-ink px-3 py-2 tabular-nums">{totals.nodes}</td>
-                    <td className="text-ink px-3 py-2 tabular-nums whitespace-nowrap">
+                  <Tr key={relation}>
+                    <Td className="font-mono">{relation}</Td>
+                    <Td numeric>{totals.nodes}</Td>
+                    <Td numeric className="whitespace-nowrap">
                       {formatMs(totals.selfMs)}
-                    </td>
-                    <td className="text-ink px-3 py-2 tabular-nums">
-                      {formatNumber(Math.round(totals.cost))}
-                    </td>
-                    <td className="text-ink px-3 py-2 tabular-nums">
-                      {formatNumber(Math.round(totals.rows))}
-                    </td>
-                  </tr>
+                    </Td>
+                    <Td numeric>{formatNumber(Math.round(totals.cost))}</Td>
+                    <Td numeric>{formatNumber(Math.round(totals.rows))}</Td>
+                  </Tr>
                 ))}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           </div>
         </Card>
       )}
 
       {Object.keys(plan.settings).length > 0 && (
-        <Card title={t('plan.settings.title')}>
-          <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-            {Object.entries(plan.settings).map(([name, value]) => (
-              <Detail key={name} label={name} value={value} />
-            ))}
-          </dl>
+        <Card>
+          <CardHeader title={t('plan.settings.title')} />
+          <CardBody>
+            {/* Noms de paramètres PostgreSQL : graphie d'origine, jamais de capitales forcées. */}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+              {Object.entries(plan.settings).map(([name, value]) => (
+                <Detail key={name} label={name} value={value} />
+              ))}
+            </dl>
+          </CardBody>
         </Card>
       )}
     </div>

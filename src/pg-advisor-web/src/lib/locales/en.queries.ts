@@ -11,6 +11,9 @@ export const enQueries: Record<string, string> = {
   'queries.filter.sortHint': 'Criterion applied server-side',
   'queries.filter.limit': 'Number of queries to read',
   'queries.filter.limitHint': 'From 1 to 200',
+  // Toolbar label: the full wording stays in the tooltip and the accessible name. "Top" is the
+  // working term in both languages and fits on one line.
+  'queries.filter.limitShort': 'Top',
   'queries.filter.advisor': 'Advisor queries',
   'queries.filter.advisorTitle':
     'Rules, collectors and analyses run by the Advisor, recognised by the role that executes them',
@@ -24,12 +27,18 @@ export const enQueries: Record<string, string> = {
   'queries.sort.temp': 'Temporary files',
 
   'queries.list.title': 'Most expensive queries',
-  'queries.list.merged': 'Merged ranking of {count} instances; the share is relative to the source database.',
-  'queries.list.single': 'Sortable and filterable columns; the list is virtualised.',
+  // Injected count: plural agreement is mandatory, otherwise "1 instances" gets written.
+  'queries.list.merged.one': 'One instance; the share is relative to its own database.',
+  'queries.list.merged.other':
+    'Merged ranking of {count} instances; the share is relative to the source database.',
+  'queries.list.single': 'Sortable columns; filters in the header.',
   'queries.empty.title': 'No query to show',
   'queries.empty.extension':
     'Install pg_stat_statements on the flagged instances to obtain their ranking.',
   'queries.empty.statistics': 'No query recorded since statistics were last reset.',
+  'queries.empty.filtered.title': 'No query passes these filters',
+  'queries.empty.filtered.body':
+    'The filters set in the column headers exclude every query that was read.',
   'queries.loadFailed': 'Loading failed.',
 
   // --- Queries: table columns -----------------------------------------------
@@ -42,9 +51,13 @@ export const enQueries: Record<string, string> = {
   'queries.column.rowsPerCall': 'Rows/call',
   'queries.column.cache': 'Cache',
   'queries.column.temp': 'Temp.',
+  // Server-side ranking offers "Blocks read from disk": with no column to show them, the
+  // ranking criterion was invisible.
+  'queries.column.reads': 'Reads',
   'queries.unit.blocks': 'blocks',
   'queries.filterPlaceholder': 'filter…',
   'queries.clearFilters': 'Clear',
+  'queries.clearFiltersTitle': 'Clear the column filters',
   'queries.rowTitle': 'Open the analysis of this query',
   'queries.badge.advisor': 'Advisor',
   'queries.badge.parameterized': 'parameterised',
@@ -79,7 +92,6 @@ export const enQueries: Record<string, string> = {
   'queries.plan.stored': 'saved plan',
   'queries.plan.storedTitle':
     'This plan comes from the Advisor database: opening it ran nothing on the supervised instance.',
-  'queries.plan.justMeasured': 'measured just now',
   'queries.plan.parameters': 'Values used',
   'queries.plan.stale':
     'The values entered differ from those that produced this plan: measure again to take them into account.',
@@ -182,6 +194,7 @@ export const enQueries: Record<string, string> = {
   'plan.warning.heap-fetches': 'heap fetches',
 
   // --- Plan: step details ---------------------------------------------------
+  'plan.tab.label': 'Step details',
   'plan.tab.general': 'General',
   'plan.tab.io': 'I/O & buffers',
   'plan.tab.output': 'Output',
@@ -246,7 +259,6 @@ export const enQueries: Record<string, string> = {
   'plan.text.title': 'Execution plan (EXPLAIN, text format)',
   'plan.json.title': 'Raw plan (JSON format)',
   'plan.table.title': 'Plan nodes',
-  'plan.table.sortBy': 'Sort by',
   'plan.table.column.node': 'Node',
   'plan.table.column.cost': 'Total Cost',
   'plan.table.column.self': 'Self Time',

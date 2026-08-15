@@ -16,6 +16,9 @@ export const frQueries: Record<string, string> = {
   'queries.filter.sortHint': 'Critère appliqué côté serveur',
   'queries.filter.limit': 'Nombre de requêtes à lire',
   'queries.filter.limitHint': 'De 1 à 200',
+  // Étiquette de la barre d'outils : le mot entier reste dans l'infobulle et l'intitulé
+  // accessible. « Top » est le terme du métier dans les deux langues et tient sur une ligne.
+  'queries.filter.limitShort': 'Top',
   'queries.filter.advisor': 'Requêtes de l’Advisor',
   'queries.filter.advisorTitle':
     'Règles, collecteurs et analyses lancés par l’Advisor, reconnus au rôle qui les exécute',
@@ -29,12 +32,18 @@ export const frQueries: Record<string, string> = {
   'queries.sort.temp': 'Fichiers temporaires',
 
   'queries.list.title': 'Requêtes les plus coûteuses',
-  'queries.list.merged': 'Classement fusionné de {count} instances ; la part est relative à la base d’origine.',
-  'queries.list.single': 'Colonnes triables et filtrables ; la liste est virtualisée.',
+  // Décompte injecté : accord en nombre obligatoire, sans quoi « 1 instances » s'écrit.
+  'queries.list.merged.one': 'Une instance ; la part est relative à sa propre base.',
+  'queries.list.merged.other':
+    'Classement fusionné de {count} instances ; la part est relative à la base d’origine.',
+  'queries.list.single': 'Colonnes triables ; filtres dans l’en-tête.',
   'queries.empty.title': 'Aucune requête à afficher',
   'queries.empty.extension':
     'Installez pg_stat_statements sur les instances signalées pour obtenir leur classement.',
   'queries.empty.statistics': 'Aucune requête enregistrée depuis la dernière remise à zéro des statistiques.',
+  'queries.empty.filtered.title': 'Aucune requête ne passe ces filtres',
+  'queries.empty.filtered.body':
+    'Les filtres posés dans l’en-tête des colonnes écartent toutes les requêtes lues.',
   'queries.loadFailed': 'Chargement impossible.',
 
   // --- Requêtes : colonnes du tableau ---------------------------------------
@@ -47,9 +56,13 @@ export const frQueries: Record<string, string> = {
   'queries.column.rowsPerCall': 'Lignes/appel',
   'queries.column.cache': 'Cache',
   'queries.column.temp': 'Temp.',
+  // Le classement serveur propose « Blocs lus sur disque » : sans colonne pour les montrer, on
+  // classait sur un critère invisible.
+  'queries.column.reads': 'Lectures',
   'queries.unit.blocks': 'blocs',
   'queries.filterPlaceholder': 'filtrer…',
   'queries.clearFilters': 'Effacer',
+  'queries.clearFiltersTitle': 'Effacer les filtres de colonne',
   'queries.rowTitle': 'Ouvrir l’analyse de cette requête',
   'queries.badge.advisor': 'Advisor',
   'queries.badge.parameterized': 'paramétrée',
@@ -84,7 +97,6 @@ export const frQueries: Record<string, string> = {
   'queries.plan.stored': 'plan conservé',
   'queries.plan.storedTitle':
     'Ce plan vient de la base de l’Advisor : l’ouvrir n’a rien exécuté sur l’instance supervisée.',
-  'queries.plan.justMeasured': 'mesuré à l’instant',
   'queries.plan.parameters': 'Valeurs utilisées',
   'queries.plan.stale':
     'Les valeurs saisies diffèrent de celles qui ont produit ce plan : remesurez pour les prendre en compte.',
@@ -187,6 +199,7 @@ export const frQueries: Record<string, string> = {
   'plan.warning.heap-fetches': 'accès au heap',
 
   // --- Plan : détail d'une étape --------------------------------------------
+  'plan.tab.label': 'Détail de l’étape',
   'plan.tab.general': 'Général',
   'plan.tab.io': 'E/S & tampons',
   'plan.tab.output': 'Sortie',
@@ -251,7 +264,6 @@ export const frQueries: Record<string, string> = {
   'plan.text.title': 'Plan d’exécution (EXPLAIN, format texte)',
   'plan.json.title': 'Plan brut (format JSON)',
   'plan.table.title': 'Nœuds du plan',
-  'plan.table.sortBy': 'Trier par',
   'plan.table.column.node': 'Nœud',
   'plan.table.column.cost': 'Total Cost',
   'plan.table.column.self': 'Self Time',
