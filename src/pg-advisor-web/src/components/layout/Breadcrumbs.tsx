@@ -24,7 +24,7 @@ export function Breadcrumbs() {
   const segments = location.pathname.split('/').filter(Boolean)
 
   if (segments.length === 0) {
-    return <span className="text-ink truncate text-sm font-medium">{t('nav.overview')}</span>
+    return <span className="text-ink truncate text-body font-medium">{t('nav.overview')}</span>
   }
 
   const crumbs = segments.map((segment, index) => {
@@ -37,7 +37,7 @@ export function Breadcrumbs() {
 
   return (
     <nav aria-label={t('breadcrumbs.aria')} className="min-w-0">
-      <ol className="flex min-w-0 items-center gap-1 text-sm">
+      <ol className="flex min-w-0 items-center gap-1 text-body">
         <li className="shrink-0">
           <Link to="/" className="text-ink-muted hover:text-ink">
             Advisor

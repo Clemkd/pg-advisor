@@ -24,8 +24,8 @@ export function Page({
           place : l'en-tête de page conserve son contenu en coûtant une ligne au lieu de trois. */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h1 className="text-ink text-lg font-semibold tracking-tight">{title}</h1>
-          {description && <p className="text-ink-muted text-sm">{description}</p>}
+          <h1 className="text-ink text-title font-semibold tracking-tight">{title}</h1>
+          {description && <p className="text-ink-muted text-body">{description}</p>}
           {meta && <div className="flex flex-wrap items-center gap-1.5">{meta}</div>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -35,40 +35,108 @@ export function Page({
   )
 }
 
+const VALUE_TONES = {
+  default: 'text-ink',
+  danger: 'text-danger',
+  warning: 'text-warning',
+  success: 'text-success',
+  info: 'text-info',
+} as const
+
+export type ValueTone = keyof typeof VALUE_TONES
+
 /** Grille de statistiques. */
 export function StatGrid({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('grid gap-3 sm:grid-cols-2 lg:grid-cols-4', className)}>{children}</div>
+  return <div className={cn('grid gap-4 sm:grid-cols-2 lg:grid-cols-4', className)}>{children}</div>
 }
 
-/** Tuile de statistique. */
+/**
+ * Tuile de statistique. Une tuile ne porte jamais le chiffre qui commande la lecture : quatre
+ * tuiles identiques n'offrent aucun point d'entrée, et l'œil doit lire les quatre libellés pour
+ * savoir laquelle compte. Ce chiffre-là revient à `Hero`.
+ *
+ * `className` accueille la marque de fraîcheur (`freshClass`) quand la valeur vient de changer.
+ */
 export function Stat({
   label,
   value,
   hint,
   icon,
   tone,
+  className,
 }: {
   label: string
   value: ReactNode
   hint?: ReactNode
   icon?: ReactNode
-  tone?: 'default' | 'danger' | 'warning' | 'success'
+  tone?: ValueTone
+  className?: string
 }) {
-  const valueTone = {
-    default: 'text-ink',
-    danger: 'text-danger',
-    warning: 'text-warning',
-    success: 'text-success',
-  }[tone ?? 'default']
-
   return (
-    <div className="bg-surface border-border-subtle shadow-card min-w-0 rounded-[var(--radius-card)] border px-4 py-3.5">
+    <div
+      className={cn(
+        'bg-surface border-border-subtle shadow-card min-w-0 rounded-[var(--radius-card)] border px-4 py-3',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-ink-muted truncate text-xs font-medium">{label}</p>
+        <p className="text-ink-muted text-meta truncate font-medium">{label}</p>
         {icon && <span className="text-ink-faint shrink-0">{icon}</span>}
       </div>
-      <p className={cn('mt-1.5 text-2xl font-semibold tabular-nums', valueTone)}>{value}</p>
-      {hint && <p className="text-ink-faint mt-0.5 truncate text-xs">{hint}</p>}
+      <p className={cn('text-metric mt-1.5 font-semibold tabular-nums', VALUE_TONES[tone ?? 'default'])}>
+        {value}
+      </p>
+      {hint && <p className="text-ink-muted text-meta mt-0.5">{hint}</p>}
     </div>
+  )
+}
+
+/**
+ * Point d'entrée d'une vue de balayage : le chiffre qui commande la lecture, et lui seul.
+ *
+ * Un écran lu tous les jours en diagonale a besoin d'un endroit où l'œil se pose sans chercher.
+ * D'où la taille — `text-display` — et la teinte prise sur la valeur : le score se lit avant d'être
+ * lu. `aside` accueille une jauge, `meta` les badges qui qualifient, `action` le pas suivant.
+ */
+export function Hero({
+  label,
+  value,
+  hint,
+  tone,
+  aside,
+  meta,
+  action,
+  className,
+}: {
+  label: ReactNode
+  value: ReactNode
+  hint?: ReactNode
+  tone?: ValueTone
+  /** Représentation visuelle du même chiffre — une jauge, par exemple. */
+  aside?: ReactNode
+  meta?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <section
+      className={cn(
+        'bg-surface border-border-subtle shadow-card flex min-w-0 flex-wrap items-center gap-x-6 gap-y-4 rounded-[var(--radius-card)] border p-4',
+        className,
+      )}
+    >
+      {aside && <div className="shrink-0">{aside}</div>}
+
+      <div className="min-w-0 flex-1">
+        <p className="text-ink-muted text-micro font-semibold tracking-wider uppercase">{label}</p>
+        <p className={cn('text-display mt-1 font-semibold tabular-nums', VALUE_TONES[tone ?? 'default'])}>
+          {value}
+        </p>
+        {hint && <p className="text-ink-muted text-meta mt-1">{hint}</p>}
+        {meta && <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div>}
+      </div>
+
+      {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
+    </section>
   )
 }

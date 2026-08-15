@@ -38,11 +38,11 @@ export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
       )}
     >
       <div className="flex h-14 shrink-0 items-center gap-2 px-3">
-        <div className="bg-brand text-brand-ink grid size-8 shrink-0 place-items-center rounded-lg text-sm font-bold">
+        <div className="bg-brand text-brand-ink grid size-8 shrink-0 place-items-center rounded-lg text-body font-bold">
           pg
         </div>
         {!collapsed && (
-          <span className="text-ink truncate text-sm font-semibold tracking-tight">
+          <span className="text-ink truncate text-body font-semibold tracking-tight">
             PostgreSQL Advisor
           </span>
         )}
@@ -129,7 +129,7 @@ function SidebarSection({
         aria-expanded={open}
         aria-controls={panelId}
         className={cn(
-          'flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 text-sm transition-colors',
+          'flex w-full items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 text-body transition-colors',
           containsActive ? 'text-ink font-medium' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
         )}
       >
@@ -231,7 +231,7 @@ function CollapsedSection({
           aria-label={t(section.labelKey)}
         >
           <div className="bg-surface border-border-subtle shadow-popover min-w-56 rounded-[var(--radius-card)] border p-2">
-            <p className="text-ink-faint px-2 pb-2 pt-1 text-xs font-semibold">{t(section.labelKey)}</p>
+            <p className="text-ink-muted px-2 pb-2 pt-1 text-meta font-semibold">{t(section.labelKey)}</p>
             <ul className="space-y-0.5">
               {entries.map((entry) => (
                 <li key={entry.to}>
@@ -259,7 +259,7 @@ function CollapsedSection({
 function itemClass(active: boolean, collapsed: boolean, nested = false) {
   return cn(
     'flex items-center gap-2 rounded-[var(--radius-control)] transition-colors',
-    nested ? 'px-2 py-1.5 text-[13px]' : 'px-2 py-2 text-sm',
+    nested ? 'px-2 py-1.5 text-body' : 'px-2 py-2 text-body',
     collapsed && 'justify-center',
     active ? 'bg-brand-subtle text-brand font-medium' : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
   )

@@ -46,6 +46,19 @@ export const fr: Record<string, string> = {
   'common.clearAll': 'Tout désélectionner',
   'common.dismiss': 'Masquer',
   'common.item': 'élément',
+  'common.undo': 'Rétablir',
+  'common.clearFilters': 'Effacer les filtres',
+  'confirm.irreversible': 'Cette action est définitive.',
+  'table.sortBy': 'Trier par {label}',
+
+  // --- Temps réel -----------------------------------------------------------
+  // L'application vit ouverte et se met à jour seule : ce qui change doit se dire, et la
+  // fraîcheur de ce qui est affiché doit être lisible sans quitter l'écran.
+  'live.updated': 'Mis à jour {when}',
+  'live.refreshing': 'Actualisation en cours',
+  'live.newFindings.one': '{count} nouvelle recommandation',
+  'live.newFindings.other': '{count} nouvelles recommandations',
+  'live.changed': 'Données mises à jour',
   'multiSelect.empty': 'Aucune sélection',
   'multiSelect.count': '{count} {unit}',
   'filter.operator.gte': 'supérieur ou égal',
@@ -172,17 +185,32 @@ export const fr: Record<string, string> = {
   'dashboard.manage': 'Gérer',
   'dashboard.loaded': 'chargées',
   'dashboard.bundled': '{count} intégrées',
+  'dashboard.bundled.one': '{count} intégrée',
+  'dashboard.bundled.other': '{count} intégrées',
   'dashboard.custom': '{count} personnalisées',
+  'dashboard.custom.one': '{count} personnalisée',
+  'dashboard.custom.other': '{count} personnalisées',
   'dashboard.failing': '{count} en erreur',
+  'dashboard.failing.one': '{count} en erreur',
+  'dashboard.failing.other': '{count} en erreur',
   'dashboard.lastLoad': 'Dernier chargement {when}',
   'dashboard.supervisedInstances': 'Instances supervisées ({count})',
   'dashboard.manageInstances': 'Gérer les instances',
   'dashboard.noInstance': 'Aucune instance',
   'dashboard.addConnection': 'Ajoutez une connexion PostgreSQL',
   'dashboard.addConnectionSuffix': 'pour lancer la première analyse.',
+  // Formes accordées en nombre, à lire avec `useTc()`. Les clés plates ci-dessous restent le
+  // temps que les vues migrent : injecter un décompte dans un libellé au pluriel écrivait
+  // « 1 critiques ».
   'dashboard.criticalCount': '{count} critiques',
+  'dashboard.criticalCount.one': '{count} critique',
+  'dashboard.criticalCount.other': '{count} critiques',
   'dashboard.warningCount': '{count} avertissements',
+  'dashboard.warningCount.one': '{count} avertissement',
+  'dashboard.warningCount.other': '{count} avertissements',
   'dashboard.infoCount': '{count} informations',
+  'dashboard.infoCount.one': '{count} information',
+  'dashboard.infoCount.other': '{count} informations',
   'dashboard.noFinding': 'aucun finding',
   'dashboard.connections': 'Connexions',
   'dashboard.cache': 'Cache',
@@ -224,6 +252,8 @@ export const fr: Record<string, string> = {
   'rules.overrides.other': '{count} surcharges',
   'rules.without': 'sans {name}',
   'rules.viewCount': '{count} vue(s)',
+  'rules.viewCount.one': '{count} vue',
+  'rules.viewCount.other': '{count} vues',
 
   // --- Détail d'une instance ------------------------------------------------
   'common.yesShort': 'oui',

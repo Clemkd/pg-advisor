@@ -61,7 +61,7 @@ export function FilterInput({
             aria-expanded={open}
             aria-label={`${t('filter.operatorFor', { label })} : ${t(current.labelKey)}`}
             title={t(current.labelKey)}
-            className="text-ink-muted hover:text-ink hover:bg-surface-sunken flex h-full shrink-0 items-center gap-0.5 rounded-l-[calc(var(--radius-control)-1px)] pl-1.5 pr-1 text-xs font-semibold"
+            className="text-ink-muted hover:text-ink hover:bg-surface-sunken flex h-full shrink-0 items-center gap-0.5 rounded-l-[calc(var(--radius-control)-1px)] pl-1.5 pr-1 text-meta font-semibold"
           >
             {current.symbol}
             <ChevronDown className="size-2.5 opacity-60" aria-hidden />
@@ -101,13 +101,13 @@ export function FilterInput({
         aria-label={t('filter.fieldFor', { label })}
         inputMode={numeric ? 'decimal' : undefined}
         className={cn(
-          'text-ink placeholder:text-ink-faint h-full w-full min-w-0 bg-transparent px-1.5 text-xs focus:outline-none',
+          'text-ink placeholder:text-ink-faint h-full w-full min-w-0 bg-transparent px-1.5 text-meta focus:outline-none',
           numeric && 'text-right tabular-nums',
         )}
       />
 
       {unit && (
-        <span className="text-ink-faint shrink-0 pr-2 text-[11px] leading-none" aria-hidden>
+        <span className="text-ink-muted shrink-0 pr-2 text-micro leading-none" aria-hidden>
           {unit}
         </span>
       )}

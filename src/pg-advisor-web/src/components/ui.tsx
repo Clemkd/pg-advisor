@@ -169,12 +169,12 @@ export function PageHeader({
   return (
     <header className={cn('flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between', className)}>
       <div className="min-w-0">
-        {breadcrumb && <p className="text-ink-faint mb-0.5 truncate text-xs">{breadcrumb}</p>}
+        {breadcrumb && <p className="text-ink-muted mb-0.5 truncate text-meta">{breadcrumb}</p>}
         {/* Titre, descriptif et méta sur la même ligne tant qu'il y a la place : l'en-tête
             garde tout son contenu en coûtant une ligne au lieu de trois. */}
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="text-ink text-lg font-semibold tracking-tight">{title}</h1>
-          {subtitle && <p className="text-ink-muted text-sm">{subtitle}</p>}
+          <h1 className="text-ink text-title font-semibold tracking-tight">{title}</h1>
+          {subtitle && <p className="text-ink-muted text-body">{subtitle}</p>}
           {meta && <div className="flex flex-wrap items-center gap-1.5">{meta}</div>}
         </div>
       </div>
