@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Clock, Code2, Play, Terminal, Wand2, Workflow } from 'lucide-react'
+import { Clock, Code2, Info, Play, Terminal, Wand2, Workflow, X } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type {
   AnalysisNote,
@@ -11,7 +12,7 @@ import type {
   TopQuery,
 } from '@/api/types'
 import { Page } from '@/components/layout/Page'
-import { PlanView } from '@/components/PlanView'
+import { PlanTotals, PlanView } from '@/components/PlanView'
 import { QueryTable } from '@/components/QueryTable'
 import {
   Badge,
@@ -250,10 +251,18 @@ function noteLabel(t: Translator, tc: PluralTranslator, note: AnalysisNote): str
   return hasTranslation(locale, key) ? t(key) : note.message
 }
 
+/** Panneaux superposés au diagramme : ce qui n'est pas le plan y est atteignable. */
+type Panel = 'sql' | 'params' | 'notes'
+
 /**
- * Modale d'analyse. Le diagramme occupe l'essentiel de la surface ; tout ce qui l'entoure tient
- * en trois blocs courts — provenance de la mesure, requête analysée repliable, valeurs des
- * paramètres — chacun présent une seule fois.
+ * Modale d'analyse. Le diagramme est le corps de la modale et l'occupe en entier : rien de ce
+ * qui n'est pas le plan ne consomme de hauteur en permanence.
+ *
+ * La provenance de la mesure et les compteurs d'ensemble tiennent dans l'en-tête, dont la
+ * hauteur est déjà payée ; la requête analysée, les valeurs des paramètres et les remarques de
+ * l'API s'ouvrent dans un panneau qui recouvre le canevas au lieu de le pousser ; les erreurs
+ * flottent au-dessus du diagramme. Sans plan à afficher, la mise en page redevient une pile
+ * ordinaire : un canevas vide n'aurait rien à occuper.
  *
  * À l'ouverture, le plan déjà mesuré est relu depuis la base de l'Advisor : rien n'est exécuté
  * sur l'instance supervisée tant que l'opérateur ne demande pas explicitement une mesure.
@@ -281,10 +290,7 @@ function AnalysisModal({
   const [requiredParameters, setRequiredParameters] = useState(0)
   const [suggestions, setSuggestions] = useState<ParameterSuggestion[]>([])
   const [suggesting, setSuggesting] = useState(false)
-  const [showSql, setShowSql] = useState(false)
-  // L'éditeur de paramètres ne s'ouvre que sur demande dès lors qu'un plan est affiché : ses
-  // valeurs se lisent alors en une ligne, et la place gagnée revient au diagramme.
-  const [editingParameters, setEditingParameters] = useState(false)
+  const [panel, setPanel] = useState<Panel | null>(null)
 
   // Relecture du plan conservé : c'est tout l'intérêt de le conserver, et c'est gratuit pour
   // l'instance supervisée.
@@ -294,20 +300,15 @@ function AnalysisModal({
     void api.queries
       .savedPlan(connectionId, { queryId })
       .then((saved) => {
-        if (abandoned) return
+        if (abandoned || !saved) return
 
-        if (saved) {
-          setResult(saved)
-          if (saved.parameters.length > 0) {
-            setParameters(saved.parameters)
-            setRequiredParameters(saved.parameters.length)
-          }
-        } else {
-          // Sans plan à montrer, la requête elle-même est le contenu le plus utile.
-          setShowSql(true)
+        setResult(saved)
+        if (saved.parameters.length > 0) {
+          setParameters(saved.parameters)
+          setRequiredParameters(saved.parameters.length)
         }
       })
-      .catch(() => setShowSql(true))
+      .catch(() => undefined)
       .finally(() => {
         if (!abandoned) setReading(false)
       })
@@ -351,7 +352,8 @@ function AnalysisModal({
       })
       setResult(analysis)
       setRequiredParameters(analysis.parameters.length)
-      setShowSql(false)
+      // Le plan vient de changer : le panneau se referme pour rendre la surface au diagramme.
+      setPanel(null)
       onMeasured()
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 422) {
@@ -363,7 +365,7 @@ function AnalysisModal({
           current.length === required ? current : Array.from({ length: required }, () => ''),
         )
         // Il manque des valeurs : l'éditeur s'ouvre, sinon le message resterait sans réponse.
-        setEditingParameters(true)
+        setPanel('params')
         setError(cause.message)
       } else {
         setError(cause instanceof ApiError ? cause.message : tr('queries.error.failed'))
@@ -381,10 +383,106 @@ function AnalysisModal({
     Array.from({ length: requiredParameters }, (_, index) => parameters[index] ?? '').join('\u0000') !==
       result.parameters.join('\u0000')
 
+  const notes = result?.notes ?? []
+
+  const editor = (
+    <ParameterEditor
+      count={requiredParameters}
+      values={parameters}
+      suggestions={suggestions}
+      suggesting={suggesting}
+      onChange={(index, value) =>
+        setParameters((current) => {
+          const next = [...current]
+          next[index] = value
+          return next
+        })
+      }
+      onSuggest={() => void suggest()}
+    />
+  )
+
+  // Les panneaux disponibles, dans l'ordre où ils sont proposés. La même liste sert aux boutons
+  // de l'en-tête et aux onglets du panneau : ce qui s'ouvre depuis l'en-tête se retrouve depuis
+  // le panneau, sans avoir à le refermer.
+  const panels: { key: Panel; icon: LucideIcon; label: string; title: string; count?: number }[] = [
+    { key: 'sql', icon: Code2, label: t('queries.panel.sql'), title: t('queries.modal.sqlTitle') },
+    ...(requiredParameters > 0
+      ? [
+          {
+            key: 'params' as const,
+            icon: Wand2,
+            label: t('queries.panel.parameters'),
+            title: t('queries.params.title'),
+            count: requiredParameters,
+          },
+        ]
+      : []),
+    ...(notes.length > 0
+      ? [
+          {
+            key: 'notes' as const,
+            icon: Info,
+            label: t('queries.panel.notes'),
+            title: t('queries.panel.notesTitle'),
+            count: notes.length,
+          },
+        ]
+      : []),
+  ]
+
+  const buttons = panels.map((item) => (
+    <Button
+      key={item.key}
+      variant={panel === item.key ? 'secondary' : 'ghost'}
+      aria-pressed={panel === item.key}
+      title={item.title}
+      onClick={() => setPanel((current) => (current === item.key ? null : item.key))}
+      className="h-7 px-2 text-xs"
+    >
+      <item.icon className="size-3.5" aria-hidden />
+      {item.label}
+      {item.count !== undefined && (
+        <span className="text-ink-faint tabular-nums">{item.count}</span>
+      )}
+    </Button>
+  ))
+
   return (
     <Modal
       title={t('queries.modal.title')}
       description={`${query.connectionName} · ${queryId}`}
+      // Provenance, compteurs d'ensemble et accès aux panneaux : l'en-tête paie déjà sa hauteur,
+      // les y poser ne coûte rien au diagramme.
+      actions={
+        result && (
+          <>
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+              <span
+                className="text-ink flex items-center gap-1.5 font-medium"
+                title={t('queries.plan.measuredOn', { date: formatDateTime(result.measuredAt) })}
+              >
+                <Clock className="text-ink-faint size-3.5" aria-hidden />
+                {t('queries.plan.measured', { when: formatRelative(result.measuredAt) })}
+              </span>
+              <span className="text-ink-faint">
+                {t('queries.plan.duration', {
+                  duration: formatSeconds(result.durationMs / 1000),
+                })}
+              </span>
+              {result.fromStorage && (
+                <Badge tone="success" title={t('queries.plan.storedTitle')}>
+                  <Workflow className="size-3" aria-hidden />
+                  {t('queries.plan.stored')}
+                </Badge>
+              )}
+              <PlanTotals plan={result.plan} />
+            </span>
+
+            <span className="flex items-center gap-1">{buttons}</span>
+          </>
+        )
+      }
       onClose={onClose}
       size="full"
       footer={
@@ -399,173 +497,204 @@ function AnalysisModal({
         </>
       }
     >
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        {/* Provenance de ce qui est affiché, et seul endroit où l'analyse est expliquée. */}
-        <div className="border-border-subtle bg-surface-sunken shrink-0 rounded-[var(--radius-card)] border px-3 py-2">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-            {result ? (
-              <>
-                <span className="text-ink flex items-center gap-1.5 font-medium">
-                  <Clock className="text-ink-faint size-3.5" aria-hidden />
-                  <span title={t('queries.plan.measuredOn', { date: formatDateTime(result.measuredAt) })}>
-                    {t('queries.plan.measured', { when: formatRelative(result.measuredAt) })}
-                  </span>
-                </span>
-                <span className="text-ink-faint">
-                  {t('queries.plan.duration', {
-                    duration: formatSeconds(result.durationMs / 1000),
-                  })}
-                </span>
-                {result.fromStorage && (
-                  <Badge tone="success" title={t('queries.plan.storedTitle')}>
-                    <Workflow className="size-3" aria-hidden />
-                    {t('queries.plan.stored')}
-                  </Badge>
-                )}
+      {result ? (
+        // Le diagramme prend le corps entier, marges de la modale comprises : la marge est
+        // reprise par le retrait négatif, et la hauteur la récupère d'autant. Tout le reste se
+        // superpose au canevas au lieu de le rogner.
+        <div className="relative -m-5 h-[calc(100%+2.5rem)] overflow-hidden">
+          <PlanView result={result} />
 
-                {/* Avec quelles valeurs ce plan a été obtenu — replié, l'éditeur ne dit plus
-                    rien, donc les valeurs se lisent ici. Jamais les deux à la fois. */}
-                {requiredParameters > 0 && !editingParameters && (
-                  <span className="flex flex-wrap items-center gap-1">
-                    <span className="text-ink-faint">{t('queries.plan.parameters')}</span>
-                    {result.parameters.map((value, index) => (
-                      <code
-                        key={index}
-                        className="bg-surface text-ink border-border-subtle rounded border px-1 font-mono text-[11px]"
-                      >
-                        ${index + 1} = {value === '' ? 'NULL' : value}
-                      </code>
-                    ))}
-                  </span>
-                )}
-              </>
-            ) : null}
-            {/* Rien à dater tant qu'aucune mesure n'existe : l'état vide, plus bas, le dit une
-                fois — un texte de remplacement ici le dirait deux fois. */}
-
-            <span className="ml-auto flex items-center gap-1">
-              {requiredParameters > 0 && result !== null && (
+          {panel && (
+            <div
+              role="region"
+              aria-label={panels.find((item) => item.key === panel)?.title}
+              className="border-border-subtle bg-surface shadow-popover absolute inset-x-0 top-0 z-30 flex max-h-[80%] flex-col border-b"
+            >
+              <div className="border-border-subtle flex shrink-0 flex-wrap items-center gap-1 border-b px-3 py-2">
+                {buttons}
                 <Button
                   variant="ghost"
-                  onClick={() => setEditingParameters((current) => !current)}
-                  className="h-7 px-2 text-xs"
+                  onClick={() => setPanel(null)}
+                  className="ml-auto h-7 px-2 text-xs"
                 >
-                  <Wand2 className="size-3.5" aria-hidden />
-                  {editingParameters
-                    ? t('queries.params.hideEditor')
-                    : t('queries.params.showEditor')}
+                  <X className="size-3.5" aria-hidden />
+                  {t('common.close')}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                onClick={() => setShowSql((current) => !current)}
-                className="h-7 px-2 text-xs"
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                {panel === 'sql' && <AnalysedSql sql={result.sql} />}
+
+                {panel === 'params' && (
+                  <div className="space-y-3">
+                    {/* Avec quelles valeurs le plan affiché a été obtenu — ce n'est pas
+                        forcément ce que portent les champs de saisie. */}
+                    <p className="flex flex-wrap items-center gap-1 text-xs">
+                      <span className="text-ink-faint">{t('queries.plan.parameters')}</span>
+                      {result.parameters.map((value, index) => (
+                        <code
+                          key={index}
+                          className="bg-surface-sunken text-ink border-border-subtle rounded border px-1 font-mono text-[11px]"
+                        >
+                          ${index + 1} = {value === '' ? 'NULL' : value}
+                        </code>
+                      ))}
+                    </p>
+                    {editor}
+                  </div>
+                )}
+
+                {panel === 'notes' && (
+                  <div className="space-y-2">
+                    {/* Remarques propres à cette mesure : préfixe retiré, paramètres substitués. */}
+                    {notes.map((note) => (
+                      <Notice key={note.code} tone="info">
+                        {noteLabel(t, tc, note)}
+                      </Notice>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Avertissements liés au geste en cours : ils flottent au-dessus du diagramme, dans
+              l'angle où il n'y a rien à lire, et ne lui prennent jamais de hauteur. */}
+          <div className="pointer-events-none absolute right-3 bottom-3 z-40 flex w-[min(26rem,calc(100%-1.5rem))] flex-col items-end gap-2">
+            {/* Pas de fermeture pour celui-ci : l'écart reste vrai tant qu'il n'a pas été levé
+                par une nouvelle mesure. */}
+            {stale && !error && (
+              <Notice tone="warning" className="shadow-popover pointer-events-auto w-full">
+                {t('queries.plan.stale')}
+              </Notice>
+            )}
+
+            {error && (
+              <Notice
+                tone={requiredParameters > 0 ? 'warning' : 'danger'}
+                title={t('queries.error.title')}
+                className="shadow-popover pointer-events-auto w-full"
+                onDismiss={() => setError(null)}
               >
-                <Code2 className="size-3.5" aria-hidden />
-                {showSql ? t('queries.modal.hideSql') : t('queries.modal.showSql')}
-              </Button>
-            </span>
+                {error}
+              </Notice>
+            )}
           </div>
-
-          <p className="text-ink-faint mt-1 text-xs leading-snug">{t('queries.modal.readOnly')}</p>
         </div>
+      ) : (
+        // Sans plan, le canevas n'a rien à montrer : la modale redevient une pile ordinaire, où
+        // les valeurs des paramètres et la requête sont le contenu utile.
+        <div className="space-y-3">
+          {/* Les valeurs sont ici la condition de la mesure : l'éditeur est ouvert d'office. */}
+          {requiredParameters > 0 && (
+            <Card>
+              <CardHeader title={t('queries.params.title')} />
+              <CardBody>{editor}</CardBody>
+            </Card>
+          )}
 
-        {/* Après analyse, le texte réellement passé à EXPLAIN : préfixe retiré, paramètres
-            substitués. C'est lui qui explique le plan affiché, et il n'apparaît qu'ici. */}
-        {showSql && (
-          <div className="shrink-0">
-            <p className="text-ink-muted mb-1.5 text-xs font-medium">{t('queries.modal.sqlTitle')}</p>
-            <SqlCode sql={result?.sql ?? sql} wrap className="max-h-40" />
-          </div>
-        )}
+          {error && (
+            <Notice
+              tone={requiredParameters > 0 ? 'warning' : 'danger'}
+              title={t('queries.error.title')}
+            >
+              {error}
+            </Notice>
+          )}
 
-        {/* Sans plan à l'écran, les valeurs sont la condition de la mesure : l'éditeur est
-            alors ouvert d'office. */}
-        {requiredParameters > 0 && (editingParameters || result === null) && (
-          <Card className="shrink-0">
-            <CardHeader
-              title={t('queries.params.title')}
-              description={t('queries.params.description')}
-              action={
-                <Button onClick={() => void suggest()} loading={suggesting}>
-                  <Wand2 className="size-3.5" aria-hidden />
-                  {t('queries.params.suggest')}
-                </Button>
-              }
+          {reading ? (
+            <LoadingBlock label={t('queries.modal.reading')} />
+          ) : busy ? (
+            <LoadingBlock label={t('queries.modal.loading')} />
+          ) : (
+            <EmptyState
+              icon={<Play className="size-6" />}
+              title={t('queries.empty.plan.title')}
+              description={t('queries.empty.plan.body')}
             />
-            <CardBody className="grid gap-3 sm:grid-cols-3">
-              {Array.from({ length: requiredParameters }, (_, index) => {
-                const suggestion = suggestions.find((item) => item.index === index + 1)
+          )}
 
-                return (
-                  <Field
-                    key={index}
-                    label={suggestion?.column ? `$${index + 1} · ${suggestion.column}` : `$${index + 1}`}
-                    hint={
-                      // `source` est une donnée de l'API, en anglais comme tout le backend ;
-                      // seul le libellé affiché dépend de la langue de l'interface.
-                      suggestion?.source === 'statistics'
-                        ? t('queries.params.source.statistics')
-                        : suggestion?.source === 'sample'
-                          ? t('queries.params.source.sample')
-                          : undefined
-                    }
-                  >
-                    <Input
-                      value={parameters[index] ?? ''}
-                      onChange={(event) =>
-                        setParameters((current) => {
-                          const next = [...current]
-                          next[index] = event.target.value
-                          return next
-                        })
-                      }
-                    />
-                  </Field>
-                )
-              })}
-            </CardBody>
-          </Card>
-        )}
-
-        {stale && !error && (
-          <Notice tone="warning" className="shrink-0">
-            {t('queries.plan.stale')}
-          </Notice>
-        )}
-
-        {error && (
-          <Notice
-            tone={requiredParameters > 0 ? 'warning' : 'danger'}
-            title={t('queries.error.title')}
-            className="shrink-0"
-          >
-            {error}
-          </Notice>
-        )}
-
-        {/* Remarques propres à cette mesure : préfixe retiré, paramètres substitués. Le caractère
-            lecture seule n'y figure pas — il est énoncé une fois, au-dessus. */}
-        {result?.notes.map((note) => (
-          <Notice key={note.code} tone="info" className="shrink-0">
-            {noteLabel(t, tc, note)}
-          </Notice>
-        ))}
-
-        {reading ? (
-          <LoadingBlock label={t('queries.modal.reading')} />
-        ) : busy && !result ? (
-          <LoadingBlock label={t('queries.modal.loading')} />
-        ) : result ? (
-          <PlanView result={result} />
-        ) : (
-          <EmptyState
-            icon={<Play className="size-6" />}
-            title={t('queries.empty.plan.title')}
-            description={t('queries.empty.plan.body')}
-          />
-        )}
-      </div>
+          <AnalysedSql sql={sql} />
+        </div>
+      )}
     </Modal>
+  )
+}
+
+/**
+ * Requête telle qu'elle est soumise à EXPLAIN : après analyse, préfixe retiré et paramètres
+ * substitués ; avant, le texte normalisé par pg_stat_statements. Le rappel du mode d'exécution
+ * la suit — il décrit ce que la mesure fera de ce texte, et n'a de sens qu'à côté de lui.
+ */
+function AnalysedSql({ sql }: { sql: string }) {
+  const t = useT()
+
+  return (
+    <div>
+      <p className="text-ink-muted mb-1.5 text-xs font-medium">{t('queries.modal.sqlTitle')}</p>
+      <SqlCode sql={sql} wrap />
+      <p className="text-ink-faint mt-1.5 text-xs leading-snug">{t('queries.modal.readOnly')}</p>
+    </div>
+  )
+}
+
+/**
+ * Saisie des valeurs de $1, $2… Le même éditeur sert dans le panneau superposé au diagramme et
+ * dans la pile affichée quand aucun plan n'existe : une seule écriture, deux emplacements.
+ */
+function ParameterEditor({
+  count,
+  values,
+  suggestions,
+  suggesting,
+  onChange,
+  onSuggest,
+}: {
+  count: number
+  values: string[]
+  suggestions: ParameterSuggestion[]
+  suggesting: boolean
+  onChange: (index: number, value: string) => void
+  onSuggest: () => void
+}) {
+  const t = useT()
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-ink-muted min-w-0 flex-1 text-xs">{t('queries.params.description')}</p>
+        <Button onClick={onSuggest} loading={suggesting}>
+          <Wand2 className="size-3.5" aria-hidden />
+          {t('queries.params.suggest')}
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        {Array.from({ length: count }, (_, index) => {
+          const suggestion = suggestions.find((item) => item.index === index + 1)
+
+          return (
+            <Field
+              key={index}
+              label={suggestion?.column ? `$${index + 1} · ${suggestion.column}` : `$${index + 1}`}
+              hint={
+                // `source` est une donnée de l'API, en anglais comme tout le backend ;
+                // seul le libellé affiché dépend de la langue de l'interface.
+                suggestion?.source === 'statistics'
+                  ? t('queries.params.source.statistics')
+                  : suggestion?.source === 'sample'
+                    ? t('queries.params.source.sample')
+                    : undefined
+              }
+            >
+              <Input
+                value={values[index] ?? ''}
+                onChange={(event) => onChange(index, event.target.value)}
+              />
+            </Field>
+          )
+        })}
+      </div>
+    </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -63,6 +64,26 @@ function estimationTone(factor: number | null): 'neutral' | 'warn' | 'bad' {
 }
 
 /**
+ * Enveloppe commune aux trois vues : une barre d'outils d'une ligne, puis le contenu qui prend
+ * tout le reste. Une seule barre pour l'ensemble — sélecteur de vue compris — au lieu d'une
+ * rangée d'onglets suivie d'une barre propre au diagramme : chaque rangée retirée revient au
+ * plan, qui est le contenu de la modale.
+ */
+function PlanShell({ toolbar, children }: { toolbar: ReactNode; children: ReactNode }) {
+  return (
+    <div className="bg-surface flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Une ligne, toujours : la barre ne se replie pas sur deux rangées quand la fenêtre se
+          resserre — ce sont les libellés des raccourcis qui s'abrègent. Une rangée de plus ici
+          serait une rangée de moins pour le plan, et elle apparaîtrait au pire moment. */}
+      <div className="border-border-subtle flex shrink-0 items-center justify-between gap-x-3 overflow-hidden border-b px-3 py-2">
+        {toolbar}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/**
  * Plan d'exécution mesuré, en trois vues. Le composant occupe toute la hauteur que son parent
  * lui laisse : dans la modale d'analyse, le diagramme est le contenu principal, et tout ce qui
  * l'entoure doit lui laisser la place.
@@ -72,58 +93,70 @@ export function PlanView({ result }: { result: QueryAnalysisResult }) {
   const [view, setView] = useState<View>('graph')
   const plan = result.plan
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav
-          className="border-border-strong bg-surface flex rounded-[var(--radius-control)] border p-0.5"
-          aria-label={t('plan.viewLabel')}
+  // Le sélecteur de vue est posé dans la barre de la vue affichée : il ne coûte donc aucune
+  // rangée supplémentaire, quelle que soit la vue.
+  const tabs = (
+    <nav
+      className="border-border-strong bg-surface flex shrink-0 rounded-[var(--radius-control)] border p-0.5"
+      aria-label={t('plan.viewLabel')}
+    >
+      {VIEWS.map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => setView(item)}
+          aria-current={view === item ? 'true' : undefined}
+          title={t(`plan.view.${item}Hint`)}
+          className={cn(
+            'rounded-[calc(var(--radius-control)-2px)] px-2.5 py-1 text-xs font-medium transition-colors',
+            view === item
+              ? 'bg-brand text-brand-ink'
+              : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
+          )}
         >
-          {VIEWS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setView(item)}
-              aria-current={view === item ? 'true' : undefined}
-              title={t(`plan.view.${item}Hint`)}
-              className={cn(
-                'rounded-[calc(var(--radius-control)-2px)] px-3 py-1.5 text-sm font-medium transition-colors',
-                view === item
-                  ? 'bg-brand text-brand-ink'
-                  : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
-              )}
-            >
-              {t(`plan.view.${item}`)}
-            </button>
-          ))}
-        </nav>
+          {t(`plan.view.${item}`)}
+        </button>
+      ))}
+    </nav>
+  )
 
-        <div className="text-ink-muted flex flex-wrap items-center gap-3 text-xs">
-          <Metric label={t('plan.total.execution')} value={formatMs(plan.executionMs)} strong />
-          <Metric label={t('plan.total.planning')} value={formatMs(plan.planningMs)} />
-          <Metric label={t('plan.total.cost')} value={formatNumber(Math.round(plan.totalCost))} />
-          <Metric label={t('plan.total.nodes')} value={String(plan.nodes.length)} />
-        </div>
-      </div>
+  if (view === 'graph') return <PlanDiagram plan={plan} tabs={tabs} />
 
-      {view === 'graph' && <PlanDiagram plan={plan} />}
-      {view === 'table' && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+  return (
+    <PlanShell toolbar={tabs}>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {view === 'table' ? (
           <PlanTables plan={plan} />
-        </div>
-      )}
-      {view === 'text' && (
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-          {/* La requête n'est pas rappelée ici : la modale l'affiche déjà, une seule fois. */}
-          <Card title={t('plan.text.title')}>
-            <CodeBlock className="whitespace-pre">{result.planText}</CodeBlock>
-          </Card>
-          <Card title={t('plan.json.title')}>
-            <CodeBlock className="whitespace-pre">{result.planJson}</CodeBlock>
-          </Card>
-        </div>
-      )}
-    </div>
+        ) : (
+          <div className="space-y-3">
+            {/* La requête n'est pas rappelée ici : la modale l'affiche déjà, une seule fois. */}
+            <Card title={t('plan.text.title')}>
+              <CodeBlock className="whitespace-pre">{result.planText}</CodeBlock>
+            </Card>
+            <Card title={t('plan.json.title')}>
+              <CodeBlock className="whitespace-pre">{result.planJson}</CodeBlock>
+            </Card>
+          </div>
+        )}
+      </div>
+    </PlanShell>
+  )
+}
+
+/**
+ * Compteurs d'ensemble du plan. Ils sont affichés hors du canevas — dans l'en-tête de la modale
+ * d'analyse — car ils décrivent la mesure entière, pas une étape : le diagramme garde sa surface.
+ */
+export function PlanTotals({ plan }: { plan: ExplainPlan }) {
+  const t = useT()
+
+  return (
+    <span className="text-ink-muted flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+      <Metric label={t('plan.total.execution')} value={formatMs(plan.executionMs)} strong />
+      <Metric label={t('plan.total.planning')} value={formatMs(plan.planningMs)} />
+      <Metric label={t('plan.total.cost')} value={formatNumber(Math.round(plan.totalCost))} />
+      <Metric label={t('plan.total.nodes')} value={String(plan.nodes.length)} />
+    </span>
   )
 }
 
@@ -391,8 +424,12 @@ type Viewbox = { zoom: number; x: number; y: number }
  * Le canevas se déplace par transformation, non par défilement : le glisser part de n'importe
  * quel point — carte comprise —, porte sur les deux axes sans butée, et le zoom se fait au
  * curseur, ce qu'une barre de défilement ne sait pas faire.
+ *
+ * Le sélecteur de vue est fourni par l'appelant et prend place dans la barre du diagramme : le
+ * canevas occupe alors tout ce qui reste sous une unique rangée de contrôles, et la légende se
+ * pose dessus plutôt qu'en dessous.
  */
-function PlanDiagram({ plan }: { plan: ExplainPlan }) {
+function PlanDiagram({ plan, tabs }: { plan: ExplainPlan; tabs: ReactNode }) {
   const t = useT()
   const [metric, setMetric] = useState<MetricKey>('self')
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set<number>())
@@ -755,87 +792,97 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
   }
 
   if (plan.nodes.length === 0) {
-    return <Alert tone="warning">{t('plan.unstructured')}</Alert>
+    return (
+      <PlanShell toolbar={tabs}>
+        <div className="p-4">
+          <Alert tone="warning">{t('plan.unstructured')}</Alert>
+        </div>
+      </PlanShell>
+    )
   }
 
   return (
-    <Card padded={false} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="border-border-subtle flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-ink-muted flex items-center gap-2 text-xs">
-            {t('plan.highlight')}
-            <Select
-              value={metric}
-              className="w-36"
-              aria-label={t('plan.highlight')}
-              onChange={(event) => setMetric(event.target.value as MetricKey)}
+    <PlanShell
+      toolbar={
+        <>
+          <div className="flex min-w-0 items-center gap-2">
+            {tabs}
+
+            <label className="text-ink-muted flex shrink-0 items-center gap-2 text-xs">
+              {t('plan.highlight')}
+              <Select
+                value={metric}
+                className="w-36"
+                aria-label={t('plan.highlight')}
+                onChange={(event) => setMetric(event.target.value as MetricKey)}
+              >
+                {METRICS.map((item) => (
+                  <option key={item} value={item}>
+                    {t(`plan.metric.${item}`)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+
+            {/* Raccourcis vers les nœuds qui décident du temps de la requête. */}
+            <CulpritChip
+              icon={Clock}
+              label={t('plan.culprit.slowest')}
+              node={culprits.slowest}
+              value={formatMs(culprits.slowest?.selfMs)}
+              onSelect={reveal}
+            />
+            <CulpritChip
+              icon={Rows3}
+              label={t('plan.culprit.largest')}
+              node={culprits.largest}
+              value={culprits.largest ? rowsLabel(Math.round(rowsOf(culprits.largest))) : '—'}
+              onSelect={reveal}
+            />
+            <CulpritChip
+              icon={Coins}
+              label={t('plan.culprit.costliest')}
+              node={culprits.costliest}
+              value={
+                culprits.costliest
+                  ? formatNumber(Math.round(costs.get(culprits.costliest.id) ?? 0))
+                  : '—'
+              }
+              onSelect={reveal}
+            />
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setExpanded((current) =>
+                  current.size === plan.nodes.length
+                    ? new Set<number>()
+                    : new Set(plan.nodes.map((node) => node.id)),
+                )
+              }
+              className="border-border-strong text-ink-muted hover:border-brand hover:text-brand h-7 rounded-[var(--radius-control)] border px-2 text-xs"
             >
-              {METRICS.map((item) => (
-                <option key={item} value={item}>
-                  {t(`plan.metric.${item}`)}
-                </option>
-              ))}
-            </Select>
-          </label>
+              {expanded.size === plan.nodes.length ? t('plan.collapseAll') : t('plan.expandAll')}
+            </button>
 
-          {/* Raccourcis vers les nœuds qui décident du temps de la requête. */}
-          <CulpritChip
-            icon={Clock}
-            label={t('plan.culprit.slowest')}
-            node={culprits.slowest}
-            value={formatMs(culprits.slowest?.selfMs)}
-            onSelect={reveal}
-          />
-          <CulpritChip
-            icon={Rows3}
-            label={t('plan.culprit.largest')}
-            node={culprits.largest}
-            value={culprits.largest ? rowsLabel(Math.round(rowsOf(culprits.largest))) : '—'}
-            onSelect={reveal}
-          />
-          <CulpritChip
-            icon={Coins}
-            label={t('plan.culprit.costliest')}
-            node={culprits.costliest}
-            value={
-              culprits.costliest
-                ? formatNumber(Math.round(costs.get(culprits.costliest.id) ?? 0))
-                : '—'
-            }
-            onSelect={reveal}
-          />
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() =>
-              setExpanded((current) =>
-                current.size === plan.nodes.length
-                  ? new Set<number>()
-                  : new Set(plan.nodes.map((node) => node.id)),
-              )
-            }
-            className="border-border-strong text-ink-muted hover:border-brand hover:text-brand h-7 rounded-[var(--radius-control)] border px-2 text-xs"
-          >
-            {expanded.size === plan.nodes.length ? t('plan.collapseAll') : t('plan.expandAll')}
-          </button>
-
-          <ZoomButton label={t('plan.zoomOut')} onClick={() => zoomFromCenter(1 / ZOOM_STEP)}>
-            <Minus className="size-3.5" aria-hidden />
-          </ZoomButton>
-          <span className="text-ink-muted w-12 text-center text-xs tabular-nums">
-            {Math.round(box.zoom * 100)} %
-          </span>
-          <ZoomButton label={t('plan.zoomIn')} onClick={() => zoomFromCenter(ZOOM_STEP)}>
-            <Plus className="size-3.5" aria-hidden />
-          </ZoomButton>
-          <ZoomButton label={t('plan.fit')} onClick={fit}>
-            <Maximize2 className="size-3.5" aria-hidden />
-          </ZoomButton>
-        </div>
-      </div>
-
+            <ZoomButton label={t('plan.zoomOut')} onClick={() => zoomFromCenter(1 / ZOOM_STEP)}>
+              <Minus className="size-3.5" aria-hidden />
+            </ZoomButton>
+            <span className="text-ink-muted w-12 text-center text-xs tabular-nums">
+              {Math.round(box.zoom * 100)} %
+            </span>
+            <ZoomButton label={t('plan.zoomIn')} onClick={() => zoomFromCenter(ZOOM_STEP)}>
+              <Plus className="size-3.5" aria-hidden />
+            </ZoomButton>
+            <ZoomButton label={t('plan.fit')} onClick={fit}>
+              <Maximize2 className="size-3.5" aria-hidden />
+            </ZoomButton>
+          </div>
+        </>
+      }
+    >
       <div
         ref={viewport}
         role="application"
@@ -933,18 +980,25 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
             )
           })}
         </div>
-      </div>
 
-      <p className="text-ink-faint border-border-subtle shrink-0 border-t px-3 py-2 text-xs">
-        {t('plan.legend.flow')} {t('plan.legend.heat')}{' '}
-        <span className="text-brand">{t('plan.legend.notable')}</span>,{' '}
-        <span className="text-warning">{t('plan.legend.heavy')}</span>,{' '}
-        <span className="text-danger">{t('plan.legend.dominant')}</span>. {t('plan.legend.controls')}
-      </p>
-    </Card>
+        {/* Légende posée sur le canevas plutôt qu'en dessous : elle reste lisible sans prendre
+            une rangée au diagramme, et laisse passer le glisser puisqu'elle n'attrape pas le
+            pointeur. */}
+        <p className="border-border-subtle bg-surface/85 text-ink-faint pointer-events-none absolute bottom-2 left-2 z-10 max-w-[min(36rem,calc(100%-1rem))] rounded-[var(--radius-control)] border px-2 py-1 text-[11px] leading-snug backdrop-blur-sm">
+          {t('plan.legend.flow')} {t('plan.legend.heat')}{' '}
+          <span className="text-brand">{t('plan.legend.notable')}</span>,{' '}
+          <span className="text-warning">{t('plan.legend.heavy')}</span>,{' '}
+          <span className="text-danger">{t('plan.legend.dominant')}</span>. {t('plan.legend.controls')}
+        </p>
+      </div>
+    </PlanShell>
   )
 }
 
+/**
+ * Raccourci vers un nœud remarquable. La pastille cède du terrain avant la barre entière : ses
+ * textes s'abrègent quand la place manque, et l'infobulle garde l'énoncé complet.
+ */
 function CulpritChip({
   icon: Icon,
   label,
@@ -964,13 +1018,13 @@ function CulpritChip({
     <button
       type="button"
       onClick={() => onSelect(node.id)}
-      title={`${node.label} — ${value}`}
-      className="border-border-subtle bg-surface-sunken text-ink-muted hover:border-brand hover:text-brand flex h-7 items-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-xs"
+      title={`${label} — ${node.label} — ${value}`}
+      className="border-border-subtle bg-surface-sunken text-ink-muted hover:border-brand hover:text-brand flex h-7 min-w-0 shrink items-center gap-1.5 rounded-[var(--radius-control)] border px-2 text-xs"
     >
       <Icon className="size-3.5 shrink-0" aria-hidden />
-      <span className="hidden sm:inline">{label}</span>
-      <span className="text-ink font-medium">{node.nodeType}</span>
-      <span className="text-ink-faint tabular-nums">{value}</span>
+      <span className="hidden truncate sm:inline">{label}</span>
+      <span className="text-ink truncate font-medium">{node.nodeType}</span>
+      <span className="text-ink-faint truncate tabular-nums">{value}</span>
     </button>
   )
 }
@@ -1433,7 +1487,9 @@ function NodeDetails({ node }: { node: PlanNode }) {
             <dl className={cn('space-y-1.5', content.pairs.length > 0 && 'mt-2')}>
               {content.blocks.map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-ink-faint text-[10px] tracking-wide uppercase">{label}</dt>
+                  {/* Pas de capitales forcées : ces intitulés sont les noms qu'EXPLAIN imprime,
+                      et c'est sous cette graphie qu'on les retrouve dans la documentation. */}
+                  <dt className="text-ink-faint text-[10px] font-medium">{label}</dt>
                   <dd className="text-ink font-mono text-[11px] break-all">{value}</dd>
                 </div>
               ))}
@@ -1448,7 +1504,9 @@ function NodeDetails({ node }: { node: PlanNode }) {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <dt className="text-ink-faint truncate text-[10px] tracking-wide uppercase">{label}</dt>
+      {/* Graphie d'origine conservée : « Rows Removed by Filter » se cherche tel quel dans la
+          documentation de PostgreSQL, pas en capitales. */}
+      <dt className="text-ink-faint truncate text-[10px] font-medium">{label}</dt>
       <dd className="text-ink truncate text-[11px] tabular-nums">{value}</dd>
     </div>
   )
@@ -1465,7 +1523,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   cost: 'plan.table.column.cost',
   rows: 'plan.table.column.rows',
   estimation: 'plan.field.estimation',
-  reads: 'plan.table.sort.reads',
+  reads: 'plan.table.column.reads',
 }
 
 /** Vue tableaux : le même plan trié selon le critère qui intéresse, plus un cumul par relation. */
@@ -1535,7 +1593,7 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
       >
         <div className="w-full overflow-x-auto">
           <table className="w-full min-w-[46rem] text-sm">
-            <thead className="bg-surface-sunken text-ink-muted text-left text-xs tracking-wide uppercase">
+            <thead className="bg-surface-sunken text-ink-muted text-left text-xs">
               <tr>
                 <th className="px-3 py-2 font-medium">{t('plan.table.column.node')}</th>
                 <th className="px-3 py-2 font-medium">{t('plan.table.column.cost')}</th>
@@ -1591,7 +1649,7 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
         <Card title={t('plan.relations.title')} padded={false}>
           <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[32rem] text-sm">
-              <thead className="bg-surface-sunken text-ink-muted text-left text-xs tracking-wide uppercase">
+              <thead className="bg-surface-sunken text-ink-muted text-left text-xs">
                 <tr>
                   <th className="px-3 py-2 font-medium">{t('plan.relations.column.relation')}</th>
                   <th className="px-3 py-2 font-medium">{t('plan.relations.column.nodes')}</th>

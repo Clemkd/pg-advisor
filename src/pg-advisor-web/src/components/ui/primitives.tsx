@@ -785,6 +785,7 @@ export type ModalSize = keyof typeof MODAL_WIDTHS
 export function Modal({
   title,
   description,
+  actions,
   onClose,
   children,
   footer,
@@ -794,6 +795,12 @@ export function Modal({
   title: ReactNode
   /** Contexte de la modale, sur la ligne sous le titre : évite d'ouvrir le corps par un pavé. */
   description?: ReactNode
+  /**
+   * Emplacement d'en-tête, entre le titre et la fermeture. Ce qui décrit le contenu de la
+   * modale — provenance d'une mesure, compteurs d'ensemble, accès à un panneau — y tient sans
+   * rien prendre au corps, dont la hauteur est le bien le plus rare d'une modale pleine page.
+   */
+  actions?: ReactNode
   onClose: () => void
   children: ReactNode
   footer?: ReactNode
@@ -840,6 +847,11 @@ export function Modal({
               <p className="text-ink-muted mt-0.5 text-xs leading-snug">{description}</p>
             )}
           </div>
+          {actions && (
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+              {actions}
+            </div>
+          )}
           <Button
             variant="ghost"
             size="icon"
