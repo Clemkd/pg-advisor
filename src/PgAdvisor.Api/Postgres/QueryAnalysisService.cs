@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -38,11 +39,32 @@ public sealed record TopQuery
     public bool HasParameters { get; init; }
 
     /// <summary>
+    /// Un plan mesuré est déjà conservé pour cette requête : elle s'ouvre sans nouvelle exécution.
+    /// Renseigné par le contrôleur, qui seul voit la base de l'Advisor.
+    /// </summary>
+    public bool HasSavedPlan { get; init; }
+
+    /// <summary>
     /// Requête exécutée par l'Advisor lui-même — règles, collecteurs, analyses — reconnue au
     /// rôle qui l'a lancée. Sans distinction, la supervision finirait par occuper son propre
     /// classement.
     /// </summary>
     public bool FromAdvisor { get; init; }
+}
+
+/// <summary>
+/// Remarque sur le déroulement d'une analyse. Le code est stable et sert de clé de traduction à
+/// l'interface ; le message anglais reste le repli, conformément au reste de l'API.
+/// </summary>
+/// <param name="Code">Identifiant stable, en minuscules avec tirets.</param>
+/// <param name="Count">Grandeur citée par le message, quand il en cite une.</param>
+public sealed record AnalysisNote(string Code, string Message, int? Count = null);
+
+public static class AnalysisNotes
+{
+    public const string ExplainPrefixRemoved = "explain-prefix-removed";
+    public const string ParametersSubstituted = "parameters-substituted";
+    public const string PlanNotParsed = "plan-not-parsed";
 }
 
 public sealed record QueryAnalysisResult
@@ -51,7 +73,19 @@ public sealed record QueryAnalysisResult
     public string PlanText { get; init; } = string.Empty;
     public string PlanJson { get; init; } = string.Empty;
     public ExplainPlan Plan { get; init; } = new();
-    public IReadOnlyList<string> Notes { get; init; } = [];
+    public IReadOnlyList<AnalysisNote> Notes { get; init; } = [];
+
+    /// <summary>Date de la mesure. Un plan relu depuis la base porte la date de son EXPLAIN, pas celle de la lecture.</summary>
+    public DateTimeOffset MeasuredAt { get; init; }
+
+    /// <summary>Durée de la mesure, en millisecondes : ce que l'analyse a coûté à l'instance.</summary>
+    public double DurationMs { get; init; }
+
+    /// <summary>Valeurs utilisées pour $1, $2… : le plan n'a de sens qu'avec elles.</summary>
+    public IReadOnlyList<string> Parameters { get; init; } = [];
+
+    /// <summary>Vrai lorsque le plan vient de la base de l'Advisor et non d'une exécution à l'instant.</summary>
+    public bool FromStorage { get; init; }
 }
 
 /// <summary>
@@ -210,7 +244,7 @@ public sealed partial class QueryAnalysisService(
         CancellationToken cancellationToken)
     {
         var trimmed = sql.Trim().TrimEnd(';');
-        var notes = new List<string>();
+        var notes = new List<AnalysisNote>();
 
         // Une requête déjà préfixée d'EXPLAIN ne peut pas être imbriquée dans un second EXPLAIN.
         // Le cas se produit dès qu'on analyse une entrée de pg_stat_statements issue d'un
@@ -219,7 +253,9 @@ public sealed partial class QueryAnalysisService(
         if (!ReferenceEquals(withoutExplain, trimmed))
         {
             trimmed = withoutExplain;
-            notes.Add("The EXPLAIN prefix was removed from the query before analysis.");
+            notes.Add(new AnalysisNote(
+                AnalysisNotes.ExplainPrefixRemoved,
+                "The EXPLAIN prefix was removed from the query before analysis."));
         }
 
         // Les textes de pg_stat_statements sont normalisés : leurs littéraux sont remplacés par
@@ -227,6 +263,8 @@ public sealed partial class QueryAnalysisService(
         // l'exécution et le plan générique. On les remplace donc par les valeurs fournies, ce
         // qui produit en prime un plan fidèle aux statistiques de distribution.
         var placeholders = PlaceholderCount(trimmed);
+        var used = Array.Empty<string>() as IReadOnlyList<string>;
+
         if (placeholders > 0)
         {
             var supplied = parameters?.Where(p => p is not null).ToList() ?? [];
@@ -237,9 +275,12 @@ public sealed partial class QueryAnalysisService(
             }
 
             trimmed = SubstituteParameters(trimmed, supplied);
-            notes.Add(
+            used = supplied.Take(placeholders).ToList();
+            notes.Add(new AnalysisNote(
+                AnalysisNotes.ParametersSubstituted,
                 $"{placeholders} parameter(s) replaced with the supplied values: the plan depends on those values " +
-                "and may differ for others.");
+                "and may differ for others.",
+                placeholders));
         }
 
         if (!SqlGuard.Validate(trimmed, out var guardError))
@@ -250,12 +291,16 @@ public sealed partial class QueryAnalysisService(
 
         await using var pg = await factory.OpenAsync(connection, cancellationToken);
 
-        notes.Add(
-            "The query was actually executed to measure timings. The transaction is rolled back " +
-            "and the session is read-only: no write is possible.");
+        // Le caractère lecture seule de l'analyse ne fait plus l'objet d'une remarque : il est
+        // vrai à chaque exécution, donc l'interface l'énonce une fois pour toutes. Le répéter
+        // dans la liste des remarques le noyait parmi les faits propres à cette mesure.
+        var measuredAt = DateTimeOffset.UtcNow;
+        var clock = Stopwatch.StartNew();
 
         var textPlan = await RunExplainAsync(pg, trimmed, buffers, "TEXT", cancellationToken);
         var jsonPlan = await RunExplainAsync(pg, trimmed, buffers, "JSON", cancellationToken);
+
+        clock.Stop();
 
         ExplainPlan parsed;
         try
@@ -267,7 +312,9 @@ public sealed partial class QueryAnalysisService(
             // Un plan illisible ne doit pas priver l'opérateur de la vue texte.
             logger.LogWarning(ex, "Unreadable JSON plan for instance {Instance}.", connection.Name);
             parsed = new ExplainPlan();
-            notes.Add("The JSON plan could not be parsed; only the text view is available.");
+            notes.Add(new AnalysisNote(
+                AnalysisNotes.PlanNotParsed,
+                "The JSON plan could not be parsed; only the text view is available."));
         }
 
         return new QueryAnalysisResult
@@ -277,6 +324,9 @@ public sealed partial class QueryAnalysisService(
             PlanJson = jsonPlan,
             Plan = parsed,
             Notes = notes,
+            MeasuredAt = measuredAt,
+            DurationMs = clock.Elapsed.TotalMilliseconds,
+            Parameters = used,
         };
     }
 

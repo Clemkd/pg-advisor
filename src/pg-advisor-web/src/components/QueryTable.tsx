@@ -1,17 +1,20 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Workflow } from 'lucide-react'
 import type { TopQuery } from '@/api/types'
 import { Badge, Button } from '@/components/ui/primitives'
 import { FilterInput, type FilterOperator } from '@/components/ui/FilterInput'
 import { cn } from '@/lib/utils'
 import { useFillHeight } from '@/lib/fillHeight'
 import { formatNumber, formatPercent } from '@/lib/format'
+import { currentLocale, INTL_LOCALES, useT, useTc } from '@/lib/i18n'
+import type { Translator } from '@/lib/i18n'
 
 export type ColumnType = 'text' | 'number' | 'percent' | 'duration'
 
 interface Column {
   key: keyof TopQuery | 'query'
+  /** Clé de traduction de l'en-tête : le libellé suit la langue choisie. */
   label: string
   type: ColumnType
   width: string
@@ -21,16 +24,23 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
-  { key: 'query', label: 'Requête', type: 'text', width: 'minmax(22rem, 3fr)' },
-  { key: 'shareOfTotal', label: 'Part', type: 'percent', width: '7rem', align: 'right' },
-  { key: 'totalExecMs', label: 'Cumulé', type: 'duration', width: '7rem', align: 'right', unit: 'ms' },
-  { key: 'meanExecMs', label: 'Moyen', type: 'duration', width: '7rem', align: 'right', unit: 'ms' },
-  { key: 'maxExecMs', label: 'Max', type: 'duration', width: '7rem', align: 'right', unit: 'ms' },
-  { key: 'calls', label: 'Appels', type: 'number', width: '6.5rem', align: 'right' },
-  { key: 'rowsPerCall', label: 'Lignes/appel', type: 'number', width: '7rem', align: 'right' },
-  { key: 'cacheHitRatio', label: 'Cache', type: 'percent', width: '6.5rem', align: 'right' },
-  { key: 'tempBlksWritten', label: 'Temp.', type: 'number', width: '6.5rem', align: 'right', unit: 'blocs' },
+  { key: 'query', label: 'queries.column.query', type: 'text', width: 'minmax(22rem, 3fr)' },
+  { key: 'shareOfTotal', label: 'queries.column.share', type: 'percent', width: '7rem', align: 'right' },
+  { key: 'totalExecMs', label: 'queries.column.total', type: 'duration', width: '7rem', align: 'right', unit: 'ms' },
+  { key: 'meanExecMs', label: 'queries.column.mean', type: 'duration', width: '7rem', align: 'right', unit: 'ms' },
+  { key: 'maxExecMs', label: 'queries.column.max', type: 'duration', width: '7rem', align: 'right', unit: 'ms' },
+  { key: 'calls', label: 'queries.column.calls', type: 'number', width: '6.5rem', align: 'right' },
+  { key: 'rowsPerCall', label: 'queries.column.rowsPerCall', type: 'number', width: '7rem', align: 'right' },
+  { key: 'cacheHitRatio', label: 'queries.column.cache', type: 'percent', width: '6.5rem', align: 'right' },
+  { key: 'tempBlksWritten', label: 'queries.column.temp', type: 'number', width: '6.5rem', align: 'right', unit: 'queries.unit.blocks' },
 ]
+
+/** Unité du filtre : les symboles restent tels quels, le reste passe par le catalogue. */
+function unitLabel(t: Translator, column: Column): string | undefined {
+  if (column.type === 'percent') return '%'
+  if (!column.unit) return undefined
+  return column.unit === 'ms' ? 'ms' : t(column.unit)
+}
 
 type NumericFilter = { operator: FilterOperator; value: string }
 
@@ -71,6 +81,8 @@ export function QueryTable({
   /** Classement fusionné : chaque ligne annonce alors sa base d'origine. */
   showInstance?: boolean
 }) {
+  const t = useT()
+  const tc = useTc()
   const [sortKey, setSortKey] = useState<Column['key']>('totalExecMs')
   const [descending, setDescending] = useState(true)
   const [textFilter, setTextFilter] = useState('')
@@ -124,7 +136,8 @@ export function QueryTable({
 
       const comparison =
         typeof left === 'string' || typeof right === 'string'
-          ? String(left ?? '').localeCompare(String(right ?? ''), 'fr')
+          ? // Le tri suit la langue de l'interface : l'ordre des accents n'est pas le même partout.
+            String(left ?? '').localeCompare(String(right ?? ''), INTL_LOCALES[currentLocale()])
           : Number(left ?? 0) - Number(right ?? 0)
 
       return descending ? -comparison : comparison
@@ -180,7 +193,7 @@ export function QueryTable({
                     sortKey === column.key && 'text-ink',
                   )}
                 >
-                  {column.label}
+                  {t(column.label)}
                   {sortKey === column.key ? (
                     descending ? (
                       <ArrowDown className="size-3" aria-hidden />
@@ -195,15 +208,15 @@ export function QueryTable({
                 <div className="mt-2">
                   {column.type === 'text' ? (
                     <FilterInput
-                      label={column.label}
+                      label={t(column.label)}
                       value={textFilter}
                       onValueChange={setTextFilter}
-                      placeholder="filtrer…"
+                      placeholder={t('queries.filterPlaceholder')}
                     />
                   ) : (
                     <FilterInput
-                      label={column.label}
-                      unit={column.type === 'percent' ? '%' : column.unit}
+                      label={t(column.label)}
+                      unit={unitLabel(t, column)}
                       value={numericFilters[String(column.key)]?.value ?? ''}
                       operator={numericFilters[String(column.key)]?.operator ?? '>='}
                       onOperatorChange={(operator) =>
@@ -239,7 +252,7 @@ export function QueryTable({
                 }}
                 className="h-7 px-2 text-xs"
               >
-                Effacer
+                {t('queries.clearFilters')}
               </Button>
             </div>
           </div>
@@ -265,7 +278,7 @@ export function QueryTable({
                   <button
                     type="button"
                     onClick={() => onAnalyze(query)}
-                    title="Analyser cette requête"
+                    title={t('queries.rowTitle')}
                     className="border-border-subtle hover:bg-surface-sunken focus-visible:bg-surface-sunken grid w-full items-start gap-x-3 border-b px-4 py-2.5 text-left"
                     style={{ gridTemplateColumns: template }}
                   >
@@ -276,10 +289,18 @@ export function QueryTable({
                       <span className="mt-1 flex flex-wrap items-center gap-1.5">
                         {showInstance && <Badge tone="brand">{query.connectionName}</Badge>}
                         <span className="text-ink-faint font-mono text-[11px]">{query.queryId}</span>
-                        {query.fromAdvisor && <Badge>Advisor</Badge>}
-                        {query.hasParameters && <Badge>paramétrée</Badge>}
+                        {/* Un plan déjà mesuré s'ouvre sans rien exécuter : l'information décide
+                            de cliquer ou non sur une requête coûteuse en production. */}
+                        {query.hasSavedPlan && (
+                          <Badge tone="success" title={t('queries.badge.savedPlanTitle')}>
+                            <Workflow className="size-3" aria-hidden />
+                            {t('queries.badge.savedPlan')}
+                          </Badge>
+                        )}
+                        {query.fromAdvisor && <Badge>{t('queries.badge.advisor')}</Badge>}
+                        {query.hasParameters && <Badge>{t('queries.badge.parameterized')}</Badge>}
                         {query.tempBlksWritten > 0 && (
-                          <Badge tone="warning">fichiers temporaires</Badge>
+                          <Badge tone="warning">{t('queries.badge.tempFiles')}</Badge>
                         )}
                       </span>
                     </span>
@@ -320,9 +341,8 @@ export function QueryTable({
       </div>
 
       <div className="text-ink-faint border-border-subtle border-t px-4 py-2 text-xs">
-        {visible.length} requête{visible.length > 1 ? 's' : ''} affichée
-        {visible.length > 1 ? 's' : ''} sur {queries.length} lue{queries.length > 1 ? 's' : ''} —
-        une ligne ouvre son analyse.
+        {tc('queries.footer.shown', visible.length)} {tc('queries.footer.read', queries.length)} —{' '}
+        {t('queries.footer.hint')}
       </div>
     </>
   )

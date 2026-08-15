@@ -1,4 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -71,7 +74,7 @@ public sealed class QueriesController(
         {
             var items = await analysis.TopQueriesAsync(
                 connection, sort.ToLowerInvariant(), limit, search, ct, includeAdvisor);
-            return Ok(new { available = true, reason = (string?)null, items });
+            return Ok(new { available = true, reason = (string?)null, items = await MarkSavedPlansAsync(items, ct) });
         }
         catch (PostgresException ex)
         {
@@ -152,7 +155,7 @@ public sealed class QueriesController(
 
         var results = await Task.WhenAll(reads);
 
-        var items = results
+        var ranked = results
             .SelectMany(result => result.Items)
             .OrderByDescending(query => QueryAnalysisService.SortScore(query, sortKey))
             .Take(bounded)
@@ -161,7 +164,7 @@ public sealed class QueriesController(
         return Ok(new
         {
             available = results.Any(result => result.Reason is null),
-            items,
+            items = await MarkSavedPlansAsync(ranked, ct),
             instances = results.Select(result => new
             {
                 id = result.Connection.Id,
@@ -211,6 +214,9 @@ public sealed class QueriesController(
 
             var result = await analysis.ExplainAsync(
                 connection, sql, request.Buffers, request.Parameters, timeout.Token);
+
+            // Une mesure réussie est conservée : la relire ne doit plus coûter une exécution.
+            await SaveAsync(connectionId, request, sql, result, ct);
 
             return Ok(result);
         }
@@ -281,6 +287,188 @@ public sealed class QueriesController(
             return Problem(statusCode: StatusCodes.Status502BadGateway,
                 title: "Cannot suggest values for this query.", detail: ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Dernier plan mesuré conservé pour cette requête, sans rien exécuter sur l'instance.
+    /// C'est ce que l'interface lit à l'ouverture d'une analyse.
+    ///
+    /// En POST alors qu'il s'agit d'une lecture : la requête à identifier peut faire plusieurs
+    /// kilo-octets, ce qu'une chaîne de requête ne transporte pas de façon fiable. Les deux
+    /// autres points d'entrée de ce contrôleur prennent déjà le même corps.
+    /// </summary>
+    [HttpPost("plan")]
+    public async Task<ActionResult<QueryAnalysisResult>> SavedPlan(
+        int connectionId, AnalyzeQueryRequest request, CancellationToken ct)
+    {
+        var key = QueryKeyFor(request);
+        if (key is null)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: "Provide a query, or the identifier of a known query.");
+        }
+
+        var snapshot = await db.QueryPlanSnapshots
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.ConnectionId == connectionId && s.QueryKey == key, ct);
+
+        if (snapshot is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(Restore(snapshot));
+    }
+
+    /// <summary>
+    /// Reconstitue un résultat d'analyse à partir du plan conservé. Le JSON est reparsé plutôt
+    /// que stocké déjà structuré : le parseur reste l'unique chemin vers la vue du plan, et une
+    /// amélioration de son analyse profite aux plans déjà enregistrés.
+    /// </summary>
+    private QueryAnalysisResult Restore(QueryPlanSnapshot snapshot)
+    {
+        ExplainPlan plan;
+        var notes = new List<AnalysisNote>();
+
+        try
+        {
+            plan = ExplainPlanParser.Parse(snapshot.PlanJson);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "Stored plan {Id} could not be parsed.", snapshot.Id);
+            plan = new ExplainPlan();
+            notes.Add(new AnalysisNote(
+                AnalysisNotes.PlanNotParsed,
+                "The JSON plan could not be parsed; only the text view is available."));
+        }
+
+        return new QueryAnalysisResult
+        {
+            Sql = snapshot.Sql,
+            PlanText = snapshot.PlanText,
+            PlanJson = snapshot.PlanJson,
+            Plan = plan,
+            Notes = notes,
+            MeasuredAt = snapshot.MeasuredAt,
+            DurationMs = snapshot.DurationMs,
+            Parameters = ReadParameters(snapshot.ParametersJson),
+            FromStorage = true,
+        };
+    }
+
+    private static IReadOnlyList<string> ReadParameters(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Écrit — ou remplace — le plan conservé pour cette requête sur cette instance.</summary>
+    private async Task SaveAsync(
+        int connectionId,
+        AnalyzeQueryRequest request,
+        string sql,
+        QueryAnalysisResult result,
+        CancellationToken ct)
+    {
+        var key = QueryKeyFor(request) ?? HashOf(sql);
+
+        var snapshot = await db.QueryPlanSnapshots
+            .FirstOrDefaultAsync(s => s.ConnectionId == connectionId && s.QueryKey == key, ct);
+
+        if (snapshot is null)
+        {
+            snapshot = new QueryPlanSnapshot { ConnectionId = connectionId, QueryKey = key };
+            db.QueryPlanSnapshots.Add(snapshot);
+        }
+
+        snapshot.QueryId = string.IsNullOrWhiteSpace(request.QueryId) ? null : request.QueryId;
+        snapshot.Sql = result.Sql;
+        snapshot.ParametersJson = result.Parameters.Count == 0
+            ? null
+            : JsonSerializer.Serialize(result.Parameters);
+        snapshot.PlanJson = result.PlanJson;
+        snapshot.PlanText = result.PlanText;
+        snapshot.MeasuredAt = result.MeasuredAt;
+        snapshot.DurationMs = result.DurationMs;
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            // Conserver le plan est un service rendu, pas une condition de l'analyse : un échec
+            // d'écriture ne doit pas priver l'opérateur du plan qu'il vient de mesurer.
+            logger.LogWarning(ex, "The measured plan could not be stored for instance {Instance}.", connectionId);
+        }
+    }
+
+    /// <summary>
+    /// Identité de la requête dans la table des plans : le queryid quand il est connu, sinon une
+    /// empreinte du texte. Deux analyses de la même requête se retrouvent ainsi, quelles que
+    /// soient les valeurs de paramètres essayées entre-temps.
+    /// </summary>
+    private static string? QueryKeyFor(AnalyzeQueryRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.QueryId))
+        {
+            return request.QueryId.Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(request.Sql) ? null : HashOf(request.Sql);
+    }
+
+    private static string HashOf(string sql)
+    {
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(sql.Trim()));
+        return "sql:" + Convert.ToHexStringLower(digest)[..32];
+    }
+
+    /// <summary>
+    /// Signale les requêtes dont un plan est déjà conservé. Une seule lecture pour tout le
+    /// classement : la liste peut compter deux cents entrées réparties sur plusieurs instances.
+    /// </summary>
+    private async Task<IReadOnlyList<TopQuery>> MarkSavedPlansAsync(
+        IReadOnlyList<TopQuery> items, CancellationToken ct)
+    {
+        if (items.Count == 0)
+        {
+            return items;
+        }
+
+        var keys = items.Select(item => item.QueryId).Distinct().ToList();
+        var connectionIds = items.Select(item => item.ConnectionId).Distinct().ToList();
+
+        var stored = await db.QueryPlanSnapshots
+            .AsNoTracking()
+            .Where(s => connectionIds.Contains(s.ConnectionId) && keys.Contains(s.QueryKey))
+            .Select(s => new { s.ConnectionId, s.QueryKey })
+            .ToListAsync(ct);
+
+        if (stored.Count == 0)
+        {
+            return items;
+        }
+
+        var known = stored.Select(s => (s.ConnectionId, s.QueryKey)).ToHashSet();
+
+        return items
+            .Select(item => known.Contains((item.ConnectionId, item.QueryId))
+                ? item with { HasSavedPlan = true }
+                : item)
+            .ToList();
     }
 
     private async Task<string?> ResolveQueryTextAsync(

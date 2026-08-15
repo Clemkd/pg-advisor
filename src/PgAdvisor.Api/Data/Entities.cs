@@ -239,6 +239,53 @@ public class RuleOverride
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// Plan d'exécution mesuré, conservé pour être relu sans le remesurer. Produire un plan demande
+/// un EXPLAIN ANALYZE, donc une exécution réelle de la requête sur l'instance supervisée : ce
+/// n'est pas anodin en production, et rien ne justifie de le refaire pour relire un plan déjà
+/// obtenu.
+///
+/// Une seule ligne par requête et par instance : la mesure la plus récente remplace la
+/// précédente. Un historique complet ferait grossir la base sans borne pour un usage — comparer
+/// deux mesures — qui n'est pas demandé.
+/// </summary>
+public class QueryPlanSnapshot
+{
+    public int Id { get; set; }
+    public int ConnectionId { get; set; }
+    public PostgresConnection? Connection { get; set; }
+
+    /// <summary>
+    /// Identité de la requête pour cette instance : le queryid de pg_stat_statements quand
+    /// l'analyse part du classement, sinon une empreinte du texte saisi.
+    /// </summary>
+    public string QueryKey { get; set; } = string.Empty;
+
+    /// <summary>queryid de pg_stat_statements, null pour une requête saisie à la main.</summary>
+    public string? QueryId { get; set; }
+
+    /// <summary>Texte réellement passé à EXPLAIN : préfixe retiré, paramètres substitués.</summary>
+    public string Sql { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Valeurs saisies pour $1, $2…, en tableau JSON. Un plan dépend des valeurs qui l'ont
+    /// produit : relire le plan sans elles reviendrait à lire un plan sans savoir de quoi il parle.
+    /// </summary>
+    public string? ParametersJson { get; set; }
+
+    /// <summary>Plan brut au format JSON, seule source de la vue structurée : il est reparsé à la relecture.</summary>
+    public string PlanJson { get; set; } = string.Empty;
+
+    /// <summary>Sortie textuelle d'EXPLAIN, que le parseur JSON ne sait pas reconstituer.</summary>
+    public string PlanText { get; set; } = string.Empty;
+
+    /// <summary>Date de la mesure : sans elle, l'opérateur relit un plan d'âge inconnu.</summary>
+    public DateTimeOffset MeasuredAt { get; set; }
+
+    /// <summary>Durée de la mesure elle-même, en millisecondes — ce qu'a coûté l'analyse à l'instance.</summary>
+    public double DurationMs { get; set; }
+}
+
 public class Setting
 {
     public string Key { get; set; } = string.Empty;

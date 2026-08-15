@@ -22,6 +22,7 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
     public DbSet<NotificationConfiguration> NotificationConfigurations => Set<NotificationConfiguration>();
     public DbSet<NotificationHistoryEntry> NotificationHistory => Set<NotificationHistoryEntry>();
     public DbSet<RuleOverride> RuleOverrides => Set<RuleOverride>();
+    public DbSet<QueryPlanSnapshot> QueryPlanSnapshots => Set<QueryPlanSnapshot>();
     public DbSet<Setting> Settings => Set<Setting>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
@@ -113,6 +114,21 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
             e.HasOne(r => r.Connection)
                 .WithMany()
                 .HasForeignKey(r => r.ConnectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<QueryPlanSnapshot>(e =>
+        {
+            // Une requête, une instance, un plan : la mesure la plus récente écrase la précédente.
+            e.HasIndex(s => new { s.ConnectionId, s.QueryKey }).IsUnique();
+            e.Property(s => s.QueryKey).HasMaxLength(128).IsRequired();
+            e.Property(s => s.QueryId).HasMaxLength(64);
+            e.Property(s => s.Sql).IsRequired();
+            e.Property(s => s.PlanJson).IsRequired();
+
+            e.HasOne(s => s.Connection)
+                .WithMany()
+                .HasForeignKey(s => s.ConnectionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

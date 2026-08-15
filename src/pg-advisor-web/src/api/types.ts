@@ -346,6 +346,8 @@ export interface TopQuery {
   hasParameters: boolean
   /** Requête exécutée par l'Advisor lui-même : règles, collecteurs, analyses. */
   fromAdvisor: boolean
+  /** Un plan mesuré est conservé : l'analyse s'ouvre sans réexécuter la requête. */
+  hasSavedPlan: boolean
 }
 
 export interface TopQueriesResponse {
@@ -445,12 +447,30 @@ export interface ParameterSuggestion {
   source: string | null
 }
 
+/**
+ * Remarque sur le déroulement d'une analyse. Le `code` est stable et sert de clé de traduction ;
+ * `message`, produit par l'API en anglais comme le reste du backend, sert de repli.
+ */
+export interface AnalysisNote {
+  code: string
+  message: string
+  count: number | null
+}
+
 export interface QueryAnalysisResult {
   sql: string
   planText: string
   planJson: string
   plan: ExplainPlan
-  notes: string[]
+  notes: AnalysisNote[]
+  /** Date de la mesure — celle de l'EXPLAIN, pas celle de la lecture d'un plan conservé. */
+  measuredAt: string
+  /** Durée de la mesure elle-même, en millisecondes. */
+  durationMs: number
+  /** Valeurs utilisées pour $1, $2… : le plan n'a de sens qu'avec elles. */
+  parameters: string[]
+  /** Vrai lorsque le plan a été relu depuis la base, sans nouvelle exécution. */
+  fromStorage: boolean
 }
 
 /** Événement poussé par le flux SSE du serveur. */

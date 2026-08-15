@@ -25,11 +25,19 @@ export class ApiError extends Error {
   readonly status: number
   readonly details?: string[]
 
-  constructor(status: number, message: string, details?: string[]) {
+  /**
+   * Corps de la réponse, tel que renvoyé par le serveur. Certaines erreurs portent des données
+   * exploitables — le nombre de paramètres attendus par une requête, par exemple — et les lire
+   * ici vaut mieux que d'aller les repêcher dans le texte du message.
+   */
+  readonly payload?: Record<string, unknown>
+
+  constructor(status: number, message: string, details?: string[], payload?: Record<string, unknown>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.details = details
+    this.payload = payload
   }
 }
 
@@ -79,8 +87,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
+type ErrorDescription = [string, string[]?, Record<string, unknown>?]
+
 /** Extrait le message d'un ProblemDetails ou d'un ValidationProblemDetails ASP.NET Core. */
-async function describeError(response: Response): Promise<[string, string[]?]> {
+async function describeError(response: Response): Promise<ErrorDescription> {
   try {
     const problem = (await response.json()) as {
       title?: string
@@ -95,7 +105,7 @@ async function describeError(response: Response): Promise<[string, string[]?]> {
       details?.[0] ??
       `Erreur ${response.status}`
 
-    return [message, details]
+    return [message, details, problem as Record<string, unknown>]
   } catch {
     return [`Erreur ${response.status} ${response.statusText}`.trim()]
   }
@@ -207,6 +217,21 @@ export const api = {
         `/api/instances/${connectionId}/queries/analyze`,
         body,
       ),
+    /**
+     * Dernier plan conservé pour cette requête, ou `null` s'il n'y en a pas. L'absence de plan
+     * est un état normal à l'ouverture d'une analyse, pas une erreur à remonter à l'appelant.
+     */
+    savedPlan: async (connectionId: number, body: { sql?: string; queryId?: string }) => {
+      try {
+        return await post<import('./types').QueryAnalysisResult>(
+          `/api/instances/${connectionId}/queries/plan`,
+          body,
+        )
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 404) return null
+        throw cause
+      }
+    },
     /** Classement fusionné de plusieurs instances. */
     across: (params: {
       connectionIds: string

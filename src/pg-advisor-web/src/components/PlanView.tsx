@@ -16,18 +16,16 @@ import {
 import type { ExplainPlan, PlanNode, PlanWarning, QueryAnalysisResult } from '../api/types'
 import { Alert, Card, CodeBlock, Select, Tag } from '@/components/ui'
 import { formatNumber } from '@/lib/format'
+import { currentLocale, hasTranslation, tr, translatePlural, useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type View = 'graph' | 'text' | 'table'
 
-const VIEWS: { value: View; label: string; hint: string }[] = [
-  { value: 'graph', label: 'Plan', hint: 'Diagramme de l’arbre d’exécution' },
-  { value: 'text', label: 'Raw', hint: 'Sortie textuelle brute d’EXPLAIN' },
-  { value: 'table', label: 'Grid', hint: 'Nœuds en grille, triables' },
-]
+const VIEWS: View[] = ['graph', 'text', 'table']
 
 function formatMs(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—'
+  // Les symboles d'unité de temps ne se traduisent pas : ms et s sont les mêmes partout.
   if (value < 1) return `${value.toFixed(3)} ms`
   if (value < 1000) return `${value.toFixed(2)} ms`
   return `${(value / 1000).toFixed(2)} s`
@@ -37,16 +35,23 @@ function formatBlocks(blocks: number | null | undefined): string {
   if (blocks === null || blocks === undefined) return '—'
   // Un bloc PostgreSQL vaut 8 kio par défaut.
   const bytes = blocks * 8 * 1024
-  if (bytes < 1024 * 1024) return `${formatNumber(blocks)} blocs`
-  return `${formatNumber(blocks)} blocs (${(bytes / 1024 / 1024).toFixed(1)} Mio)`
+  const count = formatNumber(blocks)
+  if (bytes < 1024 * 1024) return tr('plan.unit.blocks', { count })
+  return tr('plan.unit.blocksWithSize', { count, size: (bytes / 1024 / 1024).toFixed(1) })
+}
+
+/** Lignes remontées, accordées en nombre. */
+function rowsLabel(count: number): string {
+  return translatePlural(currentLocale(), 'plan.rows', count, { count: formatNumber(count) })
 }
 
 /** Écart d'estimation : positif = sous-estimation, négatif = surestimation. */
 function formatEstimation(factor: number | null): string {
   if (factor === null) return '—'
   const absolute = Math.abs(factor)
-  if (absolute < 1.5) return 'juste'
-  return factor > 0 ? `×${absolute.toFixed(1)} de plus` : `×${absolute.toFixed(1)} de moins`
+  if (absolute < 1.5) return tr('plan.estimation.exact')
+  const key = factor > 0 ? 'plan.estimation.more' : 'plan.estimation.less'
+  return tr(key, { factor: absolute.toFixed(1) })
 }
 
 function estimationTone(factor: number | null): 'neutral' | 'warn' | 'bad' {
@@ -57,63 +62,64 @@ function estimationTone(factor: number | null): 'neutral' | 'warn' | 'bad' {
   return 'neutral'
 }
 
+/**
+ * Plan d'exécution mesuré, en trois vues. Le composant occupe toute la hauteur que son parent
+ * lui laisse : dans la modale d'analyse, le diagramme est le contenu principal, et tout ce qui
+ * l'entoure doit lui laisser la place.
+ */
 export function PlanView({ result }: { result: QueryAnalysisResult }) {
+  const t = useT()
   const [view, setView] = useState<View>('graph')
   const plan = result.plan
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav
           className="border-border-strong bg-surface flex rounded-[var(--radius-control)] border p-0.5"
-          aria-label="Vue du plan"
+          aria-label={t('plan.viewLabel')}
         >
           {VIEWS.map((item) => (
             <button
-              key={item.value}
+              key={item}
               type="button"
-              onClick={() => setView(item.value)}
-              aria-current={view === item.value ? 'true' : undefined}
-              title={item.hint}
-              className={`rounded-[calc(var(--radius-control)-2px)] px-3 py-1.5 text-sm font-medium transition-colors ${
-                view === item.value
+              onClick={() => setView(item)}
+              aria-current={view === item ? 'true' : undefined}
+              title={t(`plan.view.${item}Hint`)}
+              className={cn(
+                'rounded-[calc(var(--radius-control)-2px)] px-3 py-1.5 text-sm font-medium transition-colors',
+                view === item
                   ? 'bg-brand text-brand-ink'
-                  : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
-              }`}
+                  : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
+              )}
             >
-              {item.label}
+              {t(`plan.view.${item}`)}
             </button>
           ))}
         </nav>
 
         <div className="text-ink-muted flex flex-wrap items-center gap-3 text-xs">
-          <Metric label="Exécution" value={formatMs(plan.executionMs)} strong />
-          <Metric label="Planification" value={formatMs(plan.planningMs)} />
-          <Metric label="Coût total" value={formatNumber(Math.round(plan.totalCost))} />
-          <Metric label="Nœuds" value={String(plan.nodes.length)} />
+          <Metric label={t('plan.total.execution')} value={formatMs(plan.executionMs)} strong />
+          <Metric label={t('plan.total.planning')} value={formatMs(plan.planningMs)} />
+          <Metric label={t('plan.total.cost')} value={formatNumber(Math.round(plan.totalCost))} />
+          <Metric label={t('plan.total.nodes')} value={String(plan.nodes.length)} />
         </div>
       </div>
 
-      {result.notes.map((note) => (
-        <Alert key={note} tone="info">
-          {note}
-        </Alert>
-      ))}
-
       {view === 'graph' && <PlanDiagram plan={plan} />}
-      {view === 'table' && <PlanTables plan={plan} />}
+      {view === 'table' && (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <PlanTables plan={plan} />
+        </div>
+      )}
       {view === 'text' && (
-        <div className="space-y-3">
-          {/* La requête n'est pas rappelée ici : elle est déjà affichée au-dessus du plan. */}
-          <Card title="Plan d'exécution (EXPLAIN, format texte)">
-            <CodeBlock className="max-h-[28rem] overflow-y-auto whitespace-pre">
-              {result.planText}
-            </CodeBlock>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+          {/* La requête n'est pas rappelée ici : la modale l'affiche déjà, une seule fois. */}
+          <Card title={t('plan.text.title')}>
+            <CodeBlock className="whitespace-pre">{result.planText}</CodeBlock>
           </Card>
-          <Card title="Plan brut (format JSON)">
-            <CodeBlock className="max-h-[24rem] overflow-y-auto whitespace-pre">
-              {result.planJson}
-            </CodeBlock>
+          <Card title={t('plan.json.title')}>
+            <CodeBlock className="whitespace-pre">{result.planJson}</CodeBlock>
           </Card>
         </div>
       )}
@@ -125,7 +131,7 @@ function Metric({ label, value, strong }: { label: string; value: string; strong
   return (
     <span className="whitespace-nowrap">
       <span className="text-ink-faint">{label} </span>
-      <span className={strong ? 'font-semibold text-ink' : 'text-ink'}>{value}</span>
+      <span className={strong ? 'text-ink font-semibold' : 'text-ink'}>{value}</span>
     </span>
   )
 }
@@ -136,27 +142,24 @@ const NODE_W = 340
 const GAP_X = 32
 const GAP_Y = 56
 const PAD = 32
-const MIN_ZOOM = 0.35
-const MAX_ZOOM = 1.6
+const MIN_ZOOM = 0.2
+const MAX_ZOOM = 2.5
 
 /** Hauteur supposée d'une carte avant sa première mesure. */
 const ESTIMATED_H = 96
 
 /** Plancher de l'ajustement automatique : en deçà, les cartes ne sont plus lisibles. */
-const FIT_FLOOR = 0.4
+const FIT_FLOOR = 0.3
 
 /** Déplacement, en pixels, à partir duquel un appui devient un glisser plutôt qu'un clic. */
 const PAN_THRESHOLD = 4
 
+/** Pas des boutons de zoom, en facteur multiplicatif — un zoom se raisonne en proportion. */
+const ZOOM_STEP = 1.2
+
 type MetricKey = 'none' | 'self' | 'inclusive' | 'cost' | 'rows'
 
-const METRICS: { value: MetricKey; label: string }[] = [
-  { value: 'self', label: 'Temps propre' },
-  { value: 'inclusive', label: 'Temps cumulé' },
-  { value: 'cost', label: 'Coût propre' },
-  { value: 'rows', label: 'Lignes' },
-  { value: 'none', label: 'Aucune' },
-]
+const METRICS: MetricKey[] = ['self', 'inclusive', 'cost', 'rows', 'none']
 
 /**
  * Sévérité d'une valeur, de 0 (anodin) à 3 (dominant). Une échelle unique pour toutes les
@@ -164,18 +167,16 @@ const METRICS: { value: MetricKey; label: string }[] = [
  */
 type Heat = 0 | 1 | 2 | 3
 
-const HEAT_TOKEN: Record<Heat, string> = {
-  0: '--color-ink-faint',
-  1: '--color-brand',
-  2: '--color-warning',
-  3: '--color-danger',
-}
-
-const HEAT_BADGE: Record<Heat, string> = {
-  0: 'bg-surface-sunken text-ink-muted',
-  1: 'bg-brand-subtle text-brand',
-  2: 'bg-warning-subtle text-warning',
-  3: 'bg-danger-subtle text-danger',
+/**
+ * La sévérité se lit sur une pastille, jamais sur un fond de carte. Un fond teinté impose sa
+ * couleur à tout le texte qu'il porte — libellés, compteurs, conditions — et son contraste
+ * change avec le thème ; une pastille colore un point précis et laisse la carte neutre.
+ */
+const HEAT_DOT: Record<Heat, string> = {
+  0: 'bg-ink-faint/40',
+  1: 'bg-brand',
+  2: 'bg-warning',
+  3: 'bg-danger',
 }
 
 function heatOfShare(fraction: number): Heat {
@@ -195,62 +196,23 @@ function heatOfEstimation(factor: number | null): Heat {
   return 0
 }
 
-/** Ce que fait chaque type de nœud, en une phrase : la lecture d'un plan commence par là. */
-const NODE_DESCRIPTIONS: Record<string, string> = {
-  Aggregate: 'Regroupe les lignes et calcule les agrégats (count, sum, avg…).',
-  Append: 'Concatène les résultats de plusieurs sous-plans, sans les trier.',
-  'Bitmap Heap Scan': 'Relit la table aux emplacements désignés par un index, dans l’ordre des blocs.',
-  'Bitmap Index Scan': 'Parcourt un index pour construire la carte des blocs à relire.',
-  'CTE Scan': 'Lit le résultat matérialisé d’une expression WITH.',
-  'Function Scan': 'Lit les lignes produites par une fonction.',
-  Gather: 'Rassemble les lignes des processus parallèles, sans ordre garanti.',
-  'Gather Merge': 'Rassemble les lignes des processus parallèles en conservant leur tri.',
-  Group: 'Regroupe une entrée déjà triée par la clé de regroupement.',
-  GroupAggregate: 'Calcule les agrégats sur une entrée déjà triée par la clé de regroupement.',
-  Hash: 'Charge son entrée dans une table de hachage, pour la jointure située au-dessus.',
-  HashAggregate: 'Regroupe les lignes par clé dans une table de hachage, puis calcule les agrégats.',
-  'Hash Join': 'Joint deux ensembles en sondant la table de hachage construite sur le plus petit.',
-  'Incremental Sort': 'Trie par paquets, en profitant d’un tri partiel déjà présent.',
-  'Index Only Scan': 'Lit l’index seul, sans toucher la table quand la carte de visibilité le permet.',
-  'Index Scan': 'Parcourt l’index, puis lit dans la table les lignes correspondantes.',
-  Limit: 'Ne remonte que le nombre de lignes demandé, puis interrompt son entrée.',
-  LockRows: 'Pose les verrous demandés par FOR UPDATE / FOR SHARE sur les lignes remontées.',
-  Materialize: 'Conserve son entrée en mémoire pour pouvoir la relire plusieurs fois.',
-  Memoize: 'Met en cache les résultats de la boucle interne pour les clés déjà rencontrées.',
-  'Merge Append': 'Concatène plusieurs sous-plans déjà triés en conservant l’ordre.',
-  'Merge Join': 'Joint deux entrées triées en les parcourant de front.',
-  ModifyTable: 'Applique les INSERT, UPDATE ou DELETE aux lignes reçues.',
-  'Nested Loop': 'Pour chaque ligne de l’entrée externe, parcourt l’entrée interne.',
-  ProjectSet: 'Développe les fonctions qui retournent plusieurs lignes.',
-  'Recursive Union': 'Enchaîne le terme initial et le terme récursif d’un WITH RECURSIVE.',
-  Result: 'Évalue une expression sans lire de table, ou filtre sur une condition constante.',
-  'Sample Scan': 'Lit un échantillon de la table (TABLESAMPLE).',
-  'Seq Scan': 'Lit la table entière, bloc par bloc, sans passer par un index.',
-  SetOp: 'Applique INTERSECT ou EXCEPT à deux entrées triées.',
-  Sort: 'Trie son entrée ; au-delà de work_mem, le tri déborde sur disque.',
-  'Subquery Scan': 'Lit le résultat d’une sous-requête.',
-  'Tid Scan': 'Lit directement les lignes désignées par leur ctid.',
-  Unique: 'Élimine les doublons consécutifs d’une entrée triée.',
-  'Values Scan': 'Lit les lignes littérales d’une clause VALUES.',
-  WindowAgg: 'Calcule les fonctions de fenêtrage sur une entrée triée par partition.',
-}
-
+/** Ce que fait le nœud, en une phrase : la lecture d'un plan commence par là. */
 function describe(nodeType: string): string {
-  return (
-    NODE_DESCRIPTIONS[nodeType] ??
-    NODE_DESCRIPTIONS[nodeType.replace(/^Parallel /, '')] ??
-    'Étape d’exécution du plan.'
-  )
+  const locale = currentLocale()
+  const direct = `plan.describe.${nodeType}`
+  if (hasTranslation(locale, direct)) return tr(direct)
+
+  // « Parallel Seq Scan » fait le même travail qu'un « Seq Scan », en plusieurs processus.
+  const base = `plan.describe.${nodeType.replace(/^Parallel /, '')}`
+  if (hasTranslation(locale, base)) return tr(base)
+
+  return tr('plan.describe.default')
 }
 
-const WARNING_LABELS: Record<string, string> = {
-  'seq-scan': 'parcours complet',
-  'bad-estimate': 'estimation fausse',
-  hotspot: 'temps concentré',
-  'sort-on-disk': 'tri sur disque',
-  'temp-blocks': 'fichiers temporaires',
-  'many-loops': 'boucles nombreuses',
-  'heap-fetches': 'accès au heap',
+/** Libellé d'un avertissement du parseur ; son code brut si l'interface ne le connaît pas. */
+function warningLabel(kind: string): string {
+  const key = `plan.warning.${kind}`
+  return hasTranslation(currentLocale(), key) ? tr(key) : kind
 }
 
 /** Lignes réellement remontées par le nœud, boucles comprises. */
@@ -291,7 +253,10 @@ function ownCosts(nodes: PlanNode[]): ReadonlyMap<number, number> {
   )
 }
 
-/** Sous-titre à la manière d'EXPLAIN : sur quoi le nœud travaille. */
+/**
+ * Sous-titre à la manière d'EXPLAIN : sur quoi le nœud travaille. Les mots-outils restent ceux
+ * de la sortie de PostgreSQL — c'est le vocabulaire que l'opérateur retrouve dans psql.
+ */
 function subtitleOf(node: PlanNode): string | null {
   const alias = node.alias && node.alias !== node.relationName ? ` as ${node.alias}` : ''
 
@@ -412,28 +377,46 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * Cadrage du canevas : facteur d'échelle et translation, exprimés dans le repère de la fenêtre.
+ * Un seul état pour les trois valeurs, car un zoom au curseur les modifie ensemble — les tenir
+ * séparés obligerait à lire l'une pendant qu'on met l'autre à jour.
+ */
+type Viewbox = { zoom: number; x: number; y: number }
+
+/**
  * Diagramme du plan : chaque étape est une carte dépliable, reliée à ses entrées par des
  * connecteurs coudés. Racine en haut, les données remontent des feuilles ; l'épaisseur d'un
  * connecteur dit le nombre de lignes qui remontent.
+ *
+ * Le canevas se déplace par transformation, non par défilement : le glisser part de n'importe
+ * quel point — carte comprise —, porte sur les deux axes sans butée, et le zoom se fait au
+ * curseur, ce qu'une barre de défilement ne sait pas faire.
  */
 function PlanDiagram({ plan }: { plan: ExplainPlan }) {
+  const t = useT()
   const [metric, setMetric] = useState<MetricKey>('self')
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set<number>())
   const [folded, setFolded] = useState<ReadonlySet<number>>(() => new Set<number>())
   const [heights, setHeights] = useState<ReadonlyMap<number, number>>(() => new Map())
   const [selected, setSelected] = useState<number | null>(null)
   const [focus, setFocus] = useState<number | null>(null)
-  const [zoom, setZoom] = useState(1)
+  const [box, setBox] = useState<Viewbox>({ zoom: 1, x: PAD, y: PAD })
+  const [dragging, setDragging] = useState(false)
 
   const viewport = useRef<HTMLDivElement>(null)
+  const layer = useRef<HTMLDivElement>(null)
   const drag = useRef<{
     pointerId: number
     x: number
     y: number
-    left: number
-    top: number
+    originX: number
+    originY: number
+    nextX: number
+    nextY: number
     moved: boolean
   } | null>(null)
+  /** Vrai tant qu'un bouton est enfoncé sur le canevas : sert à étouffer la sélection de texte. */
+  const pressed = useRef(false)
   const swallow = useRef(false)
   const fitted = useRef(false)
 
@@ -462,7 +445,7 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
     [plan],
   )
 
-  /** Les nœuds que PEV2 met en avant : le plus lent, le plus gros, le plus coûteux. */
+  /** Les nœuds qui décident du temps de la requête : le plus lent, le plus gros, le plus coûteux. */
   const culprits = useMemo(() => {
     const best = (score: (node: PlanNode) => number) =>
       plan.nodes.reduce<PlanNode | null>(
@@ -514,20 +497,68 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
     })
   }, [placed, visible])
 
+  // Le cadrage est posé directement sur le nœud, sans passer par le rendu : pendant un glisser,
+  // repasser par l'état re-rendrait toutes les cartes à chaque mouvement de souris.
+  const paint = useCallback((next: Viewbox) => {
+    const element = layer.current
+    if (!element) return
+    element.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) scale(${next.zoom})`
+  }, [])
+
+  useLayoutEffect(() => paint(box), [box, paint])
+
   const fit = useCallback(() => {
     const element = viewport.current
     if (!element) return
 
+    const contentWidth = width + PAD * 2
+    const contentHeight = height + PAD * 2
     // Les deux dimensions : un plan profond déborde par le bas bien avant de déborder à droite.
-    const horizontal = (element.clientWidth - 16) / (width + PAD * 2)
-    const vertical = (element.clientHeight - 16) / (height + PAD * 2)
-    setZoom(clamp(Math.min(horizontal, vertical), FIT_FLOOR, 1))
+    const scale = clamp(
+      Math.min(element.clientWidth / contentWidth, element.clientHeight / contentHeight),
+      FIT_FLOOR,
+      1,
+    )
+
+    const scaledHeight = contentHeight * scale
+    setBox({
+      zoom: scale,
+      // Centré horizontalement, y compris lorsque le plan déborde : la racine reste au milieu.
+      x: (element.clientWidth - contentWidth * scale) / 2,
+      // Verticalement, un plan trop haut se cale en haut : sa racine se lit avant ses feuilles.
+      y: scaledHeight <= element.clientHeight ? (element.clientHeight - scaledHeight) / 2 : 0,
+    })
   }, [width, height])
+
+  /** Zoom autour d'un point de la fenêtre : ce point reste sous le curseur. */
+  const zoomAt = useCallback((factor: number, pivotX: number, pivotY: number) => {
+    setBox((current) => {
+      const zoom = clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM)
+      if (zoom === current.zoom) return current
+
+      const ratio = zoom / current.zoom
+      return {
+        zoom,
+        x: pivotX - (pivotX - current.x) * ratio,
+        y: pivotY - (pivotY - current.y) * ratio,
+      }
+    })
+  }, [])
+
+  /** Zoom depuis les boutons : le centre de la fenêtre sert de point fixe. */
+  const zoomFromCenter = useCallback(
+    (factor: number) => {
+      const element = viewport.current
+      if (!element) return
+      zoomAt(factor, element.clientWidth / 2, element.clientHeight / 2)
+    },
+    [zoomAt],
+  )
 
   useEffect(() => {
     // Une seule fois, et seulement quand toutes les cartes se sont mesurées : ajuster plus tôt
     // reviendrait à cadrer sur des hauteurs estimées, et le refaire ensuite reprendrait la main
-    // sur le zoom choisi par l'opérateur.
+    // sur le cadrage choisi par l'opérateur.
     if (fitted.current || placed.length === 0 || heights.size < placed.length) return
     fitted.current = true
     fit()
@@ -541,18 +572,78 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
     setSelected(null)
   }, [plan])
 
+  // Molette et sélection sont posées à la main : React attache « wheel » en écoute passive, où
+  // preventDefault n'a aucun effet, et ne connaît pas « selectstart ».
+  useEffect(() => {
+    const element = viewport.current
+    if (!element) return
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+
+      const rect = element.getBoundingClientRect()
+
+      // Maj + molette : déplacement latéral, l'habitude des canevas larges.
+      if (event.shiftKey) {
+        setBox((current) => ({ ...current, x: current.x - event.deltaY }))
+        return
+      }
+
+      // deltaMode 1 = lignes plutôt que pixels, sur certaines souris et sous Firefox.
+      const step = event.deltaMode === 1 ? 0.05 : 0.0015
+      zoomAt(Math.exp(-event.deltaY * step), event.clientX - rect.left, event.clientY - rect.top)
+    }
+
+    const onSelectStart = (event: Event) => {
+      // Un appui maintenu sur le canevas est un déplacement, jamais une sélection de texte :
+      // sans cela, glisser depuis une carte surlignait son contenu au lieu de bouger le plan.
+      if (pressed.current) event.preventDefault()
+    }
+
+    element.addEventListener('wheel', onWheel, { passive: false })
+    element.addEventListener('selectstart', onSelectStart)
+
+    return () => {
+      element.removeEventListener('wheel', onWheel)
+      element.removeEventListener('selectstart', onSelectStart)
+    }
+  }, [zoomAt])
+
+  // Raccourci de réajustement. Les champs de saisie gardent la main : la modale en contient.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '0' || event.ctrlKey || event.metaKey || event.altKey) return
+
+      const target = event.target as HTMLElement | null
+      if (target?.isContentEditable) return
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+
+      event.preventDefault()
+      fit()
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [fit])
+
   // Centrage différé : la cible peut être sous une branche repliée, dépliée juste avant.
   useEffect(() => {
     if (focus === null) return
 
     const item = visible.get(focus)
     const element = viewport.current
-    if (!item || !element) return
+    if (!item || !element) {
+      setFocus(null)
+      return
+    }
 
-    element.scrollLeft = (item.x + NODE_W / 2 + PAD) * zoom - element.clientWidth / 2
-    element.scrollTop = (item.y + item.height / 2 + PAD) * zoom - element.clientHeight / 2
+    setBox((current) => ({
+      ...current,
+      x: element.clientWidth / 2 - (item.x + PAD + NODE_W / 2) * current.zoom,
+      y: element.clientHeight / 2 - (item.y + PAD + item.height / 2) * current.zoom,
+    }))
     setFocus(null)
-  }, [focus, visible, zoom])
+  }, [focus, visible])
 
   const reveal = useCallback((id: number) => {
     setSelected(id)
@@ -586,17 +677,22 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
   }, [])
 
   function startPan(event: React.PointerEvent<HTMLDivElement>) {
-    const element = viewport.current
-    if (!element || event.button !== 0) return
+    // Bouton gauche ou bouton du milieu : les deux gestes de déplacement d'un canevas.
+    if (event.button !== 0 && event.button !== 1) return
 
-    // Le glisser part de n'importe où, cartes comprises : sur un diagramme large, le fond
-    // visible ne suffit pas à attraper la vue. Le seuil ci-dessous distingue clic et glisser.
+    // Un glisser précédent qui ne s'est pas terminé par un clic — pointeur relâché hors de la
+    // fenêtre, geste interrompu — laisserait sa consigne d'étouffement derrière lui, et c'est
+    // le clic suivant, légitime, qui serait avalé.
+    swallow.current = false
+    pressed.current = true
     drag.current = {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      left: element.scrollLeft,
-      top: element.scrollTop,
+      originX: box.x,
+      originY: box.y,
+      nextX: box.x,
+      nextY: box.y,
       moved: false,
     }
   }
@@ -612,6 +708,10 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
     if (!state.moved) {
       if (Math.abs(deltaX) < PAN_THRESHOLD && Math.abs(deltaY) < PAN_THRESHOLD) return
       state.moved = true
+      setDragging(true)
+
+      // Une sélection déjà commencée avant l'appui ne doit pas suivre le déplacement.
+      document.getSelection()?.removeAllRanges()
 
       try {
         // La capture n'est prise qu'une fois le geste reconnu, sinon elle volerait le clic.
@@ -621,18 +721,25 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
       }
     }
 
-    element.scrollLeft = state.left - deltaX
-    element.scrollTop = state.top - deltaY
+    // Le déplacement est libre sur les deux axes et sans butée : un plan large se saisit par
+    // n'importe quel point, et rien n'empêche de l'amener au bord de la fenêtre.
+    state.nextX = state.originX + deltaX
+    state.nextY = state.originY + deltaY
+    paint({ zoom: box.zoom, x: state.nextX, y: state.nextY })
   }
 
   function endPan(event: React.PointerEvent<HTMLDivElement>) {
     const state = drag.current
+    pressed.current = false
     if (state?.pointerId !== event.pointerId) return
 
     if (state.moved) {
       if (viewport.current?.hasPointerCapture(event.pointerId)) {
         viewport.current.releasePointerCapture(event.pointerId)
       }
+      setDragging(false)
+      // Le nœud porte déjà la position : l'état la rattrape, sans nouveau tracé.
+      setBox((current) => ({ ...current, x: state.nextX, y: state.nextY }))
       // Le relâchement d'un glisser ne doit pas déplier la carte sous le curseur.
       swallow.current = true
     }
@@ -647,35 +754,25 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
     event.stopPropagation()
   }
 
-  function wheel(event: React.WheelEvent<HTMLDivElement>) {
-    const element = viewport.current
-    if (!element) return
-
-    // Molette horizontale et déplacement latéral au shift : les deux façons habituelles de
-    // parcourir un canevas plus large que sa fenêtre.
-    if (event.shiftKey && event.deltaX === 0) {
-      element.scrollLeft += event.deltaY
-    }
-  }
-
   if (plan.nodes.length === 0) {
-    return <Alert tone="warning">Le plan n'a pas pu être structuré ; utilisez la vue texte brut.</Alert>
+    return <Alert tone="warning">{t('plan.unstructured')}</Alert>
   }
 
   return (
-    <Card padded={false}>
+    <Card padded={false} className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="border-border-subtle flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-ink-muted flex items-center gap-2 text-xs">
-            Mettre en évidence
+            {t('plan.highlight')}
             <Select
               value={metric}
               className="w-36"
+              aria-label={t('plan.highlight')}
               onChange={(event) => setMetric(event.target.value as MetricKey)}
             >
               {METRICS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
+                <option key={item} value={item}>
+                  {t(`plan.metric.${item}`)}
                 </option>
               ))}
             </Select>
@@ -684,21 +781,21 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
           {/* Raccourcis vers les nœuds qui décident du temps de la requête. */}
           <CulpritChip
             icon={Clock}
-            label="le plus lent"
+            label={t('plan.culprit.slowest')}
             node={culprits.slowest}
             value={formatMs(culprits.slowest?.selfMs)}
             onSelect={reveal}
           />
           <CulpritChip
             icon={Rows3}
-            label="le plus gros"
+            label={t('plan.culprit.largest')}
             node={culprits.largest}
-            value={culprits.largest ? `${formatNumber(Math.round(rowsOf(culprits.largest)))} lignes` : '—'}
+            value={culprits.largest ? rowsLabel(Math.round(rowsOf(culprits.largest))) : '—'}
             onSelect={reveal}
           />
           <CulpritChip
             icon={Coins}
-            label="le plus coûteux"
+            label={t('plan.culprit.costliest')}
             node={culprits.costliest}
             value={
               culprits.costliest
@@ -721,19 +818,19 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
             }
             className="border-border-strong text-ink-muted hover:border-brand hover:text-brand h-7 rounded-[var(--radius-control)] border px-2 text-xs"
           >
-            {expanded.size === plan.nodes.length ? 'Tout replier' : 'Tout déplier'}
+            {expanded.size === plan.nodes.length ? t('plan.collapseAll') : t('plan.expandAll')}
           </button>
 
-          <ZoomButton label="Dézoomer" onClick={() => setZoom((z) => clamp(z - 0.15, MIN_ZOOM, MAX_ZOOM))}>
+          <ZoomButton label={t('plan.zoomOut')} onClick={() => zoomFromCenter(1 / ZOOM_STEP)}>
             <Minus className="size-3.5" aria-hidden />
           </ZoomButton>
           <span className="text-ink-muted w-12 text-center text-xs tabular-nums">
-            {Math.round(zoom * 100)} %
+            {Math.round(box.zoom * 100)} %
           </span>
-          <ZoomButton label="Zoomer" onClick={() => setZoom((z) => clamp(z + 0.15, MIN_ZOOM, MAX_ZOOM))}>
+          <ZoomButton label={t('plan.zoomIn')} onClick={() => zoomFromCenter(ZOOM_STEP)}>
             <Plus className="size-3.5" aria-hidden />
           </ZoomButton>
-          <ZoomButton label="Ajuster à la fenêtre" onClick={fit}>
+          <ZoomButton label={t('plan.fit')} onClick={fit}>
             <Maximize2 className="size-3.5" aria-hidden />
           </ZoomButton>
         </div>
@@ -741,112 +838,108 @@ function PlanDiagram({ plan }: { plan: ExplainPlan }) {
 
       <div
         ref={viewport}
+        role="application"
+        aria-label={t('plan.canvasLabel')}
         onPointerDown={startPan}
         onPointerMove={pan}
         onPointerUp={endPan}
         onPointerCancel={endPan}
         onClickCapture={swallowClick}
-        onWheel={wheel}
-        // Hauteur rapportée à la fenêtre : la modale occupant presque tout l'écran, le canevas
-        // suit, sans dépendre d'une chaîne de conteneurs flex qui traverse la modale.
-        className="bg-surface-sunken relative h-[58dvh] min-h-[22rem] cursor-grab touch-none overflow-auto active:cursor-grabbing"
+        className={cn(
+          // Le canevas ne défile pas : c'est la couche transformée qui bouge, sur les deux axes
+          // et sans butée. `touch-none` réserve le geste au déplacement plutôt qu'au navigateur.
+          'bg-surface-sunken relative min-h-[18rem] flex-1 touch-none overflow-hidden',
+          dragging ? 'cursor-grabbing select-none' : 'cursor-grab',
+        )}
       >
-        <div style={{ width: (width + PAD * 2) * zoom, height: (height + PAD * 2) * zoom }}>
-          <div
-            className="relative"
-            style={{
-              width: width + PAD * 2,
-              height: height + PAD * 2,
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-            }}
+        <div
+          ref={layer}
+          className="absolute top-0 left-0 origin-top-left will-change-transform"
+          style={{ width: width + PAD * 2, height: height + PAD * 2 }}
+        >
+          <svg
+            className="pointer-events-none absolute inset-0"
+            width={width + PAD * 2}
+            height={height + PAD * 2}
+            aria-hidden
           >
-            <svg
-              className="pointer-events-none absolute inset-0"
-              width={width + PAD * 2}
-              height={height + PAD * 2}
-              aria-hidden
-            >
-              <defs>
-                <marker
-                  id="plan-flow"
-                  markerWidth="9"
-                  markerHeight="9"
-                  refX="9"
-                  refY="4.5"
-                  orient="auto"
-                  markerUnits="userSpaceOnUse"
-                >
-                  <path d="M0,0 L9,4.5 L0,9 z" className="fill-border-strong" />
-                </marker>
-              </defs>
+            <defs>
+              <marker
+                id="plan-flow"
+                markerWidth="9"
+                markerHeight="9"
+                refX="9"
+                refY="4.5"
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <path d="M0,0 L9,4.5 L0,9 z" className="fill-border-strong" />
+              </marker>
+            </defs>
 
-              <g transform={`translate(${PAD},${PAD})`}>
-                {edges.map((edge) => (
-                  <path
-                    key={edge.id}
-                    d={edge.path}
-                    fill="none"
-                    strokeWidth={edge.thickness}
-                    strokeLinejoin="round"
-                    markerEnd="url(#plan-flow)"
-                    className="stroke-border-strong"
-                  />
-                ))}
-
-                {edges.map((edge) => (
-                  <text
-                    key={`label-${edge.id}`}
-                    x={edge.labelX + 6}
-                    y={edge.labelY}
-                    dominantBaseline="middle"
-                    fontSize={10}
-                    className="fill-ink-faint"
-                    style={{
-                      paintOrder: 'stroke',
-                      stroke: 'var(--color-surface-sunken)',
-                      strokeWidth: 4,
-                    }}
-                  >
-                    {formatNumber(Math.round(edge.rows))}
-                  </text>
-                ))}
-              </g>
-            </svg>
-
-            {placed.map((item) => {
-              const ownCost = costs.get(item.node.id) ?? 0
-              const intensity = maxWeight > 0 ? weightOf(item.node, metric, ownCost) / maxWeight : 0
-
-              return (
-                <PlanNodeCard
-                  key={item.node.id}
-                  item={item}
-                  scales={scales}
-                  ownCost={ownCost}
-                  intensity={intensity}
-                  heat={heatOfShare(intensity)}
-                  selected={selected === item.node.id}
-                  open={expanded.has(item.node.id)}
-                  folded={folded.has(item.node.id)}
-                  onSelect={setSelected}
-                  onToggleDetails={toggleDetails}
-                  onToggleBranch={toggleBranch}
-                  onMeasure={report}
+            <g transform={`translate(${PAD},${PAD})`}>
+              {edges.map((edge) => (
+                <path
+                  key={edge.id}
+                  d={edge.path}
+                  fill="none"
+                  strokeWidth={edge.thickness}
+                  strokeLinejoin="round"
+                  markerEnd="url(#plan-flow)"
+                  className="stroke-border-strong"
                 />
-              )
-            })}
-          </div>
+              ))}
+
+              {edges.map((edge) => (
+                <text
+                  key={`label-${edge.id}`}
+                  x={edge.labelX + 6}
+                  y={edge.labelY}
+                  dominantBaseline="middle"
+                  fontSize={10}
+                  className="fill-ink-faint"
+                  style={{
+                    paintOrder: 'stroke',
+                    stroke: 'var(--color-surface-sunken)',
+                    strokeWidth: 4,
+                  }}
+                >
+                  {formatNumber(Math.round(edge.rows))}
+                </text>
+              ))}
+            </g>
+          </svg>
+
+          {placed.map((item) => {
+            const ownCost = costs.get(item.node.id) ?? 0
+            const intensity = maxWeight > 0 ? weightOf(item.node, metric, ownCost) / maxWeight : 0
+
+            return (
+              <PlanNodeCard
+                key={item.node.id}
+                item={item}
+                scales={scales}
+                ownCost={ownCost}
+                heat={heatOfShare(intensity)}
+                highlighted={metric !== 'none'}
+                selected={selected === item.node.id}
+                open={expanded.has(item.node.id)}
+                folded={folded.has(item.node.id)}
+                onSelect={setSelected}
+                onToggleDetails={toggleDetails}
+                onToggleBranch={toggleBranch}
+                onMeasure={report}
+              />
+            )
+          })}
         </div>
       </div>
 
-      <p className="text-ink-faint border-border-subtle border-t px-3 py-2 text-xs">
-        Les données remontent des feuilles vers la racine ; l'épaisseur d'un connecteur et le
-        nombre qui l'accompagne donnent les lignes remontées. Chaque compteur d'une carte est
-        coloré selon son poids — <span className="text-brand">notable</span>,{' '}
-        <span className="text-warning">lourd</span>, <span className="text-danger">dominant</span>{' '}
-        — et la teinte d'une carte suit la métrique mise en évidence. Le chevron ouvre le détail
-        de l'étape, la pastille sous une carte replie sa branche.
+      <p className="text-ink-faint border-border-subtle shrink-0 border-t px-3 py-2 text-xs">
+        {t('plan.legend.flow')} {t('plan.legend.heat')}{' '}
+        <span className="text-brand">{t('plan.legend.notable')}</span>,{' '}
+        <span className="text-warning">{t('plan.legend.heavy')}</span>,{' '}
+        <span className="text-danger">{t('plan.legend.dominant')}</span>. {t('plan.legend.controls')}
       </p>
     </Card>
   )
@@ -904,16 +997,24 @@ function ZoomButton({
   )
 }
 
+/** Pastille de sévérité : le seul porteur de couleur de la carte. */
+function HeatDot({ heat, className }: { heat: Heat; className?: string }) {
+  return <span aria-hidden className={cn('size-2 shrink-0 rounded-full', HEAT_DOT[heat], className)} />
+}
+
 /**
  * Carte d'une étape : en-tête toujours visible, détail dépliable réparti en onglets. La carte
  * mesure sa propre hauteur et la remonte au diagramme, qui replace les rangées en conséquence.
+ *
+ * Le fond reste neutre dans les deux thèmes : la sévérité passe par des pastilles, une par
+ * compteur, plus celle qui précède le nom de l'étape pour la métrique mise en évidence.
  */
 function PlanNodeCard({
   item,
   scales,
   ownCost,
-  intensity,
   heat,
+  highlighted,
   selected,
   open,
   folded,
@@ -925,8 +1026,9 @@ function PlanNodeCard({
   item: Placed
   scales: Scales
   ownCost: number
-  intensity: number
   heat: Heat
+  /** Faux lorsque la mise en évidence est désactivée : la pastille de tête disparaît alors. */
+  highlighted: boolean
   selected: boolean
   open: boolean
   folded: boolean
@@ -935,6 +1037,7 @@ function PlanNodeCard({
   onToggleBranch: (id: number) => void
   onMeasure: (id: number, height: number) => void
 }) {
+  const t = useT()
   const { node } = item
   const card = useRef<HTMLDivElement>(null)
   const alert = node.warnings.some((warning) => warning.severity === 'warning')
@@ -983,14 +1086,6 @@ function PlanNodeCard({
             onToggleDetails(node.id)
           }}
           aria-expanded={open}
-          // La teinte de l'en-tête suit la sévérité du nœud pour la métrique mise en évidence,
-          // calculée sur les jetons du thème : elle reste juste en mode sombre.
-          style={{
-            backgroundColor:
-              intensity > 0
-                ? `color-mix(in oklab, var(${HEAT_TOKEN[heat]}) ${(8 + intensity * 26).toFixed(1)}%, var(--color-surface))`
-                : undefined,
-          }}
           className="hover:bg-surface-sunken/40 block w-full px-3 py-2.5 text-left"
         >
           <span className="flex items-start gap-2">
@@ -1004,7 +1099,19 @@ function PlanNodeCard({
 
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-ink text-sm font-semibold">{node.nodeType}</span>
+                {/* Sévérité de l'étape pour la métrique mise en évidence, réduite à un point :
+                    la carte reste neutre et son texte garde son contraste dans les deux thèmes. */}
+                <span
+                  className="inline-flex items-center gap-1.5"
+                  title={
+                    highlighted
+                      ? t('plan.node.heatTitle', { level: t(`plan.node.heat.${heat}`) })
+                      : undefined
+                  }
+                >
+                  {highlighted && <HeatDot heat={heat} className="size-2.5" />}
+                  <span className="text-ink text-sm font-semibold">{node.nodeType}</span>
+                </span>
                 {node.joinType && (
                   <span className="text-ink-faint text-[10px] tracking-wide uppercase">
                     {node.joinType}
@@ -1029,11 +1136,16 @@ function PlanNodeCard({
             <span className="text-ink-faint shrink-0 text-[11px] tabular-nums">#{node.id + 1}</span>
           </span>
 
-          {/* Les compteurs du nœud, chacun coloré par sa propre sévérité : le coupable se voit
+          {/* Les compteurs du nœud, chacun porteur de sa propre pastille : le coupable se voit
               sans avoir à ouvrir la carte. */}
           <span className="mt-2 flex flex-wrap items-center gap-1">
             {node.neverExecuted ? (
-              <MetricBadge icon={Ban} heat={0} label="jamais exécuté" title="Branche non atteinte à l'exécution" />
+              <MetricBadge
+                icon={Ban}
+                heat={0}
+                label={t('plan.node.neverExecuted')}
+                title={t('plan.node.neverExecutedTitle')}
+              />
             ) : (
               <>
                 <MetricBadge
@@ -1044,34 +1156,44 @@ function PlanNodeCard({
                       ? formatMs(node.selfMs)
                       : `${formatMs(node.selfMs)} · ${node.selfSharePercent.toFixed(0)} %`
                   }
-                  title="Temps propre, hors sous-arbre"
+                  title={t('plan.node.selfTitle')}
                 />
                 <MetricBadge
                   icon={Rows3}
                   heat={heatOfShare(scales.rows > 0 ? rowsOf(node) / scales.rows : 0)}
                   label={formatNumber(Math.round(rowsOf(node)))}
-                  title="Lignes remontées, boucles comprises"
+                  title={t('plan.node.rowsTitle')}
                 />
                 {node.estimationFactor !== null && Math.abs(node.estimationFactor) >= 1.5 && (
                   <MetricBadge
                     icon={node.estimationFactor > 0 ? ArrowUp : ArrowDown}
                     heat={heatOfEstimation(node.estimationFactor)}
                     label={`×${Math.abs(node.estimationFactor).toFixed(1)}`}
-                    title={`Lignes ${node.estimationFactor > 0 ? 'sous-estimées' : 'surestimées'} par le planificateur`}
+                    title={
+                      node.estimationFactor > 0
+                        ? t('plan.node.underestimated')
+                        : t('plan.node.overestimated')
+                    }
                   />
                 )}
                 <MetricBadge
                   icon={Coins}
                   heat={heatOfShare(scales.cost > 0 ? ownCost / scales.cost : 0)}
                   label={formatNumber(Math.round(ownCost))}
-                  title={`Coût propre au nœud, enfants déduits — coût cumulé ${formatNumber(Math.round(node.totalCost))}`}
+                  title={t('plan.node.costTitle', {
+                    total: formatNumber(Math.round(node.totalCost)),
+                  })}
                 />
                 {(node.parallelAware || workers) && (
                   <MetricBadge
                     icon={Cpu}
                     heat={0}
-                    label={workers ? `×${workers}` : 'parallèle'}
-                    title={`Parcours parallèle${workers ? ` : ${workers} processus` : ''}`}
+                    label={workers ? `×${workers}` : t('plan.node.parallel')}
+                    title={
+                      workers
+                        ? t('plan.node.parallelWorkers', { count: workers })
+                        : t('plan.node.parallelTitle')
+                    }
                   />
                 )}
               </>
@@ -1086,7 +1208,7 @@ function PlanNodeCard({
         <button
           type="button"
           onClick={() => onToggleBranch(node.id)}
-          title={folded ? 'Déplier cette branche' : 'Replier cette branche'}
+          title={folded ? t('plan.node.unfoldBranch') : t('plan.node.foldBranch')}
           className="border-border-strong bg-surface text-ink-muted hover:border-brand hover:text-brand absolute -bottom-2.5 left-1/2 z-10 min-w-5 -translate-x-1/2 rounded-full border px-1.5 text-[10px] leading-4 tabular-nums"
         >
           {folded ? `+${item.hidden}` : '−'}
@@ -1096,6 +1218,11 @@ function PlanNodeCard({
   )
 }
 
+/**
+ * Compteur d'un nœud : pastille de sévérité, icône de la grandeur, valeur. Le contour remplace
+ * l'ancien fond teinté — la valeur garde ainsi la couleur du texte courant, lisible dans les
+ * deux thèmes, et c'est la pastille qui porte l'alerte.
+ */
 function MetricBadge({
   icon: Icon,
   heat,
@@ -1110,12 +1237,10 @@ function MetricBadge({
   return (
     <span
       title={title}
-      className={cn(
-        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
-        HEAT_BADGE[heat],
-      )}
+      className="border-border-subtle text-ink inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium tabular-nums"
     >
-      <Icon className="size-3 shrink-0" aria-hidden />
+      <HeatDot heat={heat} className="size-1.5" />
+      <Icon className="text-ink-faint size-3 shrink-0" aria-hidden />
       {label}
     </span>
   )
@@ -1132,20 +1257,14 @@ function WarningPill({ warning }: { warning: PlanWarning }) {
           : 'bg-surface-sunken text-ink-muted',
       )}
     >
-      {WARNING_LABELS[warning.kind] ?? warning.kind}
+      {warningLabel(warning.kind)}
     </span>
   )
 }
 
 type TabKey = 'general' | 'io' | 'output' | 'workers' | 'misc'
 
-const TABS: { value: TabKey; label: string }[] = [
-  { value: 'general', label: 'Général' },
-  { value: 'io', label: 'E/S & tampons' },
-  { value: 'output', label: 'Sortie' },
-  { value: 'workers', label: 'Parallélisme' },
-  { value: 'misc', label: 'Divers' },
-]
+const TABS: TabKey[] = ['general', 'io', 'output', 'workers', 'misc']
 
 type TabContent = {
   /** Couples courts, affichés sur deux colonnes. */
@@ -1156,21 +1275,23 @@ type TabContent = {
 
 function tabContent(node: PlanNode, tab: TabKey): TabContent {
   const pair = (label: string, value: string | null): [string, string][] =>
-    value === null ? [] : [[label, value]]
+    value === null ? [] : [[tr(label), value]]
+
+  const always = (label: string, value: string): [string, string] => [tr(label), value]
 
   switch (tab) {
     case 'general':
       return {
         pairs: [
-          ['Temps propre', formatMs(node.selfMs)],
-          ['Temps cumulé', formatMs(node.inclusiveMs)],
-          ['Lignes réelles', formatNumber(Math.round(node.actualRows ?? 0))],
-          ['Lignes estimées', formatNumber(Math.round(node.planRows))],
-          ['Écart d’estimation', formatEstimation(node.estimationFactor)],
-          ['Boucles', formatNumber(node.actualLoops ?? 1)],
-          ['Coût de démarrage', formatNumber(Math.round(node.startupCost))],
-          ['Coût cumulé', formatNumber(Math.round(node.totalCost))],
-          ['Largeur', `${node.planWidth} o`],
+          always('plan.field.selfMs', formatMs(node.selfMs)),
+          always('plan.field.inclusiveMs', formatMs(node.inclusiveMs)),
+          always('plan.field.actualRows', formatNumber(Math.round(node.actualRows ?? 0))),
+          always('plan.field.planRows', formatNumber(Math.round(node.planRows))),
+          always('plan.field.estimation', formatEstimation(node.estimationFactor)),
+          always('plan.field.loops', formatNumber(node.actualLoops ?? 1)),
+          always('plan.field.startupCost', formatNumber(Math.round(node.startupCost))),
+          always('plan.field.totalCost', formatNumber(Math.round(node.totalCost))),
+          always('plan.field.width', tr('plan.unit.bytes', { count: node.planWidth })),
         ],
         blocks: [],
       }
@@ -1178,15 +1299,23 @@ function tabContent(node: PlanNode, tab: TabKey): TabContent {
     case 'io':
       return {
         pairs: [
-          ['Blocs en cache', formatBlocks(node.sharedHitBlocks)],
-          ['Blocs lus sur disque', formatBlocks(node.sharedReadBlocks)],
-          ...pair('Blocs salis', node.sharedDirtiedBlocks === null ? null : formatBlocks(node.sharedDirtiedBlocks)),
-          ...pair('Blocs écrits', node.sharedWrittenBlocks === null ? null : formatBlocks(node.sharedWrittenBlocks)),
-          ...pair('Blocs temporaires lus', node.tempReadBlocks === null ? null : formatBlocks(node.tempReadBlocks)),
-          ...pair('Blocs temporaires écrits', node.tempWrittenBlocks === null ? null : formatBlocks(node.tempWrittenBlocks)),
-          ...pair('Accès au heap', node.heapFetches === null ? null : formatNumber(node.heapFetches)),
-          ...pair('Méthode de tri', node.sortMethod),
-          ...pair('Espace de tri', node.sortSpaceUsedKb === null ? null : `${formatNumber(node.sortSpaceUsedKb)} kio (${node.sortSpaceType ?? '?'})`),
+          always('plan.field.sharedHit', formatBlocks(node.sharedHitBlocks)),
+          always('plan.field.sharedRead', formatBlocks(node.sharedReadBlocks)),
+          ...pair('plan.field.sharedDirtied', node.sharedDirtiedBlocks === null ? null : formatBlocks(node.sharedDirtiedBlocks)),
+          ...pair('plan.field.sharedWritten', node.sharedWrittenBlocks === null ? null : formatBlocks(node.sharedWrittenBlocks)),
+          ...pair('plan.field.tempRead', node.tempReadBlocks === null ? null : formatBlocks(node.tempReadBlocks)),
+          ...pair('plan.field.tempWritten', node.tempWrittenBlocks === null ? null : formatBlocks(node.tempWrittenBlocks)),
+          ...pair('plan.field.heapFetches', node.heapFetches === null ? null : formatNumber(node.heapFetches)),
+          ...pair('plan.field.sortMethod', node.sortMethod),
+          ...pair(
+            'plan.field.sortSpace',
+            node.sortSpaceUsedKb === null
+              ? null
+              : tr('plan.unit.sortSpace', {
+                  size: formatNumber(node.sortSpaceUsedKb),
+                  type: node.sortSpaceType ?? '?',
+                }),
+          ),
         ],
         blocks: [],
       }
@@ -1194,27 +1323,33 @@ function tabContent(node: PlanNode, tab: TabKey): TabContent {
     case 'output':
       return {
         pairs: pair(
-          'Lignes écartées par le filtre',
+          'plan.field.rowsRemoved',
           node.rowsRemovedByFilter === null ? null : formatNumber(node.rowsRemovedByFilter),
         ),
         blocks: [
-          ...pair('Condition d’index', node.indexCondition),
-          ...pair('Filtre', node.filter),
-          ...pair('Revérification', node.recheckCondition),
-          ...pair('Condition de hachage', node.hashCondition),
-          ...pair('Filtre de jointure', node.joinFilter),
-          ...pair('Clé de tri', node.sortKey),
-          ...pair('Clé de regroupement', node.groupKey),
+          ...pair('plan.field.indexCondition', node.indexCondition),
+          ...pair('plan.field.filter', node.filter),
+          ...pair('plan.field.recheck', node.recheckCondition),
+          ...pair('plan.field.hashCondition', node.hashCondition),
+          ...pair('plan.field.joinFilter', node.joinFilter),
+          ...pair('plan.field.sortKey', node.sortKey),
+          ...pair('plan.field.groupKey', node.groupKey),
         ],
       }
 
     case 'workers':
       return {
         pairs: [
-          ['Parcours parallèle', node.parallelAware ? 'oui' : 'non'],
-          ['Processus prévus', node.workersPlanned === null ? 'aucun' : String(node.workersPlanned)],
-          ['Processus lancés', node.workersLaunched === null ? 'aucun' : String(node.workersLaunched)],
-          ...pair('Boucles', node.actualLoops === null ? null : formatNumber(node.actualLoops)),
+          always('plan.field.parallelAware', node.parallelAware ? tr('common.yes') : tr('common.no')),
+          always(
+            'plan.field.workersPlanned',
+            node.workersPlanned === null ? tr('plan.value.none') : String(node.workersPlanned),
+          ),
+          always(
+            'plan.field.workersLaunched',
+            node.workersLaunched === null ? tr('plan.value.none') : String(node.workersLaunched),
+          ),
+          ...pair('plan.field.loops', node.actualLoops === null ? null : formatNumber(node.actualLoops)),
         ],
         blocks: [],
       }
@@ -1222,16 +1357,18 @@ function tabContent(node: PlanNode, tab: TabKey): TabContent {
     case 'misc':
       return {
         pairs: [
-          ['Type de nœud', node.nodeType],
-          ...pair('Sous-plan', node.subplanName),
-          ...pair('Relation', node.relationName),
-          ...pair('Alias', node.alias),
-          ...pair('Index', node.indexName),
-          ...pair('Type de jointure', node.joinType),
-          ...pair('Sens de parcours', node.scanDirection),
-          ...pair('Rôle chez le parent', node.parentRelationship),
-          ['Part du coût', `${node.costSharePercent.toFixed(1)} %`],
-          ...(node.neverExecuted ? ([['Exécution', 'branche jamais atteinte']] as [string, string][]) : []),
+          always('plan.field.nodeType', node.nodeType),
+          ...pair('plan.field.subplan', node.subplanName),
+          ...pair('plan.field.relation', node.relationName),
+          ...pair('plan.field.alias', node.alias),
+          ...pair('plan.field.index', node.indexName),
+          ...pair('plan.field.joinType', node.joinType),
+          ...pair('plan.field.scanDirection', node.scanDirection),
+          ...pair('plan.field.parentRelationship', node.parentRelationship),
+          always('plan.field.costShare', `${node.costSharePercent.toFixed(1)} %`),
+          ...(node.neverExecuted
+            ? [always('plan.field.execution', tr('plan.value.skipped'))]
+            : []),
         ],
         blocks: [],
       }
@@ -1239,6 +1376,7 @@ function tabContent(node: PlanNode, tab: TabKey): TabContent {
 }
 
 function NodeDetails({ node }: { node: PlanNode }) {
+  const t = useT()
   const [tab, setTab] = useState<TabKey>('general')
   const content = tabContent(node, tab)
 
@@ -1265,24 +1403,22 @@ function NodeDetails({ node }: { node: PlanNode }) {
       <div className="border-border-subtle bg-surface-sunken flex gap-0.5 overflow-x-auto border-y px-2 py-1">
         {TABS.map((item) => (
           <button
-            key={item.value}
+            key={item}
             type="button"
-            onClick={() => setTab(item.value)}
-            aria-current={tab === item.value ? 'true' : undefined}
+            onClick={() => setTab(item)}
+            aria-current={tab === item ? 'true' : undefined}
             className={cn(
               'rounded-[calc(var(--radius-control)-2px)] px-2 py-1 text-[11px] font-medium whitespace-nowrap',
-              tab === item.value
-                ? 'bg-surface text-ink shadow-card'
-                : 'text-ink-muted hover:text-ink',
+              tab === item ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
             )}
           >
-            {item.label}
+            {t(`plan.tab.${item}`)}
           </button>
         ))}
       </div>
 
       {content.pairs.length === 0 && content.blocks.length === 0 ? (
-        <p className="text-ink-faint px-3 py-2 text-[11px]">Rien à afficher pour cette étape.</p>
+        <p className="text-ink-faint px-3 py-2 text-[11px]">{t('plan.detail.empty')}</p>
       ) : (
         <div className="px-3 py-2">
           {content.pairs.length > 0 && (
@@ -1320,8 +1456,21 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 type SortKey = 'self' | 'inclusive' | 'cost' | 'rows' | 'estimation' | 'reads'
 
+const SORTS: SortKey[] = ['self', 'inclusive', 'cost', 'rows', 'estimation', 'reads']
+
+/** Libellé du critère de tri des tableaux : les mêmes mots que les colonnes qu'il classe. */
+const SORT_LABELS: Record<SortKey, string> = {
+  self: 'plan.table.column.self',
+  inclusive: 'plan.table.column.inclusive',
+  cost: 'plan.table.column.cost',
+  rows: 'plan.table.column.rows',
+  estimation: 'plan.field.estimation',
+  reads: 'plan.table.sort.reads',
+}
+
 /** Vue tableaux : le même plan trié selon le critère qui intéresse, plus un cumul par relation. */
 function PlanTables({ plan }: { plan: ExplainPlan }) {
+  const t = useT()
   const [sort, setSort] = useState<SortKey>('self')
 
   const sorted = useMemo(() => {
@@ -1364,21 +1513,21 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
   return (
     <div className="space-y-4">
       <Card
-        title="Nœuds du plan"
+        title={t('plan.table.title')}
         actions={
           <label className="text-ink-muted flex items-center gap-2 text-xs">
-            Trier par
+            {t('plan.table.sortBy')}
             <Select
               value={sort}
               className="w-44"
+              aria-label={t('plan.table.sortBy')}
               onChange={(event) => setSort(event.target.value as SortKey)}
             >
-              <option value="self">Temps propre</option>
-              <option value="inclusive">Temps cumulé</option>
-              <option value="cost">Coût</option>
-              <option value="rows">Lignes</option>
-              <option value="estimation">Écart d’estimation</option>
-              <option value="reads">Blocs lus sur disque</option>
+              {SORTS.map((item) => (
+                <option key={item} value={item}>
+                  {t(SORT_LABELS[item])}
+                </option>
+              ))}
             </Select>
           </label>
         }
@@ -1388,13 +1537,13 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
           <table className="w-full min-w-[46rem] text-sm">
             <thead className="bg-surface-sunken text-ink-muted text-left text-xs tracking-wide uppercase">
               <tr>
-                <th className="px-3 py-2 font-medium">Nœud</th>
-                <th className="px-3 py-2 font-medium">Coût</th>
-                <th className="px-3 py-2 font-medium">Temps propre</th>
-                <th className="px-3 py-2 font-medium">Cumulé</th>
-                <th className="px-3 py-2 font-medium">Lignes</th>
-                <th className="px-3 py-2 font-medium">Estimation</th>
-                <th className="px-3 py-2 font-medium">Blocs lus</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.node')}</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.cost')}</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.self')}</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.inclusive')}</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.rows')}</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.estimation')}</th>
+                <th className="px-3 py-2 font-medium">{t('plan.table.column.reads')}</th>
               </tr>
             </thead>
             <tbody className="divide-border-subtle divide-y">
@@ -1439,16 +1588,16 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
       </Card>
 
       {byRelation.length > 0 && (
-        <Card title="Cumul par relation" padded={false}>
+        <Card title={t('plan.relations.title')} padded={false}>
           <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[32rem] text-sm">
               <thead className="bg-surface-sunken text-ink-muted text-left text-xs tracking-wide uppercase">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Relation</th>
-                  <th className="px-3 py-2 font-medium">Nœuds</th>
-                  <th className="px-3 py-2 font-medium">Temps propre</th>
-                  <th className="px-3 py-2 font-medium">Coût cumulé</th>
-                  <th className="px-3 py-2 font-medium">Lignes</th>
+                  <th className="px-3 py-2 font-medium">{t('plan.relations.column.relation')}</th>
+                  <th className="px-3 py-2 font-medium">{t('plan.relations.column.nodes')}</th>
+                  <th className="px-3 py-2 font-medium">{t('plan.table.column.self')}</th>
+                  <th className="px-3 py-2 font-medium">{t('plan.field.totalCost')}</th>
+                  <th className="px-3 py-2 font-medium">{t('plan.table.column.rows')}</th>
                 </tr>
               </thead>
               <tbody className="divide-border-subtle divide-y">
@@ -1474,7 +1623,7 @@ function PlanTables({ plan }: { plan: ExplainPlan }) {
       )}
 
       {Object.keys(plan.settings).length > 0 && (
-        <Card title="Paramètres non standard actifs à la planification">
+        <Card title={t('plan.settings.title')}>
           <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             {Object.entries(plan.settings).map(([name, value]) => (
               <Detail key={name} label={name} value={value} />
