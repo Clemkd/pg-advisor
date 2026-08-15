@@ -8,12 +8,6 @@ modifier côté serveur (principe *zero-touch*), et produit un health score et d
 diagnostics à partir d'un moteur de règles YAML rechargeable à chaud et **éditable depuis
 l'interface**.
 
-La supervision ne doit pas peser sur ce qu'elle observe : une règle qui dépasse son timeout,
-échoue ou s'exécute trop lentement est signalée, puis écartée de l'instance concernée le temps
-que la situation se rétablisse — jamais en silence.
-
-→ [Garde-fou de coût](docs/RULES.md#garde-fou-de-coût)
-
 L'outil est utile sans aucune extension PostgreSQL et devient plus précis à mesure que
 `pg_stat_statements`, `pgstattuple` ou HypoPG sont disponibles. TimescaleDB, lorsqu'elle est
 présente, active en plus les règles qui lui sont propres.
@@ -207,5 +201,6 @@ Chaque document existe dans les deux langues.
   ([English](docs/OVERVIEW.md))
 - [Descriptif du projet](docs/PROJECT.md) — périmètre, architecture, priorités du MVP
   ([English](docs/PROJECT.en.md))
-- [Format des règles](docs/RULES.md) — champs, prérequis, expressions, filtres, handlers, API
+- [Format des règles](docs/RULES.md) — champs, prérequis, expressions, filtres, handlers,
+  garde-fou de coût, API
   ([English](docs/RULES.en.md))

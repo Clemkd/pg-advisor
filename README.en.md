@@ -7,12 +7,6 @@ A self-hosted PostgreSQL advisor, shipped as a **single Docker container**. One 
 server side (*zero-touch*), and produces a health score and diagnostics from a YAML rule engine
 that reloads without a restart and is **editable from the interface**.
 
-Supervision must not weigh on what it observes: a rule that overruns its deadline, fails, or runs
-too slowly is flagged, then set aside on that instance until the situation recovers — never
-silently.
-
-→ [Cost guard](docs/RULES.en.md#cost-guard)
-
 The tool is useful with no PostgreSQL extension at all, and grows more precise as
 `pg_stat_statements`, `pgstattuple` or HypoPG become available. TimescaleDB, where present,
 additionally enables the rules specific to it.
@@ -202,4 +196,5 @@ Every document exists in both languages.
 
 - [Interface overview](docs/OVERVIEW.md) — commented screenshots of every view
 - [Project description](docs/PROJECT.en.md) — scope, architecture, MVP priorities
-- [Rule format](docs/RULES.en.md) — fields, prerequisites, expressions, filters, handlers, API
+- [Rule format](docs/RULES.en.md) — fields, prerequisites, expressions, filters, handlers,
+  cost guard, API

@@ -1,4 +1,5 @@
-import { useRef, type ReactNode, type RefObject } from 'react'
+import { useCallback, useRef, useState, type ReactNode, type RefObject } from 'react'
+import type { Completion } from './yamlComplete'
 import { cn } from '@/lib/utils'
 
 /**
@@ -283,6 +284,7 @@ export function YamlEditor({
   changedLines,
   textareaRef,
   fill = false,
+  complete,
 }: {
   value: string
   onChange: (value: string) => void
@@ -298,11 +300,121 @@ export function YamlEditor({
   textareaRef?: RefObject<HTMLTextAreaElement | null>
   /** L'éditeur prend toute la hauteur que son conteneur lui laisse, au lieu de compter ses lignes. */
   fill?: boolean
+  /** Propositions à l'endroit du curseur. Absent, l'éditeur reste une simple saisie. */
+  complete?: (yaml: string, offset: number) => Completion | null
 }) {
   const layer = useRef<HTMLPreElement>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const own = useRef<HTMLTextAreaElement>(null)
+  const input = textareaRef ?? own
+
+  const [completion, setCompletion] = useState<Completion | null>(null)
+  const [active, setActive] = useState(0)
+  const [caret, setCaret] = useState({ top: 0, left: 0 })
+
+  /*
+   * Position du curseur, calculée plutôt que mesurée.
+   *
+   * La saisie est en chasse fixe et `wrap="off"` : une ligne du texte est une ligne à l'écran, et
+   * une colonne vaut toujours la même largeur. Le miroir habituel — un bloc caché qu'on remplit du
+   * même texte pour lire la position — n'apporterait rien ici, et coûterait un second rendu du
+   * document à chaque frappe.
+   */
+  const place = useCallback(() => {
+    const element = input.current
+    const container = box.current
+    if (!element || !container) return
+
+    const styles = window.getComputedStyle(element)
+    const lineHeight = parseFloat(styles.lineHeight) || 18
+    const before = element.value.slice(0, element.selectionStart)
+    const line = before.split('\n').length - 1
+    const column = before.length - (before.lastIndexOf('\n') + 1)
+
+    const probe = document.createElement('span')
+    probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font:${styles.font}`
+    probe.textContent = '0'.repeat(10)
+    container.appendChild(probe)
+    const width = probe.getBoundingClientRect().width / 10
+    probe.remove()
+
+    setCaret({
+      top: parseFloat(styles.paddingTop) + (line + 1) * lineHeight - element.scrollTop,
+      left: parseFloat(styles.paddingLeft) + column * width - element.scrollLeft,
+    })
+  }, [input])
+
+  const refresh = useCallback(() => {
+    const element = input.current
+    if (!element || !complete || readOnly) {
+      setCompletion(null)
+      return
+    }
+
+    const next = complete(element.value, element.selectionStart)
+    setCompletion(next)
+    setActive(0)
+    if (next) place()
+  }, [complete, input, place, readOnly])
+
+  /** Insère la proposition à la place du fragment en cours, et rend la main à la saisie. */
+  const accept = useCallback(
+    (index: number) => {
+      const element = input.current
+      if (!element || !completion) return
+
+      const item = completion.items[index]
+      if (!item) return
+
+      const inserted = item.value + (item.suffix ?? '')
+      const next =
+        element.value.slice(0, completion.from) + inserted + element.value.slice(completion.to)
+      const caretAt = completion.from + inserted.length
+
+      onChange(next)
+      setCompletion(null)
+
+      // Le curseur se repose après le rendu : React réécrit la valeur, ce qui le renverrait à la fin.
+      requestAnimationFrame(() => {
+        element.focus()
+        element.setSelectionRange(caretAt, caretAt)
+      })
+    },
+    [completion, input, onChange],
+  )
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // Ctrl+Espace appelle la liste même si rien n'a été tapé, comme dans un éditeur de code.
+    if (event.ctrlKey && event.code === 'Space') {
+      event.preventDefault()
+      refresh()
+      return
+    }
+
+    if (!completion) return
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const step = event.key === 'ArrowDown' ? 1 : -1
+      setActive((current) => (current + step + completion.items.length) % completion.items.length)
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      accept(active)
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setCompletion(null)
+    }
+  }
 
   return (
     <div
+      ref={box}
       className={cn(
         'border-border-strong bg-surface-sunken focus-within:border-brand focus-within:ring-brand relative overflow-hidden rounded-[var(--radius-control)] border focus-within:ring-1',
         fill && 'min-h-0 flex-1',
@@ -322,14 +434,22 @@ export function YamlEditor({
       </pre>
 
       <textarea
-        ref={textareaRef}
+        ref={input}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          onChange(event.target.value)
+          // Après le rendu : la liste se calcule sur le texte qui vient d'être écrit.
+          requestAnimationFrame(refresh)
+        }}
+        onKeyDown={onKeyDown}
+        onClick={refresh}
+        onBlur={() => setCompletion(null)}
         onScroll={(event) => {
           const element = layer.current
           if (!element) return
           element.scrollTop = event.currentTarget.scrollTop
           element.scrollLeft = event.currentTarget.scrollLeft
+          setCompletion(null)
         }}
         spellCheck={false}
         // Correction et majuscule automatiques désarmées : elles réécrivent du code.
@@ -353,6 +473,40 @@ export function YamlEditor({
           readOnly ? 'caret-transparent cursor-default' : 'caret-ink',
         )}`}
       />
+
+      {/*
+       * Liste des propositions, posée à l'endroit du curseur.
+       *
+       * `pointer-events-none` sur le conteneur et non sur les entrées : un clic dans la liste
+       * ferait perdre le focus à la saisie avant que le clic n'aboutisse, et la liste se fermerait
+       * sous le curseur. On garde donc le clavier comme seul moyen de choisir — c'est aussi ce
+       * qu'on attend d'une complétion pendant la frappe.
+       */}
+      {completion && (
+        <div
+          role="listbox"
+          aria-label={label}
+          style={{ top: caret.top, left: caret.left }}
+          className="bg-surface border-border-subtle shadow-popover pointer-events-none absolute z-30 max-h-48 min-w-56 overflow-auto rounded-[var(--radius-control)] border p-1"
+        >
+          {completion.items.slice(0, 40).map((item, index) => (
+            <div
+              key={item.value}
+              role="option"
+              aria-selected={index === active}
+              className={cn(
+                'flex items-baseline justify-between gap-3 rounded-[var(--radius-control)] px-2 py-1',
+                index === active ? 'bg-brand-subtle text-brand font-medium' : 'text-ink',
+              )}
+            >
+              <span className="truncate font-mono text-meta">{item.value}</span>
+              {item.detail && (
+                <span className="text-ink-muted shrink-0 truncate text-micro">{item.detail}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/primitives'
 import { useFillHeight } from '@/lib/fillHeight'
 import { changedLines } from '@/lib/lineDiff'
+import { completionAt } from '@/lib/yamlComplete'
 import { categoryLabel, formatDateTime, formatSeconds, severityLabel } from '@/lib/format'
 import { tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
@@ -212,6 +213,18 @@ export function RuleEditorPage() {
   const editedLines = useMemo(
     () => (detail ? changedLines(detail.yaml, yaml) : new Set<number>()),
     [detail, yaml],
+  )
+
+  /*
+   * Ce que le serveur sait du format, proposé à l'endroit du curseur.
+   *
+   * Ces mêmes listes étaient posées en aide-mémoire sous l'éditeur : il fallait quitter le texte
+   * des yeux, retenir, puis revenir écrire. Elles arrivent maintenant là où la valeur s'écrit,
+   * filtrées par ce qui est déjà tapé.
+   */
+  const suggest = useCallback(
+    (text: string, offset: number) => (schema ? completionAt(text, offset, schema) : null),
+    [schema],
   )
 
   async function save() {
@@ -445,6 +458,7 @@ export function RuleEditorPage() {
                   errorLines={errorLines}
                   changedLines={editedLines}
                   textareaRef={textarea}
+                  complete={suggest}
                   fill
                 />
 
@@ -567,7 +581,6 @@ export function RuleEditorPage() {
           </div>
         </div>
 
-        {schema && <SchemaHelp schema={schema} />}
       </div>
 
       {confirmDelete && rule && (
@@ -839,71 +852,6 @@ function DryRunPanel({
           </div>
         </FormSection>
       )}
-    </div>
-  )
-}
-
-/**
- * Aide-mémoire de la grammaire des règles. Déployé, il s'étale sur toute la largeur : les
- * listes de mots-clés se rangent alors en trois colonnes au lieu de s'empiler dans une
- * gouttière.
- */
-function SchemaHelp({ schema }: { schema: RuleSchema }) {
-  const t = useT()
-  const [open, setOpen] = useState(false)
-
-  return (
-    <Card>
-      <CardHeader
-        title={t('ruleEditor.help')}
-        description={!open ? t('ruleEditor.helpSummary') : undefined}
-        action={
-          <Button variant="ghost" onClick={() => setOpen((current) => !current)}>
-            {open ? t('ruleEditor.helpHide') : t('ruleEditor.helpShow')}
-          </Button>
-        }
-      />
-      {open && (
-        <CardBody>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
-            <Help label={t('ruleEditor.helpCategories')} items={schema.categories.map(categoryLabel)} />
-            <Help label={t('ruleEditor.helpGroups')} items={schema.groups} />
-            <Help label={t('ruleEditor.helpFilters')} items={schema.filters} />
-            <Help label={t('ruleEditor.helpFunctions')} items={schema.functions} />
-            <Help label={t('ruleEditor.helpExtensions')} items={schema.notableExtensions} />
-            <div className="min-w-0">
-              <dt className="text-ink-muted mb-1 text-micro font-semibold tracking-wider uppercase">
-                {t('ruleEditor.helpHandlers')}
-              </dt>
-              <dd className="space-y-1">
-                {schema.handlers.map((handler) => (
-                  <p key={handler.name} className="text-ink-muted text-meta">
-                    <code className="bg-surface-sunken text-ink rounded px-1 font-mono">
-                      {handler.name}
-                    </code>{' '}
-                    — {handler.description}
-                  </p>
-                ))}
-              </dd>
-            </div>
-          </dl>
-        </CardBody>
-      )}
-    </Card>
-  )
-}
-
-function Help({ label, items }: { label: string; items: string[] }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-ink-muted mb-1 text-micro font-semibold tracking-wider uppercase">{label}</dt>
-      <dd className="flex flex-wrap gap-1">
-        {items.map((item) => (
-          <code key={item} className="bg-surface-sunken text-ink rounded px-1 font-mono text-meta">
-            {item}
-          </code>
-        ))}
-      </dd>
     </div>
   )
 }
