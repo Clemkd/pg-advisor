@@ -594,6 +594,8 @@ public sealed class RulesController(
         category: performance
         severity: warning
         group: recommendations
+        # intervalSeconds: 300   # own schedule, 5 to 86400; defaults to the group's
+        # timeoutSeconds: 30     # own timeout, 1 to 300; defaults to Scheduler:QueryTimeout
 
         requires:
           views:

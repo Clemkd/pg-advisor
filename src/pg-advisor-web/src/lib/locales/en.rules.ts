@@ -181,7 +181,6 @@ export const enRules: Record<string, string> = {
   'ruleEditor.validTag': 'valid',
   'ruleEditor.errorCount.one': '{count} error',
   'ruleEditor.errorCount.other': '{count} errors',
-  'ruleEditor.unsavedTag': 'unsaved',
   'ruleEditor.unsavedTitle': 'Unsaved changes.',
   'ruleEditor.invalidTitle': 'The rule is not valid',
   // A validation error is placed as close as possible to the offending line: it names it, tints
@@ -213,8 +212,6 @@ export const enRules: Record<string, string> = {
   'ruleEditor.addInstance': 'Add an instance',
 
   // --- Rule editor: applicability and cheat sheet -----------------------------
-  'ruleEditor.applicability': 'Applicability',
-  'ruleEditor.applicabilityHint': 'where this rule will run, given the instances known today',
   'ruleEditor.applicableTag': 'applicable',
   'ruleEditor.skippedTag': 'skipped',
   'ruleEditor.degradedTag': 'degraded',
@@ -247,34 +244,27 @@ export const enRules: Record<string, string> = {
   'ruleEditor.helpExtensions': 'Known extensions',
   'ruleEditor.helpHandlers': 'Built-in handlers',
 
-  // --- Rule editor: overrides -------------------------------------------------
-  'ruleEditor.overrides': 'Overrides',
-  'ruleEditor.overridesHint':
-    'An override does not write to the file: it adjusts activation, severity, schedule or thresholds, globally or for a single instance.',
-  'ruleEditor.scope': 'Scope',
-  'ruleEditor.scopeHint': 'one instance, or all of them',
+  // --- Rule editor: instances and variables ----------------------------------
+  'ruleEditor.variables': 'Scope and variables',
+  'ruleEditor.variablesHint':
+    'Where the rule works, and with which values. Everything else — activation, severity, schedule, timeout — is written in the YAML.',
+  'ruleEditor.instances': 'Instances',
+  'ruleEditor.allInstancesHint': 'default values',
+  'ruleEditor.appliedHere': 'Apply the rule on this instance',
+  'ruleEditor.variablesFor': 'Variables — {scope}',
+  'ruleEditor.variableLegend':
+    'The value in force is on the left; on its right, the one it replaces, struck through.',
+  'ruleEditor.noVariables': 'This rule exposes no variable.',
+  'ruleEditor.saveVariables': 'Save variables',
+  'ruleEditor.clearVariables': 'Back to the rule’s values',
+  'ruleEditor.changedLines.one': '{count} changed line',
+  'ruleEditor.changedLines.other': '{count} changed lines',
   'ruleEditor.allInstances': 'All instances',
   // How to read the table: without this, a struck-through value reads as forbidden.
-  'ruleEditor.overrideLegend':
-    'On the left, the value in force today; on the right, what replaces it. A struck-through value is a replaced value.',
   'ruleEditor.fromRule': 'rule',
   'ruleEditor.fromGlobal': 'global',
-  'ruleEditor.noOverrideOption': 'No override',
   'ruleEditor.reset': 'Reset',
   'ruleEditor.resetTitle': 'Reset “{label}” to the inherited value',
-  'ruleEditor.activation': 'Activation',
-  'ruleEditor.enabledOption': 'Enabled',
-  'ruleEditor.disabledOption': 'Disabled',
-  'ruleEditor.interval': 'Schedule (s)',
-  'ruleEditor.intervalHint': 'empty = the group’s',
-  'ruleEditor.intervalFromGroup': '{group} group',
-  'ruleEditor.timeout': 'Timeout (s)',
-  'ruleEditor.timeoutHint': 'from 1 to 300',
-  'ruleEditor.thresholds': 'Thresholds',
-  'ruleEditor.saveOverride': 'Save override',
-  'ruleEditor.deleteOverride': 'Delete this override',
-  'ruleEditor.savedOverrides': 'Saved overrides',
-  'ruleEditor.editOverride': 'Edit the “{scope}” override',
   'ruleEditor.overrideInterval': 'every {seconds} s',
   'ruleEditor.overrideTimeout': 'timeout {seconds} s',
 }

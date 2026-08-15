@@ -201,7 +201,6 @@ export const frRules: Record<string, string> = {
   'ruleEditor.validTag': 'valide',
   'ruleEditor.errorCount.one': '{count} erreur',
   'ruleEditor.errorCount.other': '{count} erreurs',
-  'ruleEditor.unsavedTag': 'non enregistrée',
   'ruleEditor.unsavedTitle': 'Modifications non enregistrées.',
   'ruleEditor.invalidTitle': 'La règle n’est pas valide',
   // Une erreur de validation se pose au plus près de la ligne fautive : elle la nomme, la teinte
@@ -233,8 +232,6 @@ export const frRules: Record<string, string> = {
   'ruleEditor.addInstance': 'Ajouter une instance',
 
   // --- Éditeur de règle : applicabilité et aide-mémoire ---------------------
-  'ruleEditor.applicability': 'Applicabilité',
-  'ruleEditor.applicabilityHint': 'où cette règle s’exécutera, en l’état des instances connues',
   'ruleEditor.applicableTag': 'applicable',
   'ruleEditor.skippedTag': 'ignorée',
   // État du garde-fou, instance par instance. Une règle parfaitement applicable peut avoir été
@@ -271,36 +268,29 @@ export const frRules: Record<string, string> = {
   'ruleEditor.helpExtensions': 'Extensions reconnues',
   'ruleEditor.helpHandlers': 'Handlers internes',
 
-  // --- Éditeur de règle : surcharges ----------------------------------------
-  'ruleEditor.overrides': 'Surcharges',
-  'ruleEditor.overridesHint':
-    'Une surcharge n’écrit pas dans le fichier : elle ajuste l’activation, la sévérité, la périodicité ou les seuils, globalement ou pour une seule instance.',
-  'ruleEditor.scope': 'Portée',
-  'ruleEditor.scopeHint': 'une instance, ou toutes',
+  // --- Éditeur de règle : instances et variables -----------------------------
+  'ruleEditor.variables': 'Application et variables',
+  'ruleEditor.variablesHint':
+    'Où la règle travaille, et avec quelles valeurs. Le reste — activation, sévérité, périodicité, timeout — s’écrit dans le YAML.',
+  'ruleEditor.instances': 'Instances',
+  'ruleEditor.allInstancesHint': 'valeurs par défaut',
+  'ruleEditor.appliedHere': 'Appliquer la règle sur cette instance',
+  'ruleEditor.variablesFor': 'Variables — {scope}',
+  'ruleEditor.variableLegend':
+    'La valeur en vigueur est à gauche ; à droite, celle qu’elle remplace, barrée.',
+  'ruleEditor.noVariables': 'Cette règle n’expose aucune variable.',
+  'ruleEditor.saveVariables': 'Enregistrer les variables',
+  'ruleEditor.clearVariables': 'Revenir aux valeurs de la règle',
+  'ruleEditor.changedLines.one': '{count} ligne modifiée',
+  'ruleEditor.changedLines.other': '{count} lignes modifiées',
   'ruleEditor.allInstances': 'Toutes les instances',
   // Convention de lecture du tableau : sans elle, une valeur barrée se lit comme interdite.
-  'ruleEditor.overrideLegend':
-    'À gauche, la valeur qui s’applique aujourd’hui ; à droite, ce qui la remplace. Une valeur barrée est une valeur remplacée.',
   'ruleEditor.fromRule': 'règle',
   'ruleEditor.fromGlobal': 'globale',
-  'ruleEditor.noOverrideOption': 'Sans surcharge',
   'ruleEditor.reset': 'Rétablir',
   'ruleEditor.resetTitle': 'Rétablir « {label} » à la valeur héritée',
-  'ruleEditor.activation': 'Activation',
-  'ruleEditor.enabledOption': 'Activée',
-  'ruleEditor.disabledOption': 'Désactivée',
-  'ruleEditor.interval': 'Périodicité (s)',
-  'ruleEditor.intervalHint': 'vide = celle du groupe',
-  'ruleEditor.intervalFromGroup': 'groupe {group}',
   // « Timeout » et non « délai maximal » : c'est le mot du champ YAML, du garde-fou et des
   // journaux. Le traduire obligerait à retraduire mentalement à chaque aller-retour.
-  'ruleEditor.timeout': 'Timeout (s)',
-  'ruleEditor.timeoutHint': 'de 1 à 300',
-  'ruleEditor.thresholds': 'Seuils',
-  'ruleEditor.saveOverride': 'Enregistrer la surcharge',
-  'ruleEditor.deleteOverride': 'Supprimer cette surcharge',
-  'ruleEditor.savedOverrides': 'Surcharges enregistrées',
-  'ruleEditor.editOverride': 'Modifier la surcharge de « {scope} »',
   'ruleEditor.overrideInterval': 'toutes les {seconds} s',
   'ruleEditor.overrideTimeout': 'timeout {seconds} s',
 }

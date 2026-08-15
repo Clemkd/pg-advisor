@@ -215,15 +215,31 @@ export function errorLine(message: string, yaml: string): number | null {
 function Highlighted({
   yaml,
   errorLines,
+  changedLines,
 }: {
   yaml: string
   errorLines?: ReadonlySet<number>
+  changedLines?: ReadonlySet<number>
 }): ReactNode {
   return tokenizeYamlLines(yaml).map((tokens, index) => (
-    // Une ligne, un bloc : c'est ce qui permet de teinter la ligne fautive sur toute sa largeur.
-    // Une ligne vide garde sa hauteur grâce à l'espace sans chasse, sinon le calque coloré se
-    // décale d'une ligne par rapport à la saisie.
-    <span key={index} className={cn('block', errorLines?.has(index + 1) && 'bg-danger-subtle')}>
+    /*
+     * Une ligne, un bloc : c'est ce qui permet de teinter la ligne fautive sur toute sa largeur.
+     * Une ligne vide garde sa hauteur grâce à l'espace sans chasse, sinon le calque coloré se
+     * décale d'une ligne par rapport à la saisie.
+     *
+     * Fond et ombre intérieure seulement : une bordure ou une marge décalerait les caractères du
+     * calque d'un ou deux pixels, et le curseur de la saisie cesserait de tomber dessus.
+     */
+    <span
+      key={index}
+      className={cn(
+        'block',
+        errorLines?.has(index + 1)
+          ? 'bg-danger-subtle'
+          : changedLines?.has(index + 1) &&
+            'bg-info-subtle shadow-[inset_2px_0_0_0_var(--color-info)]',
+      )}
+    >
       {tokens.length === 0
         ? '​'
         : tokens.map((token, position) => (
@@ -264,6 +280,7 @@ export function YamlEditor({
   label,
   className,
   errorLines,
+  changedLines,
   textareaRef,
   fill = false,
 }: {
@@ -275,6 +292,8 @@ export function YamlEditor({
   className?: string
   /** Lignes signalées par la validation, numérotées à partir de 1. */
   errorLines?: ReadonlySet<number>
+  /** Lignes modifiées depuis le dernier enregistrement, numérotées à partir de 1. */
+  changedLines?: ReadonlySet<number>
   /** Donne la main sur la saisie : y poser le curseur sur une ligne, par exemple. */
   textareaRef?: RefObject<HTMLTextAreaElement | null>
   /** L'éditeur prend toute la hauteur que son conteneur lui laisse, au lieu de compter ses lignes. */
@@ -296,7 +315,7 @@ export function YamlEditor({
         className="text-ink pointer-events-none absolute inset-0 overflow-hidden px-3 py-2.5 font-mono text-meta leading-relaxed whitespace-pre [tab-size:2]"
       >
         <code>
-          <Highlighted yaml={value} errorLines={errorLines} />
+          <Highlighted yaml={value} errorLines={errorLines} changedLines={changedLines} />
           {/* Ligne vide finale : sans elle, le calque est plus court d'une ligne que la saisie. */}
           <span className="block">{'​'}</span>
         </code>

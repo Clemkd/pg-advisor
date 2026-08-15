@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowRight, FlaskConical, RotateCcw, ServerOff } from 'lucide-react'
+import { FlaskConical, RotateCcw, ServerOff } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type {
   Connection,
@@ -10,7 +10,6 @@ import type {
   RuleDetail,
   RuleOverride,
   RuleSchema,
-  Severity,
 } from '@/api/types'
 import { useAuth } from '@/app/AuthContext'
 import { useEventListener } from '@/app/EventsContext'
@@ -21,6 +20,7 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Checkbox,
   ConfirmDialog,
   EmptyState,
   Field,
@@ -42,6 +42,7 @@ import {
   Tr,
 } from '@/components/ui/primitives'
 import { useFillHeight } from '@/lib/fillHeight'
+import { changedLines } from '@/lib/lineDiff'
 import { categoryLabel, formatDateTime, formatSeconds, severityLabel } from '@/lib/format'
 import { tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
@@ -184,6 +185,18 @@ export function RuleEditorPage() {
   const errorLines = useMemo(
     () => new Set(located.map((item) => item.line).filter((line): line is number => line !== null)),
     [located],
+  )
+
+  /*
+   * Ce qui a été modifié depuis le dernier enregistrement, ligne par ligne.
+   *
+   * Les réglages d'une règle — activation, sévérité, périodicité, timeout — s'écrivent dans le
+   * YAML et non plus dans un formulaire. Une valeur changée doit donc se voir dans le texte,
+   * faute de quoi rien ne distingue ce qu'on vient d'écrire de ce qui était déjà là.
+   */
+  const editedLines = useMemo(
+    () => (detail ? changedLines(detail.yaml, yaml) : new Set<number>()),
+    [detail, yaml],
   )
 
   async function save() {
@@ -369,8 +382,8 @@ export function RuleEditorPage() {
               action={
                 <>
                   {dirty && (
-                    <Badge tone="warning" title={t('ruleEditor.unsavedTitle')}>
-                      {t('ruleEditor.unsavedTag')}
+                    <Badge tone="info" title={t('ruleEditor.unsavedTitle')}>
+                      {tc('ruleEditor.changedLines', editedLines.size)}
                     </Badge>
                   )}
                   {validated !== null &&
@@ -396,6 +409,7 @@ export function RuleEditorPage() {
                   readOnly={!isAdmin}
                   label={t('ruleEditor.yamlLabel')}
                   errorLines={errorLines}
+                  changedLines={editedLines}
                   textareaRef={textarea}
                   fill
                 />
@@ -501,11 +515,17 @@ export function RuleEditorPage() {
               </CardBody>
             </Card>
 
-            {detail && detail.applicability.length > 0 && (
-              <ApplicabilityCard
+            {/* Où la règle s'applique, et avec quelles variables : une seule carte, parce que
+                c'est une seule question — sur quelles bases cette règle travaille, et comment.
+                Le reste — activation, sévérité, périodicité, timeout — vit dans le YAML à
+                gauche : un formulaire qui redirait le fichier obligerait à savoir lequel des
+                deux fait foi. */}
+            {detail && (
+              <VariablesCard
                 detail={detail}
                 isAdmin={isAdmin}
                 onChanged={refreshDetail}
+                onReload={() => void load()}
                 onNotice={setNotice}
                 onFailure={setFailure}
               />
@@ -514,10 +534,6 @@ export function RuleEditorPage() {
         </div>
 
         {schema && <SchemaHelp schema={schema} />}
-
-        {detail && isAdmin && (
-          <OverridesCard detail={detail} connections={connections} onChanged={() => void load()} />
-        )}
       </div>
 
       {confirmDelete && rule && (
@@ -544,119 +560,31 @@ function ErrorList({ errors }: { errors: string[] }) {
   )
 }
 
-/**
- * Où la règle s'exécute, et à quel prix pour l'instance.
- *
- * L'applicabilité disait jusqu'ici « applicable » ou le motif du refus. Le garde-fou ajoute la
- * seule chose qui manquait : une règle applicable peut avoir été écartée parce qu'elle coûtait
- * trop cher, et son diagnostic cesse alors d'être produit sans que personne ne le demande.
- */
-function ApplicabilityCard({
-  detail,
-  isAdmin,
-  onChanged,
-  onNotice,
-  onFailure,
-}: {
-  detail: RuleDetail
-  isAdmin: boolean
-  onChanged: () => Promise<void> | void
-  onNotice: (message: string) => void
-  onFailure: (message: string | null) => void
-}) {
-  const t = useT()
-  const tc = useTc()
-  // `null` en portée signifie « toutes les instances », comme pour l'API : la confirmation porte
-  // donc le libellé de la portée plutôt que son identifiant.
-  const [confirm, setConfirm] = useState<{ connectionId: number | null; scope: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const quarantined = detail.applicability.filter((entry) => entry.health?.quarantined).length
-
-  async function reactivate() {
-    if (!confirm) return
-    setBusy(true)
-
-    try {
-      await api.rules.reactivate(detail.rule.id, confirm.connectionId)
-      onFailure(null)
-      onNotice(t('ruleEditor.reactivated', { scope: confirm.scope }))
-      setConfirm(null)
-      await onChanged()
-    } catch (cause) {
-      onFailure(cause instanceof ApiError ? cause.message : t('ruleEditor.reactivateFailed'))
-      setConfirm(null)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader
-        title={t('ruleEditor.applicability')}
-        description={t('ruleEditor.applicabilityHint')}
-        action={
-          isAdmin &&
-          quarantined > 1 && (
-            <Button
-              variant="ghost"
-              onClick={() => setConfirm({ connectionId: null, scope: t('ruleEditor.allInstances') })}
-            >
-              {t('ruleEditor.reactivateAll')}
-            </Button>
-          )
-        }
-      />
-      <CardBody>
-        <ul className="divide-border-subtle divide-y">
-          {detail.applicability.map((entry) => (
-            <ApplicabilityRow
-              key={entry.connectionId}
-              entry={entry}
-              isAdmin={isAdmin}
-              t={t}
-              tc={tc}
-              onReactivate={() =>
-                setConfirm({ connectionId: entry.connectionId, scope: entry.connectionName })
-              }
-            />
-          ))}
-        </ul>
-      </CardBody>
-
-      {confirm && (
-        <ConfirmDialog
-          title={
-            confirm.connectionId === null
-              ? t('ruleEditor.reactivateAllTitle', { rule: detail.rule.name })
-              : t('ruleEditor.reactivateTitle', {
-                  rule: detail.rule.name,
-                  instance: confirm.scope,
-                })
-          }
-          // La confirmation dit ce qu'elle suppose : que la cause est traitée.
-          description={t('ruleEditor.reactivateBody')}
-          confirmLabel={t('ruleEditor.reactivateConfirm')}
-          busy={busy}
-          onCancel={() => setConfirm(null)}
-          onConfirm={() => void reactivate()}
-        />
-      )}
-    </Card>
-  )
-}
-
 /** Une instance : ce que la règle y fait, et ce que le garde-fou y a constaté. */
 function ApplicabilityRow({
   entry,
   isAdmin,
+  busy,
+  selected,
+  settings,
+  applied,
+  onSelect,
+  onApplied,
   t,
   tc,
   onReactivate,
 }: {
   entry: RuleApplicability
   isAdmin: boolean
+  busy: boolean
+  /** Portée dont les variables sont ouvertes en dessous. */
+  selected: boolean
+  /** Ce qui est déjà réglé à la main sur cette instance. */
+  settings: string[]
+  /** La règle travaille-t-elle ici. */
+  applied: boolean
+  onSelect: () => void
+  onApplied: (applied: boolean) => void
   t: Translator
   tc: PluralTranslator
   onReactivate: () => void
@@ -673,8 +601,28 @@ function ApplicabilityRow({
   const allowed = seconds === null ? '—' : `${seconds} s`
 
   return (
-    <li className="py-2 first:pt-0 last:pb-0">
+    <div className={cn('rounded-[var(--radius-control)] px-2 py-2', selected && 'bg-brand-subtle')}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {/* Cocher, c'est faire travailler la règle ici. Décocher la retire de cette base sans
+            toucher au fichier — et sans la retirer des autres. */}
+        <Checkbox
+          label={<span className="sr-only">{t('ruleEditor.appliedHere')}</span>}
+          checked={applied}
+          disabled={!isAdmin || busy}
+          onChange={(event: React.ChangeEvent<HTMLInputElement>) => onApplied(event.target.checked)}
+        />
+
+        {/* Le nom ouvre les variables de cette instance : la liste sert à choisir où l'on
+            travaille, pas seulement à constater. */}
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-pressed={selected}
+          className="text-ink min-w-0 flex-1 truncate text-left text-body font-medium hover:underline"
+        >
+          {entry.connectionName}
+        </button>
+
         {entry.applicable ? (
           <Badge tone="success">{t('ruleEditor.applicableTag')}</Badge>
         ) : (
@@ -689,10 +637,17 @@ function ApplicabilityRow({
           health?.state === 'degraded' && <Badge tone="warning">{t('ruleEditor.degradedTag')}</Badge>
         )}
 
-        <span className="text-ink min-w-0 truncate">{entry.connectionName}</span>
+        {settings.map((setting) => (
+          <span
+            key={setting}
+            className="bg-info-subtle text-info-strong rounded-full px-1.5 py-0.5 font-mono text-micro"
+          >
+            {setting}
+          </span>
+        ))}
 
         {isAdmin && troubled && (
-          <Button variant="ghost" className="ml-auto" onClick={onReactivate}>
+          <Button variant="ghost" size="sm" onClick={onReactivate}>
             {t('ruleEditor.reactivate')}
           </Button>
         )}
@@ -744,7 +699,7 @@ function ApplicabilityRow({
           )}
         </>
       )}
-    </li>
+    </div>
   )
 }
 
@@ -919,38 +874,100 @@ function Help({ label, items }: { label: string; items: string[] }) {
   )
 }
 
-function OverridesCard({
+/**
+ * Où la règle s'applique, et avec quelles variables.
+ *
+ * Une seule carte, parce que c'est une seule question : sur quelles bases cette règle travaille,
+ * et comment. Le reste — activation, sévérité, périodicité, timeout — appartient au YAML, qui est
+ * la source de vérité ; un formulaire qui le redoublerait obligerait à savoir lequel des deux fait
+ * foi, pour un réglage qu'on écrit une fois.
+ */
+function VariablesCard({
   detail,
-  connections,
+  isAdmin,
   onChanged,
+  onReload,
+  onNotice,
+  onFailure,
 }: {
   detail: RuleDetail
-  connections: Connection[]
-  onChanged: () => void
+  isAdmin: boolean
+  onChanged: () => Promise<void> | void
+  onReload: () => void
+  onNotice: (message: string) => void
+  onFailure: (message: string | null) => void
 }) {
   const t = useT()
+  const tc = useTc()
   const [target, setTarget] = useState<string>('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // `null` en portée signifie « toutes les instances », comme pour l'API : la confirmation porte
+  // donc le libellé de la portée plutôt que son identifiant.
+  const [confirm, setConfirm] = useState<{ connectionId: number | null; scope: string } | null>(null)
 
   const connectionId = target === '' ? null : Number(target)
   const existing = useMemo(
     () => detail.rule.overrides.find((item) => (item.connectionId ?? null) === connectionId),
     [detail.rule.overrides, connectionId],
   )
+  const settingsFor = (id: number | null) =>
+    detail.rule.overrides.find((item) => (item.connectionId ?? null) === id)
 
-  const [enabled, setEnabled] = useState<string>('')
-  const [severity, setSeverity] = useState<string>('')
-  const [interval, setInterval] = useState<string>('')
-  const [timeout, setTimeout] = useState<string>('')
+  const quarantined = detail.applicability.filter((entry) => entry.health?.quarantined).length
+  const scopeName =
+    connectionId === null
+      ? t('ruleEditor.allInstances')
+      : (detail.applicability.find((entry) => entry.connectionId === connectionId)?.connectionName ??
+        String(connectionId))
+
+  async function reactivate() {
+    if (!confirm) return
+    setBusy(true)
+
+    try {
+      await api.rules.reactivate(detail.rule.id, confirm.connectionId)
+      onFailure(null)
+      onNotice(t('ruleEditor.reactivated', { scope: confirm.scope }))
+      setConfirm(null)
+      await onChanged()
+    } catch (cause) {
+      onFailure(cause instanceof ApiError ? cause.message : t('ruleEditor.reactivateFailed'))
+      setConfirm(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Applique ou retire la règle sur une instance. Enregistré aussitôt, sans bouton : c'est un
+   * booléen qui se défait d'un second clic, et le confirmer serait un péage.
+   */
+  async function setApplied(id: number, applied: boolean) {
+    const current = settingsFor(id)
+    setBusy(true)
+
+    try {
+      await api.rules.saveOverride(detail.rule.id, {
+        connectionId: id,
+        enabled: applied ? null : false,
+        severity: current?.severity ?? null,
+        intervalSeconds: current?.intervalSeconds ?? null,
+        timeoutSeconds: current?.timeoutSeconds ?? null,
+        parameters: current?.parameters ?? null,
+      })
+      onReload()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : t('ruleEditor.saveFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
-  // Recharge le formulaire lorsque la cible de surcharge change.
+  // Recharge le formulaire lorsque la cible change.
   useEffect(() => {
-    setEnabled(existing?.enabled === undefined || existing?.enabled === null ? '' : String(existing.enabled))
-    setSeverity(existing?.severity ?? '')
-    setInterval(existing?.intervalSeconds ? String(existing.intervalSeconds) : '')
-    setTimeout(existing?.timeoutSeconds ? String(existing.timeoutSeconds) : '')
     setParameters(
       Object.fromEntries(
         Object.entries(existing?.parameters ?? {}).map(([key, value]) => [key, String(value)]),
@@ -974,15 +991,6 @@ function OverridesCard({
   const from = (fromGlobal: boolean) =>
     fromGlobal ? t('ruleEditor.fromGlobal') : t('ruleEditor.fromRule')
 
-  const baseEnabled = inherited?.enabled ?? detail.rule.enabled
-  const baseSeverity = inherited?.severity ?? detail.rule.severity
-  const baseInterval = inherited?.intervalSeconds ?? detail.rule.intervalSeconds
-  // Délai appliqué à défaut de surcharge : celui du fichier, sinon celui du scheduler. Ce dernier
-  // n'a pas de valeur devinable côté interface — une API qui ne le renvoie pas laisse un tiret
-  // plutôt qu'un chiffre inventé.
-  const defaultTimeout = detail.rule.timeoutSeconds ?? detail.rule.defaultTimeoutSeconds ?? null
-  const baseTimeout = inherited?.timeoutSeconds ?? defaultTimeout
-
   const ruleParameters = Object.entries(detail.rule.parameters)
   const baseParameter = (key: string) =>
     String(inherited?.parameters?.[key] ?? detail.rule.parameters[key] ?? '—')
@@ -999,12 +1007,16 @@ function OverridesCard({
     }
 
     try {
+      // Les quatre autres champs ne se règlent plus ici, mais une surcharge enregistrée avant
+      // ce changement peut encore en porter : les réécrire tels quels évite de les effacer au
+      // premier enregistrement de variable. Le récapitulatif les montre, ils ne sont pas perdus
+      // de vue pour autant.
       await api.rules.saveOverride(detail.rule.id, {
         connectionId,
-        enabled: enabled === '' ? null : enabled === 'true',
-        severity: severity === '' ? null : (severity as Severity),
-        intervalSeconds: interval === '' ? null : Number(interval),
-        timeoutSeconds: timeout === '' ? null : Number(timeout),
+        enabled: existing?.enabled ?? null,
+        severity: existing?.severity ?? null,
+        intervalSeconds: existing?.intervalSeconds ?? null,
+        timeoutSeconds: existing?.timeoutSeconds ?? null,
         parameters: Object.keys(normalized).length > 0 ? normalized : null,
       })
       onChanged()
@@ -1031,119 +1043,65 @@ function OverridesCard({
     <Card>
       {/* L'explication tient sur la ligne du titre : elle situe la carte sans ouvrir le
           formulaire par un paragraphe. */}
-      <CardHeader title={t('ruleEditor.overrides')} description={t('ruleEditor.overridesHint')} />
+      <CardHeader
+        title={t('ruleEditor.variables')}
+        description={t('ruleEditor.variablesHint')}
+        action={
+          isAdmin &&
+          quarantined > 1 && (
+            <Button
+              variant="ghost"
+              onClick={() => setConfirm({ connectionId: null, scope: t('ruleEditor.allInstances') })}
+            >
+              {t('ruleEditor.reactivateAll')}
+            </Button>
+          )
+        }
+      />
       <CardBody className="space-y-5">
-        <Field label={t('ruleEditor.scope')} hint={t('ruleEditor.scopeHint')} className="max-w-sm">
-          <Select value={target} onChange={(event) => setTarget(event.target.value)}>
-            <option value="">{t('ruleEditor.allInstances')}</option>
-            {connections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.name}
-              </option>
+        {/* Les instances d'abord : on choisit là où la règle travaille, puis avec quoi. La même
+            liste porte les deux gestes — cocher une instance, et l'ouvrir pour ses variables. */}
+        <FormSection title={t('ruleEditor.instances')}>
+          <ul className="divide-border-subtle divide-y">
+            <li>
+              <ScopeHeader
+                label={t('ruleEditor.allInstances')}
+                hint={t('ruleEditor.allInstancesHint')}
+                selected={connectionId === null}
+                settings={changesOf(settingsFor(null), t)}
+                onSelect={() => setTarget('')}
+              />
+            </li>
+
+            {detail.applicability.map((entry) => (
+              <li key={entry.connectionId}>
+                <ApplicabilityRow
+                  entry={entry}
+                  isAdmin={isAdmin}
+                  busy={busy}
+                  selected={connectionId === entry.connectionId}
+                  settings={changesOf(settingsFor(entry.connectionId), t)}
+                  applied={settingsFor(entry.connectionId)?.enabled !== false}
+                  onSelect={() => setTarget(String(entry.connectionId))}
+                  onApplied={(applied) => void setApplied(entry.connectionId, applied)}
+                  t={t}
+                  tc={tc}
+                  onReactivate={() =>
+                    setConfirm({ connectionId: entry.connectionId, scope: entry.connectionName })
+                  }
+                />
+              </li>
             ))}
-          </Select>
-        </Field>
+          </ul>
+        </FormSection>
 
-        {/* La convention de lecture se dit une fois, au-dessus du tableau : sans elle, une valeur
-            barrée se lit comme une valeur interdite plutôt que comme une valeur remplacée. */}
-        <p className="text-ink-muted text-meta">{t('ruleEditor.overrideLegend')}</p>
+        <FormSection title={t('ruleEditor.variablesFor', { scope: scopeName })}>
+          {/* La convention de lecture se dit une fois : sans elle, une valeur barrée se lit
+              comme une valeur interdite plutôt que comme une valeur remplacée. */}
+          <p className="text-ink-muted mb-3 text-meta">{t('ruleEditor.variableLegend')}</p>
 
-        <div className="border-border-subtle overflow-hidden rounded-[var(--radius-control)] border">
-          <OverrideRow
-            label={t('ruleEditor.activation')}
-            base={baseEnabled ? t('rules.enabledTag') : t('rules.disabledTag')}
-            baseFrom={from(inherited?.enabled != null)}
-            overridden={enabled !== ''}
-            onReset={() => setEnabled('')}
-          >
-            {(id) => (
-              <Select
-                id={id}
-                value={enabled}
-                onChange={(event) => setEnabled(event.target.value)}
-                className={overriddenControl(enabled !== '')}
-              >
-                <option value="">{t('ruleEditor.noOverrideOption')}</option>
-                <option value="true">{t('ruleEditor.enabledOption')}</option>
-                <option value="false">{t('ruleEditor.disabledOption')}</option>
-              </Select>
-            )}
-          </OverrideRow>
-
-          <OverrideRow
-            label={t('common.severity')}
-            base={severityLabel(baseSeverity)}
-            baseFrom={from(inherited?.severity != null)}
-            overridden={severity !== ''}
-            onReset={() => setSeverity('')}
-          >
-            {(id) => (
-              <Select
-                id={id}
-                value={severity}
-                onChange={(event) => setSeverity(event.target.value)}
-                className={overriddenControl(severity !== '')}
-              >
-                <option value="">{t('ruleEditor.noOverrideOption')}</option>
-                <option value="info">{t('severity.info')}</option>
-                <option value="warning">{t('severity.warning')}</option>
-                <option value="critical">{t('severity.critical')}</option>
-              </Select>
-            )}
-          </OverrideRow>
-
-          <OverrideRow
-            label={t('ruleEditor.interval')}
-            hint={t('ruleEditor.intervalHint')}
-            base={
-              baseInterval === null
-                ? t('ruleEditor.intervalFromGroup', { group: detail.rule.group })
-                : `${baseInterval} s`
-            }
-            baseFrom={from(inherited?.intervalSeconds != null)}
-            overridden={interval !== ''}
-            onReset={() => setInterval('')}
-          >
-            {(id) => (
-              <Input
-                id={id}
-                type="number"
-                min={5}
-                max={86400}
-                value={interval}
-                onChange={(event) => setInterval(event.target.value)}
-                className={overriddenControl(interval !== '')}
-              />
-            )}
-          </OverrideRow>
-
-          {/* Le timeout est ce que le garde-fou surveille : au-delà, l'exécution est comptée
-              comme un incident, et la règle finit par être écartée de l'instance. */}
-          <OverrideRow
-            label={t('ruleEditor.timeout')}
-            hint={t('ruleEditor.timeoutHint')}
-            base={baseTimeout === null ? '—' : `${baseTimeout} s`}
-            baseFrom={from(inherited?.timeoutSeconds != null)}
-            overridden={timeout !== ''}
-            onReset={() => setTimeout('')}
-          >
-            {(id) => (
-              <Input
-                id={id}
-                type="number"
-                min={1}
-                max={300}
-                value={timeout}
-                onChange={(event) => setTimeout(event.target.value)}
-                className={overriddenControl(timeout !== '')}
-              />
-            )}
-          </OverrideRow>
-        </div>
-
-        {ruleParameters.length > 0 && (
-          <FormSection title={t('ruleEditor.thresholds')}>
-            <div className="border-border-subtle overflow-hidden rounded-[var(--radius-control)] border">
+        {ruleParameters.length > 0 ? (
+          <div className="border-border-subtle overflow-hidden rounded-[var(--radius-control)] border">
               {ruleParameters.map(([key]) => (
                 <OverrideRow
                   key={key}
@@ -1166,73 +1124,94 @@ function OverridesCard({
                   )}
                 </OverrideRow>
               ))}
-            </div>
-          </FormSection>
+          </div>
+        ) : (
+          // Une règle sans variable n'a rien à régler ici : le dire vaut mieux qu'une carte vide
+          // qui laisse chercher ce qu'on aurait manqué.
+          <p className="text-ink-muted text-meta">{t('ruleEditor.noVariables')}</p>
         )}
 
-        {error && <Notice tone="danger">{error}</Notice>}
+          {error && <Notice tone="danger">{error}</Notice>}
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="primary" size="lg" onClick={save} loading={busy}>
-            {t('ruleEditor.saveOverride')}
-          </Button>
-          {existing && (
-            <Button onClick={remove} disabled={busy}>
-              {t('ruleEditor.deleteOverride')}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="primary" onClick={save} loading={busy} disabled={!isAdmin}>
+              {t('ruleEditor.saveVariables')}
             </Button>
-          )}
-        </div>
-
-        {detail.rule.overrides.length > 0 && (
-          <FormSection title={t('ruleEditor.savedOverrides')}>
-            {/* Chaque surcharge enregistrée ramène le formulaire sur sa portée : la liste
-                cesse d'être un simple relevé qu'il fallait recopier dans le sélecteur. */}
-            <ul className="space-y-1">
-              {detail.rule.overrides.map((item) => {
-                const scope = item.connectionName ?? t('ruleEditor.allInstances')
-                const value = item.connectionId === null ? '' : String(item.connectionId)
-                const active = value === target
-
-                return (
-                  <li key={item.connectionId ?? 'global'}>
-                    <button
-                      type="button"
-                      onClick={() => setTarget(value)}
-                      aria-pressed={active}
-                      title={t('ruleEditor.editOverride', { scope })}
-                      className={cn(
-                        'flex min-h-8 w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-control)] px-2 py-1 text-left transition-colors',
-                        active ? 'bg-brand-subtle' : 'hover:bg-surface-sunken',
-                      )}
-                    >
-                      <Badge tone="neutral">{scope}</Badge>
-
-                      {/* Ce que la surcharge change, dans la teinte qui dit « valeur posée » —
-                          la même que dans le tableau au-dessus. Un ruban de fragments gris ne
-                          laissait pas voir combien de réglages étaient en jeu. */}
-                      {changesOf(item, t).map((change) => (
-                        <span
-                          key={change}
-                          className="bg-info-subtle text-info-strong rounded-full px-1.5 py-0.5 font-mono text-micro"
-                        >
-                          {change}
-                        </span>
-                      ))}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </FormSection>
-        )}
+            {existing && (
+              <Button onClick={remove} disabled={busy || !isAdmin}>
+                {t('ruleEditor.clearVariables')}
+              </Button>
+            )}
+          </div>
+        </FormSection>
       </CardBody>
+
+      {confirm && (
+        <ConfirmDialog
+          title={
+            confirm.connectionId === null
+              ? t('ruleEditor.reactivateAllTitle', { rule: detail.rule.name })
+              : t('ruleEditor.reactivateTitle', {
+                  rule: detail.rule.name,
+                  instance: confirm.scope,
+                })
+          }
+          // La confirmation dit ce qu'elle suppose : que la cause est traitée.
+          description={t('ruleEditor.reactivateBody')}
+          confirmLabel={t('ruleEditor.reactivateConfirm')}
+          busy={busy}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => void reactivate()}
+        />
+      )}
     </Card>
   )
 }
 
-/** Encre d'une valeur posée par la surcharge : la même partout, tableau comme récapitulatif. */
+/** Encre d'une valeur posée à la main : la même partout. */
 function overriddenControl(overridden: boolean): string {
   return overridden ? 'text-info-strong font-semibold' : ''
+}
+
+/**
+ * Entrée « toutes les instances » de la liste : la valeur par défaut, celle qui s'applique là où
+ * rien n'est réglé à part. Elle n'a ni applicabilité ni garde-fou — elle ne vise aucune base.
+ */
+function ScopeHeader({
+  label,
+  hint,
+  selected,
+  settings,
+  onSelect,
+}: {
+  label: string
+  hint: string
+  selected: boolean
+  settings: string[]
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        'flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-control)] px-2 py-2 text-left transition-colors',
+        selected ? 'bg-brand-subtle' : 'hover:bg-surface-sunken',
+      )}
+    >
+      <span className="text-ink text-body font-medium">{label}</span>
+      <span className="text-ink-muted text-meta">{hint}</span>
+      {settings.map((setting) => (
+        <span
+          key={setting}
+          className="bg-info-subtle text-info-strong rounded-full px-1.5 py-0.5 font-mono text-micro"
+        >
+          {setting}
+        </span>
+      ))}
+    </button>
+  )
 }
 
 /**
@@ -1281,22 +1260,23 @@ function OverrideRow({
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
-        {/* La valeur remplacée reste à l'encre `ink-muted`, pas `ink-faint` : à 12 px, cette
-            dernière tient 4,1:1 sur le fond, sous le seuil AA. Le barré dit déjà « remplacée » —
-            l'effacer davantage la rendrait illisible sans rien ajouter au sens. */}
-        <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
-          <span className="text-ink-muted text-micro tracking-wider uppercase">{baseFrom}</span>
+        <div className="min-w-0 flex-1 basis-40">{children(controlId)}</div>
+
+        {/*
+         * La valeur remplacée se tient à droite de celle qui la remplace : on lit la valeur en
+         * vigueur d'abord, et ce qu'elle a chassé ensuite, sans que l'ancienne occupe la place
+         * de la neuve.
+         *
+         * Encre `ink-muted` et non `ink-faint` : à 12 px, cette dernière tient 4,1:1 sur le fond,
+         * sous le seuil AA. Le barré dit déjà « remplacée » — l'effacer davantage la rendrait
+         * illisible sans rien ajouter au sens.
+         */}
+        <span className="flex min-w-0 shrink-0 items-baseline gap-1.5" title={baseFrom}>
           <span className={cn('text-ink-muted truncate font-mono text-meta', overridden && 'line-through')}>
             {base}
           </span>
+          <span className="text-ink-muted text-micro tracking-wider uppercase">{baseFrom}</span>
         </span>
-
-        <ArrowRight
-          className={cn('size-3.5 shrink-0', overridden ? 'text-info' : 'text-ink-faint')}
-          aria-hidden
-        />
-
-        <div className="min-w-0 flex-1 basis-40">{children(controlId)}</div>
 
         {/* Le retour en arrière n'existe qu'une fois qu'il y a quelque chose à défaire : vider le
             champ à la main marche aussi, encore faut-il deviner que le vide veut dire « hérité ». */}
@@ -1311,8 +1291,9 @@ function OverrideRow({
   )
 }
 
-/** Ce qu'une surcharge enregistrée change, en une suite de fragments lisibles. */
-function changesOf(item: RuleOverride, t: Translator): string[] {
+/** Ce qui est réglé à la main sur une portée, en une suite de fragments lisibles. */
+function changesOf(item: RuleOverride | undefined, t: Translator): string[] {
+  if (!item) return []
   const changes: string[] = []
 
   if (item.enabled !== null) {
