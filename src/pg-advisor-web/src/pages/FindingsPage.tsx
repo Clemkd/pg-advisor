@@ -418,11 +418,13 @@ export function FindingsPage() {
         {/* Point d'entrée de la vue : le chiffre qui commande la lecture. Le reste de l'écran lui
             est hiérarchiquement inférieur. L'écart depuis la dernière donnée reçue est posé à côté
             du chiffre : devant un écran immobile, la première question est « est-ce à jour ? ».
-            La taille est posée ici et non par `Hero` : la fusion de classes range `text-display`
-            et `text-danger` dans la même famille et n'en garde qu'une — la couleur. */}
+
+            En une ligne : le sujet de cette vue est le tableau, et un en-tête empilé lui prenait
+            plus de quarante pixels de hauteur utile pour dire cinq choses courtes. */}
         <Hero
+          compact
           label={t('severity.critical')}
-          value={<span className="text-display">{summary ? summary.critical : '—'}</span>}
+          value={summary ? summary.critical : '—'}
           tone={summary && summary.critical > 0 ? 'danger' : 'success'}
           hint={summary ? tc('findings.hero.pending', summary.active) : undefined}
           meta={

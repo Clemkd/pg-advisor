@@ -97,6 +97,10 @@ export function Stat({
  * Un écran lu tous les jours en diagonale a besoin d'un endroit où l'œil se pose sans chercher.
  * D'où la taille — `text-display` — et la teinte prise sur la valeur : le score se lit avant d'être
  * lu. `aside` accueille une jauge, `meta` les badges qui qualifient, `action` le pas suivant.
+ *
+ * `compact` range les mêmes éléments sur une seule ligne au lieu de les empiler. Une vue dont
+ * l'essentiel est la liste en dessous ne peut pas donner cent quarante pixels à son en-tête ;
+ * la ligne se replie d'elle-même sur un écran étroit, où l'empilement revient sans être décidé.
  */
 export function Hero({
   label,
@@ -106,6 +110,7 @@ export function Hero({
   aside,
   meta,
   action,
+  compact = false,
   className,
 }: {
   label: ReactNode
@@ -116,8 +121,24 @@ export function Hero({
   aside?: ReactNode
   meta?: ReactNode
   action?: ReactNode
+  /** Tout sur une ligne, pour une vue où l'en-tête n'est pas le sujet. */
+  compact?: boolean
   className?: string
 }) {
+  const number = (
+    <p
+      className={cn(
+        'font-semibold tabular-nums',
+        // Sur un téléphone, la ligne se replie et le chiffre n'a plus rien à dominer : il reste
+        // le plus gros élément de l'écran à 24 px, et rend huit pixels à la liste.
+        compact ? 'text-metric sm:text-display' : 'text-display',
+        VALUE_TONES[tone ?? 'default'],
+      )}
+    >
+      {value}
+    </p>
+  )
+
   return (
     <section
       className={cn(
@@ -127,14 +148,28 @@ export function Hero({
     >
       {aside && <div className="shrink-0">{aside}</div>}
 
-      <div className="min-w-0 flex-1">
-        <p className="text-ink-muted text-micro font-semibold tracking-wider uppercase">{label}</p>
-        <p className={cn('text-display mt-1 font-semibold tabular-nums', VALUE_TONES[tone ?? 'default'])}>
-          {value}
-        </p>
-        {hint && <p className="text-ink-muted text-meta mt-1">{hint}</p>}
-        {meta && <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div>}
-      </div>
+      {compact ? (
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Le chiffre et ce qu'il compte ne se séparent pas : même groupe, aligné sur la
+              ligne de base, pour qu'un repli les emporte ensemble. */}
+          <div className="flex items-baseline gap-2">
+            {number}
+            <p className="text-ink-muted text-micro font-semibold tracking-wider uppercase">
+              {label}
+            </p>
+          </div>
+
+          {hint && <p className="text-ink-muted min-w-0 text-meta">{hint}</p>}
+          {meta && <div className="flex flex-wrap items-center gap-1.5">{meta}</div>}
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1">
+          <p className="text-ink-muted text-micro font-semibold tracking-wider uppercase">{label}</p>
+          <div className="mt-1">{number}</div>
+          {hint && <p className="text-ink-muted text-meta mt-1">{hint}</p>}
+          {meta && <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div>}
+        </div>
+      )}
 
       {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
     </section>
