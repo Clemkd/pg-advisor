@@ -1,18 +1,27 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { api } from '../api/client'
-import type { ConnectionDetail } from '../api/types'
-import { useEventListener } from '../app/EventsContext'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { Check, X } from 'lucide-react'
+import { api } from '@/api/client'
+import type { CapabilityStatus, ConnectionDetail } from '@/api/types'
+import { useEventListener } from '@/app/EventsContext'
+import { Hero, Page } from '@/components/layout/Page'
+import type { ValueTone } from '@/components/layout/Page'
 import {
-  Alert,
+  Badge,
   Card,
+  CardAction,
+  CardBody,
+  CardHeader,
   EmptyState,
-  PageHeader,
-  ScoreBar,
-  ScoreRing,
-  Spinner,
-  Tag,
-} from '../components/ui'
+  KeyValue,
+  KeyValueGrid,
+  LastUpdated,
+  LiveRegion,
+  LoadingBlock,
+  Notice,
+  RefreshBar,
+} from '@/components/ui/primitives'
+import { ScoreBar, ScoreRing } from '@/components/ui/score'
 import {
   categoryLabel,
   collectionStateLabel,
@@ -20,27 +29,72 @@ import {
   formatDateTime,
   formatNumber,
   formatPercent,
+  formatRelative,
   formatSeconds,
-} from '../lib/format'
-import { tr, useT } from '../lib/i18n'
+  scoreTone,
+} from '@/lib/format'
+import { currentLocale, translate, tr, useT, useTc } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
+const LIVE_EVENTS = [
+  'collection.state',
+  'instance.changed',
+  'health.changed',
+  'finding.created',
+  'finding.resolved',
+]
+
+const HERO_TONES: Record<string, ValueTone> = {
+  good: 'success',
+  warn: 'warning',
+  bad: 'danger',
+}
+
+/**
+ * Détail d'une instance. On y arrive pour comprendre l'état d'une base : le score et sa
+ * décomposition d'abord, l'activité mesurée ensuite, ce que l'Advisor sait lire en dernier.
+ */
 export function InstanceDetailPage() {
   const t = useT()
+  const tc = useTc()
   const { id } = useParams<{ id: string }>()
   const connectionId = Number(id)
 
   const [detail, setDetail] = useState<ConnectionDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [receivedAt, setReceivedAt] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState<string | null>(null)
+
+  const previousScore = useRef<number | null | undefined>(undefined)
 
   const load = useCallback(async () => {
+    setRefreshing(true)
     try {
-      setDetail(await api.connections.get(connectionId))
+      const next = await api.connections.get(connectionId)
+      setDetail(next)
+      setReceivedAt(new Date().toISOString())
       setError(null)
+
+      const score = next.connection.health?.global ?? null
+      // Le premier chargement n'annonce rien : afficher n'est pas changer.
+      if (previousScore.current !== undefined && previousScore.current !== score && score !== null) {
+        setAnnouncement(
+          translate(currentLocale(), 'instanceDetail.live.scoreChanged', {
+            name: next.connection.name,
+            score,
+          }),
+        )
+      } else {
+        setAnnouncement(null)
+      }
+      previousScore.current = score
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [connectionId])
 
@@ -48,288 +102,376 @@ export function InstanceDetailPage() {
     void load()
   }, [load])
 
-  useEventListener(
-    ['collection.state', 'instance.changed', 'health.changed', 'finding.created', 'finding.resolved'],
-    (event) => {
-      if (event.connectionId === null || event.connectionId === connectionId) {
-        void load()
-      }
-    },
-  )
+  useEventListener(LIVE_EVENTS, (event) => {
+    if (event.connectionId === null || event.connectionId === connectionId) {
+      void load()
+    }
+  })
+
+  const health = detail?.connection.health ?? null
 
   if (loading) {
     return (
-      <div className="flex justify-center py-16">
-        <Spinner className="size-6" />
-      </div>
+      <Page title={t('nav.instances')}>
+        <LoadingBlock />
+      </Page>
     )
   }
 
-  if (error) {
-    return <Alert title={t('common.error')}>{error}</Alert>
-  }
-
   if (!detail) {
-    return null
+    return (
+      <Page title={t('nav.instances')}>
+        <Notice tone="danger" title={t('common.error')}>
+          {error ?? t('common.loadFailed')}
+        </Notice>
+      </Page>
+    )
   }
 
   const { connection, capabilities, capabilitySummary } = detail
   const metrics = connection.metrics
   const views = capabilitySummary.filter((capability) => capability.kind === 'view')
   const extensions = capabilitySummary.filter((capability) => capability.kind === 'extension')
+  const presentExtensions = extensions.filter((extension) => extension.available)
+  const missingExtensions = extensions.filter((extension) => !extension.available)
+  const score = health?.global ?? null
+  const categories = Object.entries(connection.health?.categories ?? {}).sort(([, a], [, b]) => a - b)
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        breadcrumb={
-          <>
-            <Link to="/instances" className="hover:underline">
-              {t('nav.instances')}
-            </Link>{' '}
-            / {connection.name}
-          </>
-        }
-        title={connection.name}
-        subtitle={`${connection.host}:${connection.port} · ${connection.database} · ${connection.username}`}
-        meta={
-          <>
-            <Tag tone={connection.collectionState === 'error' ? 'bad' : 'accent'}>
-              {connection.enabled
-                ? collectionStateLabel(connection.collectionState)
-                : t('instances.disabledBadge')}
-            </Tag>
-            {connection.serverVersion && <Tag>PostgreSQL {connection.serverVersion}</Tag>}
-          </>
-        }
-        actions={
-          <Link
-            to={`/findings?connectionId=${connection.id}`}
-            className="inline-flex items-center rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken"
-          >
-            {t('instanceDetail.seeFindings')}
-          </Link>
-        }
-      />
+    <Page
+      title={connection.name}
+      description={[
+        connection.serverVersion ? `PostgreSQL ${connection.serverVersion}` : null,
+        `${connection.host}:${connection.port}`,
+        connection.database,
+        connection.username,
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+      meta={
+        <>
+          <Badge tone={stateTone(connection.enabled, connection.collectionState)}>
+            {connection.enabled
+              ? collectionStateLabel(connection.collectionState)
+              : t('instances.disabledBadge')}
+          </Badge>
+          <LastUpdated at={receivedAt} />
+        </>
+      }
+      actions={
+        <CardAction to={`/findings?connectionId=${connection.id}`}>
+          {t('instanceDetail.seeDiagnostics')}
+        </CardAction>
+      }
+    >
+      <div className="space-y-4" aria-busy={refreshing}>
+        <LiveRegion message={announcement} />
 
-      {connection.lastError && (
-        <Alert title={t('instanceDetail.lastCollectionError')}>{connection.lastError}</Alert>
-      )}
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card title={t('instanceDetail.health')}>
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
-            <ScoreRing score={connection.health?.global ?? null} />
-            <dl className="w-full min-w-0 space-y-1 text-sm text-ink-muted">
-              <div>
-                {t('dashboard.criticals')} :{' '}
-                <span className="font-semibold text-ink">{connection.health?.critical ?? 0}</span>
-              </div>
-              <div>
-                {t('dashboard.warnings')} :{' '}
-                <span className="font-semibold text-ink">{connection.health?.warning ?? 0}</span>
-              </div>
-              <div>
-                {t('dashboard.infos')} :{' '}
-                <span className="font-semibold text-ink">{connection.health?.info ?? 0}</span>
-              </div>
-              <div className="pt-1 text-xs text-ink-muted">
-                {t('instanceDetail.collectedAt', {
-                  when: formatDateTime(connection.lastCollectedAt),
-                })}
-              </div>
-            </dl>
-          </div>
-        </Card>
-
-        <Card title={t('dashboard.categoryScores')} className="lg:col-span-2">
-          {!connection.health || Object.keys(connection.health.categories).length === 0 ? (
-            <EmptyState title={t('instanceDetail.noScore')}>
-              {t('instanceDetail.noScoreHint')}
-            </EmptyState>
-          ) : (
-            <div className="space-y-2.5">
-              {Object.entries(connection.health.categories)
-                .sort(([, a], [, b]) => a - b)
-                .map(([category, score]) => (
-                  <ScoreBar key={category} label={categoryLabel(category)} score={score} />
-                ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <Card title={t('instanceDetail.activity')}>
-        {!metrics ? (
-          <EmptyState title={t('instanceDetail.noMetrics')}>
-            {t('instanceDetail.noMetricsHint')}
-          </EmptyState>
-        ) : (
-          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            <MetricTile
-              label={t('dashboard.connections')}
-              value={`${formatNumber(metrics.connections)} / ${formatNumber(metrics.maxConnections)}`}
-              detail={formatPercent(metrics.connectionUsage)}
-            />
-            <MetricTile
-              label={t('instanceDetail.activeQueries')}
-              value={formatNumber(metrics.activeQueries)}
-            />
-            <MetricTile
-              label={t('instanceDetail.idleInTransaction')}
-              value={formatNumber(metrics.idleInTransaction)}
-            />
-            <MetricTile
-              label={t('instanceDetail.blockedSessions')}
-              value={formatNumber(metrics.blockedSessions)}
-            />
-            <MetricTile
-              label={t('instanceDetail.longestTransaction')}
-              value={formatSeconds(metrics.longestTransactionSeconds)}
-            />
-            <MetricTile
-              label={t('instanceDetail.longestQuery')}
-              value={formatSeconds(metrics.longestQuerySeconds)}
-            />
-            <MetricTile
-              label={t('instanceDetail.cacheHitRatio')}
-              value={formatPercent(metrics.cacheHitRatio)}
-            />
-            <MetricTile
-              label={t('instanceDetail.databaseSize')}
-              value={formatBytes(metrics.databaseSizeBytes)}
-            />
-            <MetricTile label={t('instanceDetail.commits')} value={formatNumber(metrics.commits)} />
-            <MetricTile
-              label={t('instanceDetail.rollbacks')}
-              value={formatNumber(metrics.rollbacks)}
-            />
-            <MetricTile
-              label={t('instanceDetail.deadlocks')}
-              value={formatNumber(metrics.deadlocks)}
-            />
-            <MetricTile
-              label={t('instanceDetail.tempFiles')}
-              value={formatBytes(metrics.tempBytes)}
-            />
-          </dl>
+        {error && (
+          <Notice tone="danger" title={t('common.error')}>
+            {error}
+          </Notice>
         )}
-      </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title={t('instanceDetail.capabilities')}>
-          {capabilities ? (
-            <>
-              <dl className="mb-3 grid grid-cols-2 gap-2 text-sm">
-                <Info label={t('instanceDetail.version')} value={capabilities.serverVersion} />
-                <Info label={t('instanceDetail.user')} value={capabilities.currentUser} />
-                <Info
-                  label={t('instanceDetail.superuser')}
-                  value={capabilities.isSuperuser ? t('common.yesShort') : t('common.noShort')}
-                />
-                <Info
-                  label="pg_monitor"
-                  value={capabilities.hasPgMonitor ? t('common.yesShort') : t('common.noShort')}
-                />
-                <Info
-                  label={t('instanceDetail.inRecovery')}
-                  value={capabilities.inRecovery ? t('common.yesShort') : t('common.noShort')}
-                />
-                <Info
-                  label={t('instanceDetail.detected')}
-                  value={formatDateTime(capabilities.detectedAt)}
-                />
-              </dl>
+        {connection.lastError && (
+          <Notice tone="danger" title={t('instanceDetail.lastCollectionError')}>
+            {connection.lastError}
+          </Notice>
+        )}
 
-              <p className="mb-1.5 text-xs font-semibold text-ink-muted">
-                {t('category.extensions')}
-              </p>
-              <ul className="mb-3 space-y-0.5 font-mono text-xs">
-                {extensions.map((extension) => (
-                  <li
-                    key={extension.name}
-                    className={extension.available ? 'text-success' : 'text-ink-faint'}
-                  >
-                    {extension.available ? '✓' : '✗'} {extension.name}
-                    {extension.version && ` ${extension.version}`}
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Hero
+            label={t('instanceDetail.health')}
+            value={
+              score === null ? (
+                '—'
+              ) : (
+                <>
+                  {score}
+                  <span className="text-ink-muted text-body font-normal"> {t('score.outOf')}</span>
+                </>
+              )
+            }
+            tone={score === null ? undefined : HERO_TONES[scoreTone(score)]}
+            hint={
+              <span title={formatDateTime(connection.lastCollectedAt)}>
+                {connection.lastCollectedAt
+                  ? t('instanceDetail.collectedAt', {
+                      when: formatRelative(connection.lastCollectedAt),
+                    })
+                  : t('dashboard.awaitingCollection')}
+              </span>
+            }
+            aside={<ScoreRing score={score} size={72} />}
+            meta={
+              health && (
+                <>
+                  {health.critical > 0 && (
+                    <Badge tone="danger">{tc('dashboard.criticalCount', health.critical)}</Badge>
+                  )}
+                  {health.warning > 0 && (
+                    <Badge tone="warning">{tc('dashboard.warningCount', health.warning)}</Badge>
+                  )}
+                  {health.info > 0 && (
+                    <Badge tone="info">{tc('dashboard.infoCount', health.info)}</Badge>
+                  )}
+                  {health.total === 0 && <Badge tone="success">{t('dashboard.noDiagnosticBadge')}</Badge>}
+                </>
+              )
+            }
+          />
+
+          <Card className="lg:col-span-2">
+            <CardHeader title={t('dashboard.categoryScores')} />
+            <CardBody>
+              {categories.length === 0 ? (
+                <EmptyState
+                  title={t('instanceDetail.noScore')}
+                  description={t('instanceDetail.noScoreHint')}
+                />
+              ) : (
+                <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                  {categories.map(([category, categoryScore]) => (
+                    <ScoreBar key={category} label={categoryLabel(category)} score={categoryScore} />
+                  ))}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </div>
+
+        {/* Le bloc qui bouge le plus : il garde son contenu pendant qu'il se met à jour, et le
+            liseré dit qu'une collecte est arrivée. */}
+        <Card className="overflow-hidden">
+          <RefreshBar active={refreshing} />
+          <CardHeader
+            title={t('instanceDetail.activity')}
+            description={
+              metrics ? (
+                <span title={formatDateTime(metrics.collectedAt)}>
+                  {t('instanceDetail.collectedAt', { when: formatRelative(metrics.collectedAt) })}
+                </span>
+              ) : undefined
+            }
+          />
+          <CardBody>
+            {!metrics ? (
+              <EmptyState
+                title={t('instanceDetail.noMetrics')}
+                description={t('instanceDetail.noMetricsHint')}
+              />
+            ) : (
+              <KeyValueGrid columns={4}>
+                <KeyValue label={t('dashboard.connections')}>
+                  {formatNumber(metrics.connections)} / {formatNumber(metrics.maxConnections)}
+                  <span className="text-ink-muted"> ({formatPercent(metrics.connectionUsage)})</span>
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.activeQueries')}>
+                  {formatNumber(metrics.activeQueries)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.idleInTransaction')}>
+                  {formatNumber(metrics.idleInTransaction)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.blockedSessions')}>
+                  {formatNumber(metrics.blockedSessions)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.longestTransaction')}>
+                  {formatSeconds(metrics.longestTransactionSeconds)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.longestQuery')}>
+                  {formatSeconds(metrics.longestQuerySeconds)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.cacheHitRatio')}>
+                  {formatPercent(metrics.cacheHitRatio)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.databaseSize')}>
+                  {formatBytes(metrics.databaseSizeBytes)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.commits')}>
+                  {formatNumber(metrics.commits)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.rollbacks')}>
+                  {formatNumber(metrics.rollbacks)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.deadlocks')}>
+                  {formatNumber(metrics.deadlocks)}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.tempFiles')}>
+                  {formatBytes(metrics.tempBytes)}
+                </KeyValue>
+              </KeyValueGrid>
+            )}
+          </CardBody>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader title={t('instanceDetail.capabilities')} />
+            <CardBody className="space-y-4">
+              {!capabilities ? (
+                <EmptyState
+                  title={t('instanceDetail.unknownCapabilities')}
+                  description={t('instanceDetail.unknownCapabilitiesHint')}
+                />
+              ) : (
+                <>
+                  <KeyValueGrid columns={2}>
+                    <KeyValue label={t('instanceDetail.version')}>
+                      {capabilities.serverVersion}
+                    </KeyValue>
+                    <KeyValue label={t('instanceDetail.user')}>{capabilities.currentUser}</KeyValue>
+                    <KeyValue label={t('instanceDetail.superuser')}>
+                      {capabilities.isSuperuser ? t('common.yesShort') : t('common.noShort')}
+                    </KeyValue>
+                    <KeyValue label="pg_monitor">
+                      {capabilities.hasPgMonitor ? t('common.yesShort') : t('common.noShort')}
+                    </KeyValue>
+                    <KeyValue label={t('instanceDetail.inRecovery')}>
+                      {capabilities.inRecovery ? t('common.yesShort') : t('common.noShort')}
+                    </KeyValue>
+                    <KeyValue label={t('instanceDetail.detected')}>
+                      {formatDateTime(capabilities.detectedAt)}
+                    </KeyValue>
+                  </KeyValueGrid>
+
+                  {/* La version d'une extension — TimescaleDB comprise — se lit ici, avec les
+                      autres extensions, et nulle part ailleurs : ce n'est pas une caractéristique
+                      de l'instance mais un détail de ce qui est installé. */}
+                  <CapabilityList
+                    title={t('instanceDetail.extensionsPresent', {
+                      count: presentExtensions.length,
+                    })}
+                    items={presentExtensions}
+                    empty={t('instanceDetail.noExtension')}
+                    available
+                  />
+
+                  {missingExtensions.length > 0 && (
+                    <CapabilityList
+                      title={t('instanceDetail.extensionsMissing', {
+                        count: missingExtensions.length,
+                      })}
+                      items={missingExtensions}
+                      empty={t('instanceDetail.noExtension')}
+                      available={false}
+                    />
+                  )}
+
+                  <CapabilityList
+                    title={tc('instanceDetail.readableViews', views.length)}
+                    items={views}
+                    empty={t('instanceDetail.noView')}
+                    available
+                  />
+                </>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title={t('instanceDetail.collectionSettings')} />
+            <CardBody className="space-y-4">
+              <KeyValueGrid columns={2}>
+                <KeyValue label={t('instanceDetail.instanceEnabled')}>
+                  {connection.enabled ? t('common.yesShort') : t('common.noShort')}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.sslMode')}>{connection.sslMode}</KeyValue>
+                <KeyValue label={t('instanceDetail.ownInterval')}>
+                  {connection.collectionIntervalSeconds > 0
+                    ? `${connection.collectionIntervalSeconds} s`
+                    : t('instanceDetail.globalInterval')}
+                </KeyValue>
+                <KeyValue label={t('instanceDetail.createdAt')}>
+                  {formatDateTime(connection.createdAt)}
+                </KeyValue>
+              </KeyValueGrid>
+
+              {/* Le principe zero-touch se rappelle là où l'on règle la collecte : l'Advisor
+                  diagnostique, il ne corrige jamais. Les deux réglages sont nommés puis
+                  expliqués — une phrase à trous autour d'un bloc de code ne se traduit pas. */}
+              <Notice tone="info" title={t('instanceDetail.readOnlyTitle')}>
+                <p>{t('instanceDetail.readOnlyIntro')}</p>
+                <ul className="mt-1 space-y-0.5">
+                  <li>
+                    <code className="font-mono">default_transaction_read_only=on</code>
+                    <span className="text-ink-muted"> — {t('instanceDetail.readOnlyItem')}</span>
                   </li>
-                ))}
-              </ul>
-
-              <p className="mb-1.5 text-xs font-semibold text-ink-muted">
-                {t('instanceDetail.readableViews', { count: views.length })}
-              </p>
-              <ul className="max-h-56 space-y-0.5 overflow-y-auto font-mono text-xs text-success">
-                {views.map((view) => (
-                  <li key={view.name}>✓ {view.name}</li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <EmptyState title={t('instanceDetail.unknownCapabilities')}>
-              {t('instanceDetail.unknownCapabilitiesHint')}
-            </EmptyState>
-          )}
-        </Card>
-
-        <Card title={t('instanceDetail.collectionSettings')}>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <Info
-              label={t('instanceDetail.instanceEnabled')}
-              value={connection.enabled ? t('common.yesShort') : t('common.noShort')}
-            />
-            <Info label={t('instanceDetail.sslMode')} value={connection.sslMode} />
-            <Info
-              label={t('instanceDetail.ownInterval')}
-              value={
-                connection.collectionIntervalSeconds > 0
-                  ? `${connection.collectionIntervalSeconds} s`
-                  : t('instanceDetail.globalInterval')
-              }
-            />
-            <Info
-              label={t('instanceDetail.createdAt')}
-              value={formatDateTime(connection.createdAt)}
-            />
-          </dl>
-
-          <p className="mt-4 rounded-md bg-surface-sunken p-3 text-xs text-ink-muted">
-            {t('instanceDetail.readOnlyNoticeBefore')}
-            <code className="mx-1 rounded bg-border-subtle px-1">default_transaction_read_only=on</code>
-            {t('instanceDetail.readOnlyNoticeMiddle')}
-            <code className="mx-1 rounded bg-border-subtle px-1">statement_timeout</code>
-            {t('instanceDetail.readOnlyNoticeAfter')}
-          </p>
-        </Card>
+                  <li>
+                    <code className="font-mono">statement_timeout</code>
+                    <span className="text-ink-muted">
+                      {' '}
+                      — {t('instanceDetail.readOnlyTimeoutItem')}
+                    </span>
+                  </li>
+                </ul>
+                <p className="mt-1">{t('instanceDetail.readOnlyZeroTouch')}</p>
+              </Notice>
+            </CardBody>
+          </Card>
+        </div>
       </div>
-    </div>
+    </Page>
   )
 }
 
-function MetricTile({
-  label,
-  value,
-  detail,
+/** `brand` ne dit jamais un état : une collecte en cours est une information. */
+function stateTone(enabled: boolean, state: string): 'neutral' | 'danger' | 'success' | 'info' {
+  if (!enabled) return 'neutral'
+  if (state === 'error') return 'danger'
+  if (state === 'idle') return 'success'
+  return 'info'
+}
+
+/**
+ * Ce que l'Advisor sait lire sur l'instance : extensions installées, vues accessibles. Deux
+ * colonnes de noms plutôt qu'une zone défilante — la liste est courte et se lit une fois.
+ */
+function CapabilityList({
+  title,
+  items,
+  empty,
+  available,
 }: {
-  label: string
-  value: string
-  detail?: string
+  title: string
+  items: CapabilityStatus[]
+  empty: string
+  available: boolean
 }) {
   return (
-    <div className="rounded-md border border-border-subtle px-3 py-2">
-      <dt className="text-[11px] uppercase tracking-wide text-ink-faint">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold tabular-nums text-ink">{value}</dd>
-      {detail && <p className="text-xs text-ink-muted">{detail}</p>}
-    </div>
-  )
-}
+    <section>
+      <h3 className="text-ink-muted mb-1.5 text-micro font-semibold tracking-wider uppercase">
+        {title}
+      </h3>
 
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="truncate text-[11px] uppercase tracking-wide text-ink-faint">{label}</dt>
-      <dd className="truncate text-ink" title={value}>
-        {value}
-      </dd>
-    </div>
+      {items.length === 0 ? (
+        <p className="text-ink-muted text-body">{empty}</p>
+      ) : (
+        <ul className="grid gap-x-4 sm:grid-cols-2">
+          {items.map((item) => (
+            <li key={item.name} className="flex min-w-0 items-center gap-1.5 py-0.5">
+              {available ? (
+                <Check className="text-success size-3.5 shrink-0" aria-hidden />
+              ) : (
+                <X className="text-ink-faint size-3.5 shrink-0" aria-hidden />
+              )}
+              <span
+                className={cn(
+                  'truncate font-mono text-body',
+                  available ? 'text-ink' : 'text-ink-muted',
+                )}
+                title={item.name}
+              >
+                {item.name}
+              </span>
+              {item.version && (
+                <span className="text-ink-muted shrink-0 text-meta tabular-nums">
+                  {item.version}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

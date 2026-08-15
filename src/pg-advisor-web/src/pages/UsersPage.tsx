@@ -1,34 +1,52 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError } from '../api/client'
-import type { UserAccount } from '../api/types'
-import { useAuth } from '../app/AuthContext'
+import { UserPlus } from 'lucide-react'
+import { api, ApiError } from '@/api/client'
+import type { UserAccount } from '@/api/types'
+import { useAuth } from '@/app/AuthContext'
+import { Page } from '@/components/layout/Page'
 import {
-  Alert,
+  Badge,
   Button,
   Card,
+  CardBody,
+  CardHeader,
+  ConfirmDialog,
   EmptyState,
   Field,
   Input,
+  LoadingBlock,
   Modal,
-  PageHeader,
+  Notice,
   Select,
-  Spinner,
+  TBody,
+  THead,
+  Table,
   TableScroll,
-  Tag,
-} from '../components/ui'
-import { formatDateTime, formatRelative } from '../lib/format'
-import { tr, useT, useTc } from '../lib/i18n'
+  Td,
+  Th,
+  Tr,
+} from '@/components/ui/primitives'
+import { formatDateTime, formatRelative } from '@/lib/format'
+import { tr, useT, useTc } from '@/lib/i18n'
 
+/**
+ * Comptes — famille *installation*.
+ *
+ * Deux gestes seulement : ouvrir un accès, le reprendre. Tout le reste — le rôle — se règle sur
+ * place, sans aller-retour dans une modale pour un choix binaire.
+ */
 export function UsersPage() {
   const { user: current, isAdmin } = useAuth()
   const t = useT()
   const tc = useTc()
+
   const [users, setUsers] = useState<UserAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [resetting, setResetting] = useState<UserAccount | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<UserAccount | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -45,113 +63,145 @@ export function UsersPage() {
     void load()
   }, [load])
 
-  if (!isAdmin) {
-    return <Alert tone="warning">{t('users.adminOnly')}</Alert>
+  async function remove() {
+    if (!confirmDelete) return
+    setDeleting(true)
+    try {
+      await api.auth.deleteUser(confirmDelete.id)
+      setConfirmDelete(null)
+      void load()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : tr('users.deleteFailed'))
+      setConfirmDelete(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
+  if (!isAdmin) {
+    return (
+      <Page title={t('nav.users')}>
+        <Notice tone="warning">{t('users.adminOnly')}</Notice>
+      </Page>
+    )
+  }
+
+  const addButton = (
+    <Button variant="primary" onClick={() => setCreating(true)}>
+      {t('users.add')}
+    </Button>
+  )
+
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title={t('nav.users')}
-        subtitle={t('users.subtitle')}
-        actions={
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            {t('users.add')}
-          </Button>
-        }
-      />
-
-      {error && <Alert title={t('common.error')}>{error}</Alert>}
-
-      <Card title={tc('users.count', users.length)} padded={false}>
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Spinner className="size-6" />
-          </div>
-        ) : users.length === 0 ? (
-          <EmptyState title={t('users.empty')} />
-        ) : (
-          <TableScroll minWidth={720}>
-            <table className="w-full text-sm">
-              <thead className="bg-surface-sunken text-left text-xs uppercase tracking-wide text-ink-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">{t('users.column.username')}</th>
-                  <th className="px-4 py-2 font-medium">{t('users.column.role')}</th>
-                  <th className="px-4 py-2 font-medium">{t('users.column.createdAt')}</th>
-                  <th className="px-4 py-2 font-medium">{t('users.column.lastLogin')}</th>
-                  <th className="px-4 py-2">
-                    <span className="sr-only">{t('common.actions')}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {users.map((account) => (
-                  <tr key={account.id} className="hover:bg-surface-sunken">
-                    <td className="px-4 py-2.5">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium text-ink">{account.username}</span>
-                        {account.id === current?.id && <Tag tone="accent">{t('users.you')}</Tag>}
-                        {account.mustChangePassword && (
-                          <Tag tone="warn">{t('users.mustChangePassword')}</Tag>
-                        )}
-                      </div>
-                    </td>
-                    {/* Le rôle se change sur place : une liste déroulante vaut mieux qu'un
-                        aller-retour dans une modale pour un choix binaire. */}
-                    <td className="px-4 py-2.5">
-                      <Select
-                        value={account.role}
-                        className="max-w-40"
-                        aria-label={t('users.roleFor', { name: account.username })}
-                        onChange={async (event) => {
-                          try {
-                            await api.auth.updateUser(account.id, { role: event.target.value })
-                            void load()
-                          } catch (cause) {
-                            setError(
-                              cause instanceof ApiError ? cause.message : t('users.updateFailed'),
-                            )
-                          }
-                        }}
-                      >
-                        <option value="Admin">{t('role.admin')}</option>
-                        <option value="Viewer">{t('role.viewer')}</option>
-                      </Select>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-ink-muted">
-                      {formatDateTime(account.createdAt)}
-                    </td>
-                    <td
-                      className="whitespace-nowrap px-4 py-2.5 text-ink-muted"
-                      title={formatDateTime(account.lastLoginAt)}
-                    >
-                      {account.lastLoginAt ? formatRelative(account.lastLoginAt) : t('common.never')}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" onClick={() => setResetting(account)}>
-                          {t('users.resetPassword')}
-                        </Button>
-                        {account.id !== current?.id && (
-                          <Button
-                            variant="ghost"
-                            className="text-danger hover:text-danger"
-                            onClick={() => setConfirmDelete(account)}
-                          >
-                            {t('common.delete')}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableScroll>
+    <Page title={t('nav.users')} description={t('users.subtitle')} actions={addButton}>
+      <div className="space-y-4">
+        {error && (
+          <Notice tone="danger" title={t('common.error')} onDismiss={() => setError(null)}>
+            {error}
+          </Notice>
         )}
-      </Card>
 
-      <ChangeOwnPassword />
+        <Card>
+          <CardHeader title={tc('users.count', users.length)} />
+
+          {loading ? (
+            <LoadingBlock />
+          ) : users.length === 0 ? (
+            <EmptyState
+              icon={<UserPlus className="size-6" aria-hidden />}
+              title={t('users.empty')}
+              description={t('users.emptyHint')}
+              action={addButton}
+            />
+          ) : (
+            <TableScroll minWidth={760}>
+              <Table>
+                <THead>
+                  <Tr>
+                    <Th>{t('users.column.username')}</Th>
+                    <Th>{t('users.column.role')}</Th>
+                    <Th>{t('users.column.createdAt')}</Th>
+                    <Th>{t('users.column.lastLogin')}</Th>
+                    <Th>
+                      <span className="sr-only">{t('common.actions')}</span>
+                    </Th>
+                  </Tr>
+                </THead>
+                <TBody>
+                  {users.map((account) => (
+                    <Tr key={account.id}>
+                      <Td>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-ink font-medium">{account.username}</span>
+                          {account.id === current?.id && (
+                            <Badge tone="info">{t('users.you')}</Badge>
+                          )}
+                          {account.mustChangePassword && (
+                            <Badge tone="warning">{t('users.mustChangePassword')}</Badge>
+                          )}
+                        </div>
+                      </Td>
+                      {/* Le rôle se change sur place : une liste déroulante vaut mieux qu'un
+                          aller-retour dans une modale pour un choix binaire. */}
+                      <Td>
+                        <Select
+                          value={account.role}
+                          className="max-w-40"
+                          aria-label={t('users.roleFor', { name: account.username })}
+                          onChange={async (event) => {
+                            try {
+                              await api.auth.updateUser(account.id, { role: event.target.value })
+                              void load()
+                            } catch (cause) {
+                              setError(
+                                cause instanceof ApiError ? cause.message : t('users.updateFailed'),
+                              )
+                            }
+                          }}
+                        >
+                          <option value="Admin">{t('role.admin')}</option>
+                          <option value="Viewer">{t('role.viewer')}</option>
+                        </Select>
+                      </Td>
+                      <Td className="text-ink-muted whitespace-nowrap">
+                        {formatDateTime(account.createdAt)}
+                      </Td>
+                      <Td
+                        className="text-ink-muted whitespace-nowrap"
+                        title={formatDateTime(account.lastLoginAt)}
+                      >
+                        {account.lastLoginAt
+                          ? formatRelative(account.lastLoginAt)
+                          : t('common.never')}
+                      </Td>
+                      <Td>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" onClick={() => setResetting(account)}>
+                            {t('users.resetPassword')}
+                          </Button>
+                          {/* Un compte ne se supprime pas lui-même : le geste laisserait
+                              l'application sans administrateur connecté. */}
+                          {account.id !== current?.id && (
+                            <Button
+                              variant="ghost"
+                              className="text-danger-strong hover:text-danger-strong"
+                              onClick={() => setConfirmDelete(account)}
+                            >
+                              {t('common.delete')}
+                            </Button>
+                          )}
+                        </div>
+                      </Td>
+                    </Tr>
+                  ))}
+                </TBody>
+              </Table>
+            </TableScroll>
+          )}
+        </Card>
+
+        <ChangeOwnPassword />
+      </div>
 
       {creating && (
         <CreateUser
@@ -175,35 +225,16 @@ export function UsersPage() {
       )}
 
       {confirmDelete && (
-        <Modal
+        <ConfirmDialog
           title={t('users.delete.title', { name: confirmDelete.username })}
-          onClose={() => setConfirmDelete(null)}
-          size="sm"
-          footer={
-            <>
-              <Button onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  try {
-                    await api.auth.deleteUser(confirmDelete.id)
-                    setConfirmDelete(null)
-                    void load()
-                  } catch (cause) {
-                    setError(cause instanceof ApiError ? cause.message : tr('users.deleteFailed'))
-                    setConfirmDelete(null)
-                  }
-                }}
-              >
-                {t('common.delete')}
-              </Button>
-            </>
-          }
-        >
-          <p className="text-ink text-sm">{t('users.delete.body')}</p>
-        </Modal>
+          description={t('users.delete.body')}
+          confirmLabel={t('users.delete.confirm')}
+          busy={deleting}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => void remove()}
+        />
       )}
-    </div>
+    </Page>
   )
 }
 
@@ -237,38 +268,38 @@ function CreateUser({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       size="md"
       footer={
         <>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button form="create-user" type="submit" variant="primary" disabled={busy}>
-            {busy && <Spinner />} {t('common.create')}
+          <Button onClick={onClose} disabled={busy}>
+            {t('common.cancel')}
+          </Button>
+          <Button form="create-user" type="submit" variant="primary" size="lg" loading={busy}>
+            {t('users.form.create')}
           </Button>
         </>
       }
     >
-      {/* Identifiant et mot de passe se saisissent d'affilée : côte à côte, ils tiennent sur
-          une ligne, et le rôle garde la sienne avec son explication. */}
+      {/* Une colonne : le mot de passe saisi ici n'est plus jamais réaffiché, l'indication le
+          dit avant la validation plutôt qu'après. */}
       <form id="create-user" onSubmit={submit} className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t('users.form.username')}>
-            <Input
-              value={username}
-              required
-              pattern="[A-Za-z0-9._@\-]+"
-              autoComplete="off"
-              onChange={(event) => setUsername(event.target.value)}
-            />
-          </Field>
+        <Field label={t('users.form.username')} hint={t('users.form.usernameHint')}>
+          <Input
+            value={username}
+            required
+            pattern="[A-Za-z0-9._@\-]+"
+            autoComplete="off"
+            onChange={(event) => setUsername(event.target.value)}
+          />
+        </Field>
 
-          <Field label={t('users.form.password')} hint={t('users.form.passwordHint')}>
-            <Input
-              type="password"
-              value={password}
-              required
-              minLength={10}
-              autoComplete="new-password"
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </Field>
-        </div>
+        <Field label={t('users.form.password')} hint={t('users.form.passwordHint')}>
+          <Input
+            type="password"
+            value={password}
+            required
+            minLength={10}
+            autoComplete="new-password"
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </Field>
 
         <Field label={t('users.form.role')} hint={t('users.form.roleHint')}>
           <Select value={role} onChange={(event) => setRole(event.target.value)}>
@@ -277,7 +308,7 @@ function CreateUser({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           </Select>
         </Field>
 
-        {error && <Alert>{error}</Alert>}
+        {error && <Notice tone="danger">{error}</Notice>}
       </form>
     </Modal>
   )
@@ -315,13 +346,16 @@ function ResetPassword({
   return (
     <Modal
       title={t('users.reset.title', { name: account.username })}
+      description={t('users.reset.body')}
       onClose={onClose}
       size="sm"
       footer={
         <>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button form="reset-password" type="submit" variant="primary" disabled={busy}>
-            {busy && <Spinner />} {t('common.save')}
+          <Button onClick={onClose} disabled={busy}>
+            {t('common.cancel')}
+          </Button>
+          <Button form="reset-password" type="submit" variant="primary" size="lg" loading={busy}>
+            {t('users.reset.submit')}
           </Button>
         </>
       }
@@ -338,7 +372,7 @@ function ResetPassword({
           />
         </Field>
 
-        {error && <Alert>{error}</Alert>}
+        {error && <Notice tone="danger">{error}</Notice>}
       </form>
     </Modal>
   )
@@ -371,51 +405,48 @@ function ChangeOwnPassword() {
   }
 
   return (
-    <Card title={t('users.changeOwn.title')}>
-      {/* Les deux champs et le bouton partagent une ligne, à une largeur de saisie raisonnable :
-          un mot de passe n'a pas besoin de toute la largeur de la page pour être lisible. */}
-      <form
-        onSubmit={submit}
-        className="grid gap-3 sm:grid-cols-[minmax(0,18rem)_minmax(0,18rem)_auto] sm:items-end sm:justify-start"
-      >
-        <Field label={t('users.changeOwn.current')}>
-          <Input
-            type="password"
-            value={currentPassword}
-            required
-            autoComplete="current-password"
-            onChange={(event) => setCurrentPassword(event.target.value)}
-          />
-        </Field>
+    <Card>
+      <CardHeader title={t('users.changeOwn.title')} description={t('users.changeOwn.hint')} />
+      <CardBody className="space-y-3">
+        {/* Les deux champs et le bouton partagent une ligne, à une largeur de saisie raisonnable :
+            un mot de passe n'a pas besoin de toute la largeur de la page pour être lisible. */}
+        <form
+          onSubmit={submit}
+          className="grid gap-3 sm:grid-cols-[minmax(0,18rem)_minmax(0,18rem)_auto] sm:items-end sm:justify-start"
+        >
+          <Field label={t('users.changeOwn.current')}>
+            <Input
+              type="password"
+              value={currentPassword}
+              required
+              autoComplete="current-password"
+              onChange={(event) => setCurrentPassword(event.target.value)}
+            />
+          </Field>
 
-        <Field label={t('users.changeOwn.new')} hint={t('users.form.passwordHint')}>
-          <Input
-            type="password"
-            value={newPassword}
-            required
-            minLength={10}
-            autoComplete="new-password"
-            onChange={(event) => setNewPassword(event.target.value)}
-          />
-        </Field>
+          <Field label={t('users.changeOwn.new')} hint={t('users.form.passwordHint')}>
+            <Input
+              type="password"
+              value={newPassword}
+              required
+              minLength={10}
+              autoComplete="new-password"
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+          </Field>
 
-        <Button type="submit" variant="primary" size="md" disabled={busy}>
-          {busy && <Spinner />} {t('users.changeOwn.submit')}
-        </Button>
-      </form>
+          <Button type="submit" variant="primary" size="lg" loading={busy}>
+            {t('users.changeOwn.submit')}
+          </Button>
+        </form>
 
-      {notice && (
-        <div className="mt-3">
-          <Alert tone="success" onDismiss={() => setNotice(null)}>
+        {notice && (
+          <Notice tone="success" onDismiss={() => setNotice(null)}>
             {notice}
-          </Alert>
-        </div>
-      )}
-      {error && (
-        <div className="mt-3">
-          <Alert>{error}</Alert>
-        </div>
-      )}
+          </Notice>
+        )}
+        {error && <Notice tone="danger">{error}</Notice>}
+      </CardBody>
     </Card>
   )
 }
