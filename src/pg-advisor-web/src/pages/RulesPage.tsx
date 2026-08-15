@@ -32,6 +32,7 @@ import {
 import { categoryLabel, severityLabel } from '@/lib/format'
 import { tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
+import { guardAnnouncement, RULE_GUARD_EVENTS } from '@/lib/ruleGuard'
 
 /** Colonnes triables. Le tri se fait ici : le catalogue tient en mémoire, il est chargé en entier. */
 type SortKey = 'rule' | 'category' | 'severity' | 'origin' | 'state'
@@ -40,6 +41,31 @@ type SortKey = 'rule' | 'category' | 'severity' | 'origin' | 'state'
 const SEVERITY_RANK: Record<string, number> = { critical: 0, warning: 1, info: 2 }
 
 const SEVERITIES = ['critical', 'warning', 'info']
+
+/**
+ * Valeurs de la colonne d'état. L'activation vient de la règle, la santé du garde-fou : une règle
+ * activée peut être écartée d'une instance, et c'est justement ce qu'il faut pouvoir retrouver.
+ */
+function stateTags(rule: Rule): string[] {
+  const tags = [rule.enabled ? 'enabled' : 'disabled']
+  if (degradedOn(rule) > 0) tags.push('degraded')
+  if (quarantinedOn(rule) > 0) tags.push('quarantined')
+  return tags
+}
+
+/** Le plus préoccupant d'abord : écartée, dégradée, puis l'ordre d'activation habituel. */
+function stateRank(rule: Rule): number {
+  if (quarantinedOn(rule) > 0) return 0
+  if (degradedOn(rule) > 0) return 1
+  return rule.enabled ? 2 : 3
+}
+
+/*
+ * Une API antérieure au garde-fou ne renvoie pas ces décomptes. Zéro se lit alors comme
+ * « rien à signaler », ce qui est exactement ce qu'une telle API sait dire.
+ */
+const degradedOn = (rule: Rule) => rule.degradedInstances ?? 0
+const quarantinedOn = (rule: Rule) => rule.quarantinedInstances ?? 0
 
 /*
  * Capitales de l'en-tête. `Th` les pose sur la cellule, mais le libellé triable vit dans un
@@ -127,6 +153,13 @@ export function RulesPage() {
     void load()
   })
 
+  // Le garde-fou change l'état d'une règle sans qu'on ait rien demandé : la liste se remet à jour
+  // sans se vider, et l'annonce dit laquelle, sur quelle instance.
+  useEventListener(RULE_GUARD_EVENTS, (event) => {
+    setAnnouncement(guardAnnouncement(event))
+    void load()
+  })
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase()
 
@@ -134,7 +167,7 @@ export function RulesPage() {
       if (categoryFilter.length > 0 && !categoryFilter.includes(rule.category)) return false
       if (severityFilter.length > 0 && !severityFilter.includes(rule.severity)) return false
       if (originFilter.length > 0 && !originFilter.includes(rule.origin)) return false
-      if (stateFilter.length > 0 && !stateFilter.includes(rule.enabled ? 'enabled' : 'disabled')) {
+      if (stateFilter.length > 0 && !stateTags(rule).some((tag) => stateFilter.includes(tag))) {
         return false
       }
       if (!needle) return true
@@ -161,7 +194,7 @@ export function RulesPage() {
         case 'origin':
           return left.origin.localeCompare(right.origin)
         case 'state':
-          return Number(right.enabled) - Number(left.enabled)
+          return stateRank(left) - stateRank(right)
         default:
           return 0
       }
@@ -175,6 +208,14 @@ export function RulesPage() {
   }, [filtered, sortKey, descending])
 
   const categories = useMemo(() => [...new Set(rules.map((rule) => rule.category))].sort(), [rules])
+
+  // Une règle écartée cesse de produire son diagnostic : la catégorie qu'elle notait n'est plus
+  // notée. Le dire en tête de la vue, et pas seulement au fond d'une colonne.
+  const quarantined = useMemo(() => rules.filter((rule) => quarantinedOn(rule) > 0), [rules])
+  const degraded = useMemo(
+    () => rules.filter((rule) => degradedOn(rule) > 0 && quarantinedOn(rule) === 0),
+    [rules],
+  )
 
   async function reload() {
     setReloading(true)
@@ -207,6 +248,16 @@ export function RulesPage() {
 
   const sortOf = (key: SortKey) => (sortKey === key ? (descending ? 'desc' : 'asc') : null)
   const setList = (key: string) => (values: string[]) => setParam(key, values.join(','))
+
+  /** Ramène le tableau sur les seules règles que le garde-fou a signalées. */
+  function showGuarded() {
+    setParam(
+      'state',
+      [quarantined.length > 0 ? 'quarantined' : '', degraded.length > 0 ? 'degraded' : '']
+        .filter(Boolean)
+        .join(','),
+    )
+  }
 
   return (
     <Page
@@ -258,6 +309,30 @@ export function RulesPage() {
               ))}
             </CardBody>
           </Card>
+        )}
+
+        {/* Le garde-fou passe avant le catalogue, pour la même raison que les règles en erreur :
+            une règle écartée ne produit plus de diagnostic, et le score de l'instance remonte
+            sans que rien d'autre ne le dise. */}
+        {(quarantined.length > 0 || degraded.length > 0) && (
+          <Notice
+            tone="warning"
+            title={
+              quarantined.length > 0
+                ? tc('rules.guard.quarantinedTitle', quarantined.length)
+                : tc('rules.guard.degradedTitle', degraded.length)
+            }
+          >
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <p className="min-w-0 flex-1 basis-72">
+                {quarantined.length > 0 ? t('rules.guard.quarantinedBody') : t('rules.guard.degradedBody')}
+                {quarantined.length > 0 && degraded.length > 0 && (
+                  <> {tc('rules.guard.alsoDegraded', degraded.length)}</>
+                )}
+              </p>
+              <Button onClick={showGuarded}>{t('rules.guard.show')}</Button>
+            </div>
+          </Notice>
         )}
 
         <Card>
@@ -395,8 +470,10 @@ export function RulesPage() {
                         />
                       </Th>
                       <Th className="font-normal normal-case">
+                        {/* Un cran plus large que les autres colonnes : quatre états à nommer,
+                            dont deux mots longs — « désactivée » y était déjà tronqué. */}
                         <MultiSelect
-                          className="w-28"
+                          className="w-32"
                           label={t('common.state')}
                           values={stateFilter}
                           onChange={setList('state')}
@@ -405,6 +482,10 @@ export function RulesPage() {
                           options={[
                             { value: 'enabled', label: t('rules.enabledTag') },
                             { value: 'disabled', label: t('rules.disabledTag') },
+                            // L'activation vient de la règle, la santé du garde-fou : les deux
+                            // se filtrent depuis la même colonne, c'est là qu'elles se lisent.
+                            { value: 'degraded', label: t('rules.degradedTag') },
+                            { value: 'quarantined', label: t('rules.quarantinedTag') },
                           ]}
                         />
                       </Th>
@@ -456,16 +537,30 @@ export function RulesPage() {
                             )}
                           </Td>
                           <Td className="align-top">
-                            {rule.enabled ? (
-                              <Badge tone="success">{t('rules.enabledTag')}</Badge>
-                            ) : (
-                              <Badge tone="warning">{t('rules.disabledTag')}</Badge>
-                            )}
-                            {rule.overrides.length > 0 && (
-                              <p className="text-ink-muted mt-1 whitespace-nowrap text-meta">
-                                {tc('rules.overrides', rule.overrides.length)}
-                              </p>
-                            )}
+                            {/* Activation puis santé, l'une sous l'autre : une règle activée
+                                peut être écartée d'une instance, et les deux se lisent. */}
+                            <div className="flex flex-col items-start gap-1">
+                              {rule.enabled ? (
+                                <Badge tone="success">{t('rules.enabledTag')}</Badge>
+                              ) : (
+                                <Badge tone="warning">{t('rules.disabledTag')}</Badge>
+                              )}
+                              {quarantinedOn(rule) > 0 && (
+                                <Badge tone="danger">
+                                  {tc('rules.quarantinedOn', quarantinedOn(rule))}
+                                </Badge>
+                              )}
+                              {degradedOn(rule) > 0 && (
+                                <Badge tone="warning">
+                                  {tc('rules.degradedOn', degradedOn(rule))}
+                                </Badge>
+                              )}
+                              {rule.overrides.length > 0 && (
+                                <p className="text-ink-muted whitespace-nowrap text-meta">
+                                  {tc('rules.overrides', rule.overrides.length)}
+                                </p>
+                              )}
+                            </div>
                           </Td>
                         </Tr>
                       ))

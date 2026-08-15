@@ -124,6 +124,42 @@ export const enRules: Record<string, string> = {
   'rules.noMatchHint': 'No rule in the catalogue matches these criteria. Lift a filter to see more.',
   'rules.live.reloaded': 'Rules reloaded',
 
+  // --- Cost guard -------------------------------------------------------------
+  'ruleHealth.state.healthy': 'healthy',
+  'ruleHealth.state.degraded': 'degraded',
+  'ruleHealth.state.quarantined': 'quarantined',
+  'ruleHealth.kind.timeout': 'timed out',
+  'ruleHealth.kind.error': 'SQL error',
+  'ruleHealth.kind.slow': 'ran too slowly',
+  'ruleHealth.kindHint.timeout':
+    'The instance did not answer within the allotted time: it is the instance that is struggling, not the rule.',
+  'ruleHealth.kindHint.error':
+    'The rule’s query failed: the rule is what needs fixing, not the instance.',
+  'ruleHealth.kindHint.slow':
+    'The rule completes, but costs the instance too much to be repeated this often.',
+
+  // --- Catalogue: rule state --------------------------------------------------
+  'rules.degradedTag': 'degraded',
+  'rules.quarantinedTag': 'quarantined',
+  'rules.degradedOn.one': 'degraded on {count} instance',
+  'rules.degradedOn.other': 'degraded on {count} instances',
+  'rules.quarantinedOn.one': 'set aside on {count} instance',
+  'rules.quarantinedOn.other': 'set aside on {count} instances',
+  'rules.guard.quarantinedTitle.one': '{count} rule set aside by the cost guard',
+  'rules.guard.quarantinedTitle.other': '{count} rules set aside by the cost guard',
+  'rules.guard.quarantinedBody':
+    'Their diagnostic is no longer produced on the instances concerned: the category stops being scored there, and the score climbs without any database getting better.',
+  'rules.guard.degradedTitle.one': '{count} rule flagged by the cost guard',
+  'rules.guard.degradedTitle.other': '{count} rules flagged by the cost guard',
+  'rules.guard.degradedBody':
+    'They still run, but are piling up incidents: at the next threshold they will be set aside on the instance and their diagnostic will stop.',
+  'rules.guard.alsoDegraded.one': '{count} more rule is flagged without being set aside.',
+  'rules.guard.alsoDegraded.other': '{count} more rules are flagged without being set aside.',
+  'rules.guard.show': 'View these rules',
+  'rules.live.degraded': 'Rule “{rule}” degraded on {instance}',
+  'rules.live.quarantined': 'Rule “{rule}” set aside on {instance}',
+  'rules.live.recovered': 'Rule “{rule}” recovered on {instance}',
+
   // --- Rule editor: header ----------------------------------------------------
   'ruleEditor.newTitle': 'New rule',
   'ruleEditor.group': 'group {group}',
@@ -181,6 +217,24 @@ export const enRules: Record<string, string> = {
   'ruleEditor.applicabilityHint': 'where this rule will run, given the instances known today',
   'ruleEditor.applicableTag': 'applicable',
   'ruleEditor.skippedTag': 'skipped',
+  'ruleEditor.degradedTag': 'degraded',
+  'ruleEditor.quarantinedTag': 'set aside',
+  'ruleEditor.strikesLabel': 'Incidents',
+  'ruleEditor.strikes.one': '{count} of {max}',
+  'ruleEditor.strikes.other': '{count} of {max}',
+  'ruleEditor.lastIncidentLabel': 'Last incident',
+  'ruleEditor.durationLabel': 'Duration / limit',
+  'ruleEditor.durationTitle': '{observed} observed against {timeout} allowed',
+  'ruleEditor.quarantineUntilLabel': 'Set aside until',
+  'ruleEditor.reactivate': 'Reactivate',
+  'ruleEditor.reactivateAll': 'Reactivate everywhere',
+  'ruleEditor.reactivateTitle': 'Reactivate “{rule}” on {instance}?',
+  'ruleEditor.reactivateAllTitle': 'Reactivate “{rule}” on every instance?',
+  'ruleEditor.reactivateBody':
+    'This assumes the cause has been dealt with. The incident count starts again from zero and the rule runs at the next cycle; if the cause is still there, it will be set aside again.',
+  'ruleEditor.reactivateConfirm': 'Reactivate the rule',
+  'ruleEditor.reactivated': 'Rule reactivated on {scope}: the incident count starts again from zero.',
+  'ruleEditor.reactivateFailed': 'Reactivation failed.',
   'ruleEditor.help': 'Cheat sheet',
   'ruleEditor.helpShow': 'Show',
   'ruleEditor.helpHide': 'Hide',
@@ -206,6 +260,8 @@ export const enRules: Record<string, string> = {
   'ruleEditor.disabledOption': 'Disabled',
   'ruleEditor.interval': 'Schedule (s)',
   'ruleEditor.intervalHint': 'empty = the group’s',
+  'ruleEditor.timeout': 'Time limit (s)',
+  'ruleEditor.timeoutHint': 'default {value} s, from 1 to 300',
   'ruleEditor.thresholds': 'Thresholds',
   'ruleEditor.thresholdDefault': 'default: {value}',
   'ruleEditor.saveOverride': 'Save override',
@@ -214,4 +270,5 @@ export const enRules: Record<string, string> = {
   'ruleEditor.editOverride': 'Edit the “{scope}” override',
   'ruleEditor.overrideSeverity': 'severity {severity}',
   'ruleEditor.overrideInterval': 'every {seconds} s',
+  'ruleEditor.overrideTimeout': '{seconds} s limit',
 }

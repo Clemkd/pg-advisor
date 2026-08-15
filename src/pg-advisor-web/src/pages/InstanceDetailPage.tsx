@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CapabilityStatus, ConnectionDetail } from '@/api/types'
@@ -34,6 +34,7 @@ import {
   scoreTone,
 } from '@/lib/format'
 import { currentLocale, translate, tr, useT, useTc } from '@/lib/i18n'
+import { guardAnnouncement, RULE_GUARD_EVENTS } from '@/lib/ruleGuard'
 import { cn } from '@/lib/utils'
 
 const LIVE_EVENTS = [
@@ -108,6 +109,14 @@ export function InstanceDetailPage() {
     }
   })
 
+  // Une règle écartée d'ici retire une catégorie du score de cette instance : l'annonce le dit,
+  // et le contenu se met à jour sans être remplacé par un sablier.
+  useEventListener(RULE_GUARD_EVENTS, (event) => {
+    if (event.connectionId !== null && event.connectionId !== connectionId) return
+    const message = guardAnnouncement(event)
+    void load().then(() => setAnnouncement(message))
+  })
+
   const health = detail?.connection.health ?? null
 
   if (loading) {
@@ -136,6 +145,7 @@ export function InstanceDetailPage() {
   const missingExtensions = extensions.filter((extension) => !extension.available)
   const score = health?.global ?? null
   const categories = Object.entries(connection.health?.categories ?? {}).sort(([, a], [, b]) => a - b)
+  const quarantined = connection.quarantinedRules ?? []
 
   return (
     <Page
@@ -179,6 +189,30 @@ export function InstanceDetailPage() {
           </Notice>
         )}
 
+        {/* Le garde-fou a écarté des règles d'ici : leur catégorie n'est plus notée, et le score
+            affiché plus haut est meilleur qu'il ne devrait l'être. Les règles sont nommées et
+            mènent à leur détail, où la quarantaine se lit et se lève. */}
+        {quarantined.length > 0 && (
+          <Notice
+            tone="warning"
+            title={tc('instanceDetail.quarantine.title', quarantined.length)}
+          >
+            <p>{t('instanceDetail.quarantine.body')}</p>
+            <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+              {quarantined.map((ruleId) => (
+                <li key={ruleId}>
+                  <Link
+                    to={`/rules/${encodeURIComponent(ruleId)}`}
+                    className="text-brand hover:text-brand-hover font-mono text-meta hover:underline"
+                  >
+                    {ruleId}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Notice>
+        )}
+
         <div className="grid gap-4 lg:grid-cols-3">
           <Hero
             label={t('instanceDetail.health')}
@@ -204,18 +238,26 @@ export function InstanceDetailPage() {
             }
             aside={<ScoreRing score={score} size={72} />}
             meta={
-              health && (
+              (health || quarantined.length > 0) && (
                 <>
-                  {health.critical > 0 && (
+                  {health && health.critical > 0 && (
                     <Badge tone="danger">{tc('dashboard.criticalCount', health.critical)}</Badge>
                   )}
-                  {health.warning > 0 && (
+                  {health && health.warning > 0 && (
                     <Badge tone="warning">{tc('dashboard.warningCount', health.warning)}</Badge>
                   )}
-                  {health.info > 0 && (
+                  {health && health.info > 0 && (
                     <Badge tone="info">{tc('dashboard.infoCount', health.info)}</Badge>
                   )}
-                  {health.total === 0 && <Badge tone="success">{t('dashboard.noDiagnosticBadge')}</Badge>}
+                  {health && health.total === 0 && quarantined.length === 0 && (
+                    <Badge tone="success">{t('dashboard.noDiagnosticBadge')}</Badge>
+                  )}
+                  {/* Le score se lit avec ce qui a cessé d'être regardé, ou il ment. */}
+                  {quarantined.length > 0 && (
+                    <Badge tone="warning" title={quarantined.join(', ')}>
+                      {tc('dashboard.quarantinedRules', quarantined.length)}
+                    </Badge>
+                  )}
                 </>
               )
             }

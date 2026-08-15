@@ -22,6 +22,15 @@ export const enInstances: Record<string, string> = {
     'The Advisor scores every instance from its first collection onwards, and never writes to it.',
   'dashboard.rulesTitle': 'Rule engine',
   'dashboard.awaitingCollection': 'awaiting collection',
+  'dashboard.quarantine.title.one': '{count} rule set aside by the cost guard',
+  'dashboard.quarantine.title.other': '{count} rules set aside by the cost guard',
+  'dashboard.quarantine.body':
+    'Their diagnostic is no longer produced on {instances}: the category concerned is no longer scored there, and the score shown is better than it should be.',
+  'dashboard.quarantine.instances.one': '{count} instance',
+  'dashboard.quarantine.instances.other': '{count} instances',
+  'dashboard.quarantine.show': 'View the rules set aside',
+  'dashboard.quarantinedRules.one': '{count} rule set aside',
+  'dashboard.quarantinedRules.other': '{count} rules set aside',
   'dashboard.live.newCritical.one': '{count} new critical diagnostic',
   'dashboard.live.newCritical.other': '{count} new critical diagnostics',
   'dashboard.live.scoreChanged': 'Global health: {score} out of 100',
@@ -42,6 +51,10 @@ export const enInstances: Record<string, string> = {
     'The corrective statements offered are yours to run, elsewhere.',
   'instanceDetail.seeDiagnostics': 'View the diagnostics',
   'instanceDetail.live.scoreChanged': 'Health of {name}: {score} out of 100',
+  'instanceDetail.quarantine.title.one': '{count} rule set aside on this instance',
+  'instanceDetail.quarantine.title.other': '{count} rules set aside on this instance',
+  'instanceDetail.quarantine.body':
+    'The cost guard set them aside because they weighed too heavily on this database. Their category is no longer scored: the score above is better than it should be, for want of still being watched.',
 
   // --- Instances: list ------------------------------------------------------
   'instances.subtitle': 'Every instance is monitored read-only and scored on its own.',
@@ -111,7 +124,13 @@ export const enInstances: Record<string, string> = {
   'webhooks.empty.body':
     'A webhook receives new diagnostics and their resolutions. Each episode is notified only once per destination.',
   'webhooks.event.newFinding': 'New diagnostic',
+  'webhooks.event.newFindingHint': 'on its first appearance on an instance',
   'webhooks.event.findingResolved': 'Diagnostic resolved',
+  'webhooks.event.findingResolvedHint': 'when an analysis no longer finds it',
+  'webhooks.event.ruleDegraded': 'Rule degraded',
+  'webhooks.event.ruleDegradedHint': 'rule struggling, still running',
+  'webhooks.event.ruleQuarantined': 'Rule quarantined',
+  'webhooks.event.ruleQuarantinedHint': 'rule set aside, its diagnostic stops',
   'webhooks.format.generic': 'Generic (full JSON)',
   'webhooks.format.genericShort': 'Generic',
   'webhooks.format.genericHint':

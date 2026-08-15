@@ -23,6 +23,10 @@ const EVENT_TYPES = [
   'analysis.progress',
   'rules.reloaded',
   'instance.changed',
+  // Garde-fou de coût : une règle signalée, écartée, ou rétablie sur une instance. Un type
+  // absent d'ici n'est jamais écouté — `EventSource` ne délivre que les noms enregistrés.
+  'rule.guard',
+  'rule.recovered',
   'stream.open',
 ]
 

@@ -28,6 +28,18 @@ export const frInstances: Record<string, string> = {
     'L’Advisor note chaque instance dès sa première collecte, et n’y écrit jamais.',
   'dashboard.rulesTitle': 'Moteur de règles',
   'dashboard.awaitingCollection': 'en attente de collecte',
+  // Garde-fou de coût : une règle écartée cesse de produire son diagnostic, donc sa catégorie
+  // cesse d'être notée. Le score remonte sans qu'aucune base n'aille mieux — l'écrire noir sur
+  // blanc est la seule façon d'éviter de lire une embellie là où il n'y en a pas.
+  'dashboard.quarantine.title.one': '{count} règle écartée de la supervision',
+  'dashboard.quarantine.title.other': '{count} règles écartées de la supervision',
+  'dashboard.quarantine.body':
+    'Leur diagnostic n’est plus produit sur {instances} : la catégorie concernée n’y est plus notée, et le score affiché est meilleur qu’il ne devrait l’être.',
+  'dashboard.quarantine.instances.one': '{count} instance',
+  'dashboard.quarantine.instances.other': '{count} instances',
+  'dashboard.quarantine.show': 'Voir les règles écartées',
+  'dashboard.quarantinedRules.one': '{count} règle écartée',
+  'dashboard.quarantinedRules.other': '{count} règles écartées',
   // Annonces du flux temps réel, lues par les technologies d'assistance : une interface qui se
   // réécrit seule reste muette sans elles.
   'dashboard.live.newCritical.one': '{count} nouveau diagnostic critique',
@@ -53,6 +65,10 @@ export const frInstances: Record<string, string> = {
     'Les commandes correctives proposées sont à exécuter vous-même, ailleurs.',
   'instanceDetail.seeDiagnostics': 'Voir les diagnostics',
   'instanceDetail.live.scoreChanged': 'Santé de {name} : {score} sur 100',
+  'instanceDetail.quarantine.title.one': '{count} règle écartée de cette instance',
+  'instanceDetail.quarantine.title.other': '{count} règles écartées de cette instance',
+  'instanceDetail.quarantine.body':
+    'Le garde-fou les a écartées parce qu’elles pesaient trop lourd sur cette base. Leur catégorie n’est plus notée : le score ci-dessus est meilleur qu’il ne devrait l’être, faute d’être encore regardée.',
 
   // --- Instances : liste ----------------------------------------------------
   'instances.subtitle': 'Chaque instance est supervisée en lecture seule et notée indépendamment.',
@@ -124,7 +140,15 @@ export const frInstances: Record<string, string> = {
   'webhooks.empty.body':
     'Un webhook reçoit les nouveaux diagnostics et leurs résolutions. Chaque épisode n’est notifié qu’une fois par destination.',
   'webhooks.event.newFinding': 'Nouveau diagnostic',
+  'webhooks.event.newFindingHint': 'à sa première apparition sur une instance',
   'webhooks.event.findingResolved': 'Diagnostic résolu',
+  'webhooks.event.findingResolvedHint': 'quand une analyse ne le retrouve plus',
+  // Le garde-fou de coût : une règle trop lente ou fautive est d'abord signalée, puis écartée.
+  // Sans ces deux abonnements, une catégorie cesse d'être évaluée sans que personne le sache.
+  'webhooks.event.ruleDegraded': 'Règle dégradée',
+  'webhooks.event.ruleDegradedHint': 'règle en difficulté, encore exécutée',
+  'webhooks.event.ruleQuarantined': 'Règle en quarantaine',
+  'webhooks.event.ruleQuarantinedHint': 'règle écartée, son diagnostic cesse',
   'webhooks.format.generic': 'Générique (JSON complet)',
   // Le nom long explique le choix dans la liste déroulante ; la pastille d'une ligne de liste
   // n'a la place que du nom court.

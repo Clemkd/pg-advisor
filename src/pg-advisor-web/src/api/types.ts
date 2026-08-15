@@ -67,6 +67,15 @@ export interface Connection {
   analysisProgress: number | null
   health: HealthScore | null
   metrics: InstanceMetrics | null
+
+  /**
+   * Règles écartées de cette instance par le garde-fou de coût. Leur catégorie n'est plus notée :
+   * un score qui remonte doit pouvoir s'expliquer par cette liste plutôt que par une embellie.
+   *
+   * Facultatif : une API antérieure au garde-fou ne renvoie pas ce champ, et le tableau de bord
+   * ne doit pas s'effondrer pour autant. Voir la note sur les champs du garde-fou plus bas.
+   */
+  quarantinedRules?: string[]
 }
 
 export interface CapabilityStatus {
@@ -222,7 +231,57 @@ export interface RuleOverride {
   enabled: boolean | null
   severity: Severity | null
   intervalSeconds: number | null
+  /** Délai maximal accordé à la règle sur cette cible ; null = valeur du fichier. */
+  timeoutSeconds?: number | null
   parameters: Record<string, unknown>
+  updatedAt: string
+}
+
+/*
+ * Champs du garde-fou : tous facultatifs.
+ *
+ * Ils sont apparus avec le garde-fou et l'API les renvoie désormais toujours. Mais l'interface
+ * et l'API se déploient ensemble sans être servies ensemble en développement — un SPA récent
+ * interrogeant une API antérieure lisait `undefined` là où le type promettait un tableau, et la
+ * vue entière disparaissait sur un « Cannot read properties of undefined ». Les déclarer
+ * facultatifs fait porter cette vérification au compilateur plutôt qu'à la relecture.
+ */
+
+/** Trois états du garde-fou, tels que les renvoie l'API. */
+export type RuleHealthState = 'healthy' | 'degraded' | 'quarantined'
+
+/**
+ * Nature du dernier incident. La distinction commande la conclusion de l'exploitant :
+ * `timeout` et `slow` disent que l'instance souffre, `error` que la règle est fautive.
+ */
+export type RuleFailureKind = 'timeout' | 'error' | 'slow'
+
+/** État d'une règle sur une instance, du point de vue du garde-fou de coût. */
+export interface RuleHealth {
+  connectionId: number
+  connectionName: string
+  ruleId: string
+  state: RuleHealthState
+  /** Vrai tant que l'échéance de quarantaine n'est pas atteinte. */
+  quarantined: boolean
+  /** Incidents consécutifs, toutes natures confondues : c'est ce que comparent les seuils. */
+  strikes: number
+  consecutiveFailures: number
+  consecutiveSlowRuns: number
+  failureKind: RuleFailureKind | null
+  failureMessage: string | null
+  lastFailureAt: string | null
+  lastSuccessAt: string | null
+  lastDurationMs: number | null
+  maxDurationMs: number | null
+  /** Délai en vigueur lors de la dernière exécution, pour situer la durée mesurée. */
+  lastTimeoutSeconds: number | null
+  quarantinedAt: string | null
+  quarantinedUntil: string | null
+  quarantineReason: string | null
+  quarantineCount: number
+  warningThreshold: number
+  quarantineThreshold: number
   updatedAt: string
 }
 
@@ -242,9 +301,17 @@ export interface Rule {
   handler: string | null
   hasQuery: boolean
   intervalSeconds: number | null
+  /** Délai propre déclaré par la règle ; null = délai global du scheduler. */
+  timeoutSeconds?: number | null
+  /** Délai appliqué à défaut de délai propre, en secondes. */
+  defaultTimeoutSeconds?: number
   requires: RuleRequirements
   parameters: Record<string, unknown>
   overrides: RuleOverride[]
+  /** Instances où la règle est signalée par le garde-fou sans être écartée. */
+  degradedInstances?: number
+  /** Instances où la règle est écartée : son diagnostic n'y est plus produit. */
+  quarantinedInstances?: number
 }
 
 export interface RuleApplicability {
@@ -252,6 +319,10 @@ export interface RuleApplicability {
   connectionName: string
   applicable: boolean
   reason: string | null
+  /** Délai réellement appliqué à cette règle sur cette instance, surcharges comprises. */
+  timeoutSeconds?: number
+  /** État du garde-fou ; null tant que la règle n'a jamais été exécutée ici. */
+  health?: RuleHealth | null
 }
 
 export interface RuleDetail {

@@ -2,8 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FlaskConical, ServerOff } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
-import type { Connection, DryRunResult, RuleDetail, RuleSchema, Severity } from '@/api/types'
+import type {
+  Connection,
+  DryRunResult,
+  RuleApplicability,
+  RuleDetail,
+  RuleSchema,
+  Severity,
+} from '@/api/types'
 import { useAuth } from '@/app/AuthContext'
+import { useEventListener } from '@/app/EventsContext'
 import { Page } from '@/components/layout/Page'
 import {
   Badge,
@@ -16,7 +24,10 @@ import {
   Field,
   FormSection,
   Input,
+  KeyValue,
+  KeyValueGrid,
   LastUpdated,
+  LiveRegion,
   LoadingBlock,
   Notice,
   Select,
@@ -29,12 +40,24 @@ import {
   Tr,
 } from '@/components/ui/primitives'
 import { useFillHeight } from '@/lib/fillHeight'
-import { categoryLabel, severityLabel } from '@/lib/format'
+import { categoryLabel, formatDateTime, formatSeconds, severityLabel } from '@/lib/format'
 import { tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
+import {
+  failureKindHint,
+  failureKindLabel,
+  guardAnnouncement,
+  guardRuleId,
+  RULE_GUARD_EVENTS,
+} from '@/lib/ruleGuard'
 import { SqlCommand } from '@/lib/sqlHighlight'
 import { errorLine, YamlEditor } from '@/lib/yamlHighlight'
 import { cn } from '@/lib/utils'
+
+/** Le garde-fou mesure en millisecondes ; les durées se lisent partout ailleurs en secondes. */
+function measured(milliseconds: number | null): string {
+  return milliseconds === null ? '—' : formatSeconds(milliseconds / 1000)
+}
 
 /**
  * Raccourci d'exécution à blanc. Affiché sur le bouton : un raccourci qu'on ne voit pas n'existe
@@ -67,6 +90,7 @@ export function RuleEditorPage() {
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [announcement, setAnnouncement] = useState<string | null>(null)
 
   const [dryRunInstance, setDryRunInstance] = useState<number | null>(null)
   const [dryRun, setDryRun] = useState<DryRunResult | null>(null)
@@ -103,6 +127,28 @@ export function RuleEditorPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /**
+   * Relit la règle sans toucher au texte en cours d'édition. Le garde-fou change l'applicabilité
+   * pendant qu'on écrit : recharger le YAML effacerait la frappe, ce qui n'est jamais acceptable.
+   */
+  const refreshDetail = useCallback(async () => {
+    if (creating || !id) return
+    try {
+      setDetail(await api.rules.get(id))
+    } catch {
+      // Un rafraîchissement de confort : son échec ne doit pas gêner l'édition.
+    }
+  }, [creating, id])
+
+  // L'écran ne se vide pas et l'événement s'annonce : une règle écartée pendant qu'on la lit est
+  // exactement ce qu'il ne faut pas manquer.
+  useEventListener(RULE_GUARD_EVENTS, (event) => {
+    const target = guardRuleId(event)
+    if (target !== null && target !== id) return
+    setAnnouncement(guardAnnouncement(event))
+    void refreshDetail()
+  })
 
   const dirty = detail !== null && yaml !== detail.yaml
 
@@ -281,6 +327,8 @@ export function RuleEditorPage() {
       wide
     >
       <div className="space-y-4">
+        <LiveRegion message={announcement} />
+
         {failure && (
           <Notice tone="danger" title={failure}>
             {errors.length > 0 && <ErrorList errors={errors} />}
@@ -452,27 +500,13 @@ export function RuleEditorPage() {
             </Card>
 
             {detail && detail.applicability.length > 0 && (
-              <Card>
-                <CardHeader
-                  title={t('ruleEditor.applicability')}
-                  description={t('ruleEditor.applicabilityHint')}
-                />
-                <CardBody>
-                  <ul className="space-y-1.5">
-                    {detail.applicability.map((entry) => (
-                      <li key={entry.connectionId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        {entry.applicable ? (
-                          <Badge tone="success">{t('ruleEditor.applicableTag')}</Badge>
-                        ) : (
-                          <Badge tone="warning">{t('ruleEditor.skippedTag')}</Badge>
-                        )}
-                        <span className="text-ink">{entry.connectionName}</span>
-                        {entry.reason && <span className="text-ink-muted text-meta">{entry.reason}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </CardBody>
-              </Card>
+              <ApplicabilityCard
+                detail={detail}
+                isAdmin={isAdmin}
+                onChanged={refreshDetail}
+                onNotice={setNotice}
+                onFailure={setFailure}
+              />
             )}
           </div>
         </div>
@@ -505,6 +539,210 @@ function ErrorList({ errors }: { errors: string[] }) {
         <li key={index}>{error}</li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * Où la règle s'exécute, et à quel prix pour l'instance.
+ *
+ * L'applicabilité disait jusqu'ici « applicable » ou le motif du refus. Le garde-fou ajoute la
+ * seule chose qui manquait : une règle applicable peut avoir été écartée parce qu'elle coûtait
+ * trop cher, et son diagnostic cesse alors d'être produit sans que personne ne le demande.
+ */
+function ApplicabilityCard({
+  detail,
+  isAdmin,
+  onChanged,
+  onNotice,
+  onFailure,
+}: {
+  detail: RuleDetail
+  isAdmin: boolean
+  onChanged: () => Promise<void> | void
+  onNotice: (message: string) => void
+  onFailure: (message: string | null) => void
+}) {
+  const t = useT()
+  const tc = useTc()
+  // `null` en portée signifie « toutes les instances », comme pour l'API : la confirmation porte
+  // donc le libellé de la portée plutôt que son identifiant.
+  const [confirm, setConfirm] = useState<{ connectionId: number | null; scope: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const quarantined = detail.applicability.filter((entry) => entry.health?.quarantined).length
+
+  async function reactivate() {
+    if (!confirm) return
+    setBusy(true)
+
+    try {
+      await api.rules.reactivate(detail.rule.id, confirm.connectionId)
+      onFailure(null)
+      onNotice(t('ruleEditor.reactivated', { scope: confirm.scope }))
+      setConfirm(null)
+      await onChanged()
+    } catch (cause) {
+      onFailure(cause instanceof ApiError ? cause.message : t('ruleEditor.reactivateFailed'))
+      setConfirm(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title={t('ruleEditor.applicability')}
+        description={t('ruleEditor.applicabilityHint')}
+        action={
+          isAdmin &&
+          quarantined > 1 && (
+            <Button
+              variant="ghost"
+              onClick={() => setConfirm({ connectionId: null, scope: t('ruleEditor.allInstances') })}
+            >
+              {t('ruleEditor.reactivateAll')}
+            </Button>
+          )
+        }
+      />
+      <CardBody>
+        <ul className="divide-border-subtle divide-y">
+          {detail.applicability.map((entry) => (
+            <ApplicabilityRow
+              key={entry.connectionId}
+              entry={entry}
+              isAdmin={isAdmin}
+              t={t}
+              tc={tc}
+              onReactivate={() =>
+                setConfirm({ connectionId: entry.connectionId, scope: entry.connectionName })
+              }
+            />
+          ))}
+        </ul>
+      </CardBody>
+
+      {confirm && (
+        <ConfirmDialog
+          title={
+            confirm.connectionId === null
+              ? t('ruleEditor.reactivateAllTitle', { rule: detail.rule.name })
+              : t('ruleEditor.reactivateTitle', {
+                  rule: detail.rule.name,
+                  instance: confirm.scope,
+                })
+          }
+          // La confirmation dit ce qu'elle suppose : que la cause est traitée.
+          description={t('ruleEditor.reactivateBody')}
+          confirmLabel={t('ruleEditor.reactivateConfirm')}
+          busy={busy}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => void reactivate()}
+        />
+      )}
+    </Card>
+  )
+}
+
+/** Une instance : ce que la règle y fait, et ce que le garde-fou y a constaté. */
+function ApplicabilityRow({
+  entry,
+  isAdmin,
+  t,
+  tc,
+  onReactivate,
+}: {
+  entry: RuleApplicability
+  isAdmin: boolean
+  t: Translator
+  tc: PluralTranslator
+  onReactivate: () => void
+}) {
+  // `?? null` et non `!== null` : une API antérieure au garde-fou ne renvoie pas ce champ, et
+  // `undefined` traversait la garde pour venir mourir sur `health.quarantined`.
+  const health = entry.health ?? null
+  const troubled = health !== null && (health.quarantined || health.strikes > 0)
+  const hint = health?.failureKind ? failureKindHint(health.failureKind) : null
+
+  // Délai en vigueur ici. Celui de l'exécution mesurée prime : c'est à lui que la durée relevée
+  // doit se comparer, même si une surcharge a changé le délai depuis.
+  const seconds = health?.lastTimeoutSeconds ?? entry.timeoutSeconds ?? null
+  const allowed = seconds === null ? '—' : `${seconds} s`
+
+  return (
+    <li className="py-2 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {entry.applicable ? (
+          <Badge tone="success">{t('ruleEditor.applicableTag')}</Badge>
+        ) : (
+          <Badge tone="warning">{t('ruleEditor.skippedTag')}</Badge>
+        )}
+
+        {/* L'état du garde-fou est distinct de l'applicabilité : une règle parfaitement
+            applicable peut avoir été écartée parce qu'elle pesait trop lourd. */}
+        {health?.quarantined ? (
+          <Badge tone="danger">{t('ruleEditor.quarantinedTag')}</Badge>
+        ) : (
+          health?.state === 'degraded' && <Badge tone="warning">{t('ruleEditor.degradedTag')}</Badge>
+        )}
+
+        <span className="text-ink min-w-0 truncate">{entry.connectionName}</span>
+
+        {isAdmin && troubled && (
+          <Button variant="ghost" className="ml-auto" onClick={onReactivate}>
+            {t('ruleEditor.reactivate')}
+          </Button>
+        )}
+      </div>
+
+      {entry.reason && <p className="text-ink-muted mt-0.5 text-meta">{entry.reason}</p>}
+
+      {troubled && health && (
+        <>
+          <KeyValueGrid columns={2} className="mt-2">
+            <KeyValue label={t('ruleEditor.strikesLabel')}>
+              {tc('ruleEditor.strikes', health.strikes, { max: health.quarantineThreshold })}
+            </KeyValue>
+
+            {/* Dépassement de délai, erreur SQL ou lenteur : ce n'est pas la même conclusion. */}
+            <KeyValue label={t('ruleEditor.lastIncidentLabel')}>
+              {health.failureKind ? failureKindLabel(health.failureKind) : '—'}
+            </KeyValue>
+
+            <KeyValue label={t('ruleEditor.durationLabel')}>
+              <span
+                title={t('ruleEditor.durationTitle', {
+                  observed: measured(health.lastDurationMs),
+                  timeout: allowed,
+                })}
+              >
+                {measured(health.lastDurationMs)}
+                <span className="text-ink-muted"> / {allowed}</span>
+              </span>
+            </KeyValue>
+
+            {/* La quarantaine se date : « il reste un peu » ne dit pas quand la règle revient. */}
+            {health.quarantinedUntil && (
+              <KeyValue label={t('ruleEditor.quarantineUntilLabel')}>
+                {formatDateTime(health.quarantinedUntil)}
+              </KeyValue>
+            )}
+          </KeyValueGrid>
+
+          {hint && <p className="text-ink-muted mt-1.5 text-meta">{hint}</p>}
+
+          {health.failureMessage && (
+            <p
+              className="text-ink-muted mt-0.5 line-clamp-2 font-mono text-meta"
+              title={health.failureMessage}
+            >
+              {health.failureMessage}
+            </p>
+          )}
+        </>
+      )}
+    </li>
   )
 }
 
@@ -702,6 +940,7 @@ function OverridesCard({
   const [enabled, setEnabled] = useState<string>('')
   const [severity, setSeverity] = useState<string>('')
   const [interval, setInterval] = useState<string>('')
+  const [timeout, setTimeout] = useState<string>('')
   const [parameters, setParameters] = useState<Record<string, string>>({})
 
   // Recharge le formulaire lorsque la cible de surcharge change.
@@ -709,12 +948,18 @@ function OverridesCard({
     setEnabled(existing?.enabled === undefined || existing?.enabled === null ? '' : String(existing.enabled))
     setSeverity(existing?.severity ?? '')
     setInterval(existing?.intervalSeconds ? String(existing.intervalSeconds) : '')
+    setTimeout(existing?.timeoutSeconds ? String(existing.timeoutSeconds) : '')
     setParameters(
       Object.fromEntries(
         Object.entries(existing?.parameters ?? {}).map(([key, value]) => [key, String(value)]),
       ),
     )
   }, [existing])
+
+  // Délai appliqué à défaut de surcharge : celui du fichier, sinon celui du scheduler. Ce dernier
+  // n'a pas de valeur devinable côté interface — une API qui ne le renvoie pas laisse un tiret
+  // plutôt qu'un chiffre inventé.
+  const defaultTimeout = detail.rule.timeoutSeconds ?? detail.rule.defaultTimeoutSeconds ?? null
 
   const ruleParameters = Object.entries(detail.rule.parameters)
 
@@ -735,6 +980,7 @@ function OverridesCard({
         enabled: enabled === '' ? null : enabled === 'true',
         severity: severity === '' ? null : (severity as Severity),
         intervalSeconds: interval === '' ? null : Number(interval),
+        timeoutSeconds: timeout === '' ? null : Number(timeout),
         parameters: Object.keys(normalized).length > 0 ? normalized : null,
       })
       onChanged()
@@ -805,6 +1051,22 @@ function OverridesCard({
               max={86400}
               value={interval}
               onChange={(event) => setInterval(event.target.value)}
+            />
+          </Field>
+
+          {/* Le délai est ce que le garde-fou surveille : au-delà, l'exécution est comptée comme
+              un incident, et la règle finit par être écartée de l'instance. */}
+          <Field
+            label={t('ruleEditor.timeout')}
+            hint={t('ruleEditor.timeoutHint', { value: defaultTimeout ?? '—' })}
+          >
+            <Input
+              type="number"
+              min={1}
+              max={300}
+              placeholder={defaultTimeout === null ? '' : String(defaultTimeout)}
+              value={timeout}
+              onChange={(event) => setTimeout(event.target.value)}
             />
           </Field>
         </div>
@@ -880,6 +1142,11 @@ function OverridesCard({
                       {item.intervalSeconds && (
                         <span className="text-ink-muted text-meta">
                           {t('ruleEditor.overrideInterval', { seconds: item.intervalSeconds })}
+                        </span>
+                      )}
+                      {item.timeoutSeconds && (
+                        <span className="text-ink-muted text-meta">
+                          {t('ruleEditor.overrideTimeout', { seconds: item.timeoutSeconds })}
                         </span>
                       )}
                       {Object.keys(item.parameters).length > 0 && (

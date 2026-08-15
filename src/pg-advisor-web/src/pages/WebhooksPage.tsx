@@ -34,9 +34,32 @@ import { formatDateTime, formatRelative, severityLabel } from '@/lib/format'
 import { tr, useT, useTc } from '@/lib/i18n'
 import type { Translator } from '@/lib/i18n'
 
+/**
+ * Événements offerts à l'abonnement. La liste renvoyée à l'enregistrement est complète : tout
+ * événement absent d'ici serait désabonné en silence au premier passage dans le formulaire.
+ * Elle doit donc suivre `NotificationEvents.All` côté serveur.
+ */
 const EVENTS = [
-  { value: 'new_finding', labelKey: 'webhooks.event.newFinding' },
-  { value: 'finding_resolved', labelKey: 'webhooks.event.findingResolved' },
+  {
+    value: 'new_finding',
+    labelKey: 'webhooks.event.newFinding',
+    hintKey: 'webhooks.event.newFindingHint',
+  },
+  {
+    value: 'finding_resolved',
+    labelKey: 'webhooks.event.findingResolved',
+    hintKey: 'webhooks.event.findingResolvedHint',
+  },
+  {
+    value: 'rule_degraded',
+    labelKey: 'webhooks.event.ruleDegraded',
+    hintKey: 'webhooks.event.ruleDegradedHint',
+  },
+  {
+    value: 'rule_quarantined',
+    labelKey: 'webhooks.event.ruleQuarantined',
+    hintKey: 'webhooks.event.ruleQuarantinedHint',
+  },
 ]
 
 /** Formats de charge : Discord et Slack refusent un JSON quelconque. */
@@ -86,7 +109,9 @@ const EMPTY_FORM: FormState = {
   enabled: true,
   minimumSeverity: 'warning',
   format: 'generic',
-  events: ['new_finding', 'finding_resolved'],
+  // Mêmes abonnements par défaut que le serveur : un garde-fou dont personne n'est prévenu
+  // laisse une base souffrir sans témoin.
+  events: EVENTS.map((event) => event.value),
   connectionId: '',
   headers: '',
   replaceHeaders: true,
@@ -615,11 +640,18 @@ function WebhookForm({
             </Select>
           </Field>
 
-          <Fieldset legend={t('webhooks.form.events')} hint={t('webhooks.form.eventsHint')}>
+          {/* Une colonne : chaque événement porte l'indication de ce qu'il déclenche, et quatre
+              lignes courtes se lisent mieux qu'une grille où l'indication se replie. */}
+          <Fieldset
+            legend={t('webhooks.form.events')}
+            hint={t('webhooks.form.eventsHint')}
+            columns={1}
+          >
             {EVENTS.map((event) => (
               <Checkbox
                 key={event.value}
                 label={t(event.labelKey)}
+                hint={t(event.hintKey)}
                 checked={form.events.includes(event.value)}
                 onChange={(changed) =>
                   setForm({

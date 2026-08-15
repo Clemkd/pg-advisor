@@ -137,6 +137,49 @@ export const frRules: Record<string, string> = {
   'rules.noMatchHint': 'Aucune règle du catalogue ne répond à ces critères. Levez un filtre pour en revoir.',
   'rules.live.reloaded': 'Règles rechargées',
 
+  // --- Garde-fou de coût ----------------------------------------------------
+  // Une règle qui pèse sur la base observée est d'abord signalée, puis écartée de l'instance.
+  // Les termes d'API — healthy, degraded, quarantined, timeout, error, slow — restent les clés :
+  // seul l'affichage est traduit.
+  'ruleHealth.state.healthy': 'saine',
+  'ruleHealth.state.degraded': 'dégradée',
+  'ruleHealth.state.quarantined': 'en quarantaine',
+  'ruleHealth.kind.timeout': 'dépassement de délai',
+  'ruleHealth.kind.error': 'erreur SQL',
+  'ruleHealth.kind.slow': 'exécution trop lente',
+  // La nature de l'incident ne conduit pas à la même conclusion : le délai dépassé et la lenteur
+  // disent que l'instance souffre, l'erreur SQL que la règle est fautive.
+  'ruleHealth.kindHint.timeout':
+    'L’instance n’a pas rendu la main dans le délai accordé : c’est elle qui souffre, pas la règle.',
+  'ruleHealth.kindHint.error':
+    'La requête de la règle a échoué : c’est la règle qu’il faut corriger, pas l’instance.',
+  'ruleHealth.kindHint.slow':
+    'La règle aboutit, mais coûte trop cher à l’instance pour être répétée à cette fréquence.',
+
+  // --- Catalogue : état des règles ------------------------------------------
+  // Libellés d'option du filtre d'état : un seul mot, la colonne est étroite et l'option
+  // tronquée ne se distingue plus de sa voisine.
+  'rules.degradedTag': 'dégradée',
+  'rules.quarantinedTag': 'quarantaine',
+  'rules.degradedOn.one': 'dégradée sur {count} instance',
+  'rules.degradedOn.other': 'dégradée sur {count} instances',
+  'rules.quarantinedOn.one': 'écartée de {count} instance',
+  'rules.quarantinedOn.other': 'écartée de {count} instances',
+  'rules.guard.quarantinedTitle.one': '{count} règle écartée par le garde-fou',
+  'rules.guard.quarantinedTitle.other': '{count} règles écartées par le garde-fou',
+  'rules.guard.quarantinedBody':
+    'Leur diagnostic n’est plus produit sur les instances concernées : la catégorie cesse d’y être notée, et le score remonte sans qu’aucune base n’aille mieux.',
+  'rules.guard.degradedTitle.one': '{count} règle signalée par le garde-fou',
+  'rules.guard.degradedTitle.other': '{count} règles signalées par le garde-fou',
+  'rules.guard.degradedBody':
+    'Elles s’exécutent encore, mais accumulent des incidents : au seuil suivant, elles seront écartées de l’instance et leur diagnostic cessera.',
+  'rules.guard.alsoDegraded.one': '{count} autre règle est signalée sans être écartée.',
+  'rules.guard.alsoDegraded.other': '{count} autres règles sont signalées sans être écartées.',
+  'rules.guard.show': 'Voir ces règles',
+  'rules.live.degraded': 'Règle « {rule} » dégradée sur {instance}',
+  'rules.live.quarantined': 'Règle « {rule} » écartée de {instance}',
+  'rules.live.recovered': 'Règle « {rule} » rétablie sur {instance}',
+
   // --- Éditeur de règle : en-tête -------------------------------------------
   'ruleEditor.newTitle': 'Nouvelle règle',
   'ruleEditor.group': 'groupe {group}',
@@ -194,6 +237,28 @@ export const frRules: Record<string, string> = {
   'ruleEditor.applicabilityHint': 'où cette règle s’exécutera, en l’état des instances connues',
   'ruleEditor.applicableTag': 'applicable',
   'ruleEditor.skippedTag': 'ignorée',
+  // État du garde-fou, instance par instance. Une règle parfaitement applicable peut avoir été
+  // écartée parce qu'elle coûtait trop cher : les deux se lisent sur la même ligne.
+  'ruleEditor.degradedTag': 'dégradée',
+  'ruleEditor.quarantinedTag': 'écartée',
+  'ruleEditor.strikesLabel': 'Incidents',
+  'ruleEditor.strikes.one': '{count} sur {max}',
+  'ruleEditor.strikes.other': '{count} sur {max}',
+  'ruleEditor.lastIncidentLabel': 'Dernier incident',
+  'ruleEditor.durationLabel': 'Durée / délai',
+  'ruleEditor.durationTitle': '{observed} observées pour {timeout} accordées',
+  'ruleEditor.quarantineUntilLabel': 'Écartée jusqu’au',
+  'ruleEditor.reactivate': 'Réactiver',
+  'ruleEditor.reactivateAll': 'Réactiver partout',
+  'ruleEditor.reactivateTitle': 'Réactiver « {rule} » sur {instance} ?',
+  'ruleEditor.reactivateAllTitle': 'Réactiver « {rule} » sur toutes les instances ?',
+  // La confirmation dit ce qu'elle suppose, pas ce qu'elle fait : réactiver sans avoir traité la
+  // cause fait simplement recommencer le décompte.
+  'ruleEditor.reactivateBody':
+    'Cette action suppose que la cause est traitée. Le décompte d’incidents repart de zéro et la règle est réexécutée au prochain cycle ; si la cause subsiste, elle sera écartée de nouveau.',
+  'ruleEditor.reactivateConfirm': 'Réactiver la règle',
+  'ruleEditor.reactivated': 'Règle réactivée sur {scope} : le décompte d’incidents repart de zéro.',
+  'ruleEditor.reactivateFailed': 'Réactivation impossible.',
   'ruleEditor.help': 'Aide-mémoire',
   'ruleEditor.helpShow': 'Afficher',
   'ruleEditor.helpHide': 'Réduire',
@@ -219,6 +284,8 @@ export const frRules: Record<string, string> = {
   'ruleEditor.disabledOption': 'Désactivée',
   'ruleEditor.interval': 'Périodicité (s)',
   'ruleEditor.intervalHint': 'vide = celle du groupe',
+  'ruleEditor.timeout': 'Délai maximal (s)',
+  'ruleEditor.timeoutHint': 'défaut {value} s, de 1 à 300',
   'ruleEditor.thresholds': 'Seuils',
   'ruleEditor.thresholdDefault': 'défaut : {value}',
   'ruleEditor.saveOverride': 'Enregistrer la surcharge',
@@ -227,4 +294,5 @@ export const frRules: Record<string, string> = {
   'ruleEditor.editOverride': 'Modifier la surcharge de « {scope} »',
   'ruleEditor.overrideSeverity': 'sévérité {severity}',
   'ruleEditor.overrideInterval': 'toutes les {seconds} s',
+  'ruleEditor.overrideTimeout': 'délai {seconds} s',
 }

@@ -12,6 +12,7 @@ import type {
   Rule,
   RuleDetail,
   RuleError,
+  RuleHealth,
   RuleSchema,
   RulesStatus,
   TestConnectionResult,
@@ -179,6 +180,12 @@ export const api = {
     list: (params: { category?: string; origin?: string; search?: string } = {}) =>
       get<Rule[]>(`/api/rules${query(params)}`),
     get: (id: string) => get<RuleDetail>(`/api/rules/${encodeURIComponent(id)}`),
+    /** État du garde-fou pour toutes les règles suivies, sans ouvrir chacune d'elles. */
+    health: (params: { connectionId?: number; state?: string } = {}) =>
+      get<RuleHealth[]>(`/api/rules/health${query(params)}`),
+    /** Lève la quarantaine : sur une instance, ou partout si `connectionId` vaut null. */
+    reactivate: (id: string, connectionId: number | null = null) =>
+      post<RuleHealth[]>(`/api/rules/${encodeURIComponent(id)}/reactivate`, { connectionId }),
     schema: () => get<RuleSchema>('/api/rules/schema'),
     errors: () => get<RuleError[]>('/api/rules/errors'),
     validate: (yaml: string) => post<ValidateRuleResult>('/api/rules/validate', { yaml }),
@@ -196,6 +203,7 @@ export const api = {
         enabled?: boolean | null
         severity?: string | null
         intervalSeconds?: number | null
+        timeoutSeconds?: number | null
         parameters?: Record<string, unknown> | null
       },
     ) => put<unknown>(`/api/rules/${encodeURIComponent(id)}/override`, body),

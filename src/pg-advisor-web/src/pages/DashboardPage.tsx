@@ -36,6 +36,7 @@ import {
 } from '@/lib/format'
 import { currentLocale, translate, translatePlural, tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
+import { guardAnnouncement, RULE_GUARD_EVENTS } from '@/lib/ruleGuard'
 import { cn } from '@/lib/utils'
 
 const LIVE_EVENTS = [
@@ -110,6 +111,15 @@ export function DashboardPage() {
 
   useEventListener(LIVE_EVENTS, () => void load())
 
+  // Le garde-fou modifie ce qui est encore observé : une règle écartée fait remonter un score
+  // sans rien améliorer. L'événement s'annonce, et la vue se remet à jour sans se vider.
+  useEventListener(RULE_GUARD_EVENTS, (event) => {
+    // L'annonce est posée après le rechargement : `load` réécrit la région live avec ce que la
+    // nouvelle donnée a changé, et l'écraserait sinon.
+    const message = guardAnnouncement(event)
+    void load().then(() => setAnnouncement(message))
+  })
+
   // Le rappel périodique ne vit que si le flux est mort : branché en permanence, il doublait le
   // SSE et rechargeait la page toutes les trente secondes pour rien.
   useEffect(() => {
@@ -142,6 +152,14 @@ export function DashboardPage() {
   const scored = instances.filter((instance) => instance.health !== null).length
   const activeDiagnostics = summary.critical + summary.warning + summary.info
 
+  // Une règle écartée cesse d'être évaluée : la catégorie qu'elle notait sort du score, et celui-ci
+  // remonte sans qu'aucune base n'aille mieux. C'est la seule bonne nouvelle qui n'en est pas une,
+  // et elle se dit avant tout le reste.
+  const quarantinedRules = new Set(instances.flatMap((instance) => instance.quarantinedRules ?? []))
+  const blindInstances = instances.filter(
+    (instance) => (instance.quarantinedRules?.length ?? 0) > 0,
+  ).length
+
   return (
     <Page
       title={t('nav.overview')}
@@ -157,6 +175,21 @@ export function DashboardPage() {
         {error && (
           <Notice tone="danger" title={t('common.error')}>
             {error}
+          </Notice>
+        )}
+
+        {quarantinedRules.size > 0 && (
+          <Notice tone="warning" title={tc('dashboard.quarantine.title', quarantinedRules.size)}>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <p className="min-w-0 flex-1 basis-72">
+                {t('dashboard.quarantine.body', {
+                  instances: tc('dashboard.quarantine.instances', blindInstances),
+                })}
+              </p>
+              <CardAction to="/rules?state=quarantined">
+                {t('dashboard.quarantine.show')}
+              </CardAction>
+            </div>
           </Notice>
         )}
 
@@ -445,6 +478,7 @@ function InstanceRow({
 }) {
   const health = instance.health
   const metrics = instance.metrics
+  const quarantined = instance.quarantinedRules ?? []
 
   return (
     <li className="px-4 py-3">
@@ -470,8 +504,16 @@ function InstanceRow({
             {health && health.info > 0 && (
               <Badge tone="info">{tc('dashboard.infoCount', health.info)}</Badge>
             )}
-            {health && health.total === 0 && (
+            {health && health.total === 0 && quarantined.length === 0 && (
               <Badge tone="success">{t('dashboard.noDiagnosticBadge')}</Badge>
+            )}
+
+            {/* « Aucun diagnostic » ne veut rien dire si une règle a cessé de regarder : le
+                badge nomme le nombre de règles écartées, et son titre les énumère. */}
+            {quarantined.length > 0 && (
+              <Badge tone="warning" title={quarantined.join(', ')}>
+                {tc('dashboard.quarantinedRules', quarantined.length)}
+              </Badge>
             )}
           </div>
 
