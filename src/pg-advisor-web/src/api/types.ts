@@ -198,6 +198,16 @@ export interface RuleError {
   origin: string
 }
 
+/**
+ * Fichier refusé par le moteur, avec son contenu. Une règle en erreur n'entre pas dans le
+ * catalogue : elle n'a pas d'identifiant à éditer, on ouvre donc son fichier.
+ */
+export interface FailingRule extends RuleError {
+  yaml: string
+  /** Faux pour un fichier livré avec l'application : son répertoire est monté en lecture seule. */
+  writable: boolean
+}
+
 export interface RulesStatus {
   total: number
   enabled: number

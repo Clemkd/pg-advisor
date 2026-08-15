@@ -233,6 +233,8 @@ export const en: Record<string, string> = {
   'rules.reloadedAt': 'reloaded {when}',
   'rules.reload': 'Reload',
   'rules.failingTitle': 'Failing rules ({count})',
+  'rules.fix': 'Fix',
+  'rules.fixFile': 'Fix {file}',
   'rules.customRule': 'custom rule',
   'rules.bundledRule': 'bundled rule',
   'rules.failingHint':

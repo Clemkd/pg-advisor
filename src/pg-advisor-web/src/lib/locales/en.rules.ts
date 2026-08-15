@@ -245,6 +245,9 @@ export const enRules: Record<string, string> = {
   'ruleEditor.helpHandlers': 'Built-in handlers',
 
   // --- Rule editor: instances and variables ----------------------------------
+  'ruleEditor.repairTitle': 'Fix {file}',
+  'ruleEditor.repairHint':
+    'This file was rejected at load time, so the rule is not active. Fix it here; it reloads on save.',
   'ruleEditor.variables': 'Scope and variables',
   'ruleEditor.variablesHint':
     'Where the rule works, and with which values. Everything else — activation, severity, schedule, timeout — is written in the YAML.',

@@ -105,6 +105,36 @@ public sealed class RuleFileService(
     public bool HasUserFile(string id) => File.Exists(PathFor(id));
 
     /// <summary>
+    /// Retire un fichier utilisateur devenu inutile après réparation.
+    ///
+    /// Une règle corrigée est écrite sous « &lt;identifiant&gt;.yaml ». Si le fichier fautif portait
+    /// un autre nom — il a pu être déposé à la main —, le laisser en place le ferait rejeter à
+    /// chaque rechargement, et l'erreur qu'on vient de corriger resterait affichée.
+    /// </summary>
+    public bool DiscardUserFile(string path, string keptRuleId)
+    {
+        var root = Path.GetFullPath(_options.UserRulesDirectory);
+        var full = Path.GetFullPath(path);
+
+        // Hors du répertoire utilisateur, rien n'est supprimé : le répertoire des règles livrées
+        // est monté en lecture seule, et une erreur de chemin ne doit pas y toucher.
+        if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+            !full.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (string.Equals(full, PathFor(keptRuleId), StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+        {
+            return false;
+        }
+
+        File.Delete(full);
+        logger.LogInformation("Rejected rule file {Path} removed after being fixed as {RuleId}.", full, keptRuleId);
+        return true;
+    }
+
+    /// <summary>
     /// Chemin du fichier d'une règle. L'identifiant est déjà contraint par la validation
     /// (minuscules, sans séparateur de chemin) ; on vérifie néanmoins que le résultat reste
     /// dans le répertoire des règles utilisateur.

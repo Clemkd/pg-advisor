@@ -269,6 +269,9 @@ export const frRules: Record<string, string> = {
   'ruleEditor.helpHandlers': 'Handlers internes',
 
   // --- Éditeur de règle : instances et variables -----------------------------
+  'ruleEditor.repairTitle': 'Corriger {file}',
+  'ruleEditor.repairHint':
+    'Ce fichier a été refusé au chargement : la règle n’est pas active. Corrigez-le ici, il sera rechargé à l’enregistrement.',
   'ruleEditor.variables': 'Application et variables',
   'ruleEditor.variablesHint':
     'Où la règle travaille, et avec quelles valeurs. Le reste — activation, sévérité, périodicité, timeout — s’écrit dans le YAML.',

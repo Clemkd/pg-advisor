@@ -1,4 +1,5 @@
 import type {
+  FailingRule,
   Connection,
   ConnectionDetail,
   CurrentUser,
@@ -188,6 +189,10 @@ export const api = {
       post<RuleHealth[]>(`/api/rules/${encodeURIComponent(id)}/reactivate`, { connectionId }),
     schema: () => get<RuleSchema>('/api/rules/schema'),
     errors: () => get<RuleError[]>('/api/rules/errors'),
+    /** Contenu d'un fichier refusé, pour le corriger sans passer par le volume. */
+    failing: (file: string) => get<FailingRule>(`/api/rules/errors/${encodeURIComponent(file)}`),
+    fixFailing: (file: string, yaml: string) =>
+      put<RuleDetail>(`/api/rules/errors/${encodeURIComponent(file)}`, { yaml }),
     validate: (yaml: string) => post<ValidateRuleResult>('/api/rules/validate', { yaml }),
     create: (yaml: string) => post<RuleDetail>('/api/rules', { yaml }),
     update: (id: string, yaml: string) =>

@@ -22,3 +22,16 @@ public sealed record RulesStatusResponse
 }
 
 public sealed record RuleErrorResponse(string File, string? RuleId, string Message, string Origin);
+
+/// <summary>
+/// Un fichier de règle que le moteur a refusé, avec son contenu : une règle en erreur n'entre pas
+/// dans le catalogue, elle n'a donc pas d'identifiant à éditer — on ouvre son fichier.
+/// </summary>
+public sealed record FailingRuleResponse(
+    string File,
+    string? RuleId,
+    string Message,
+    string Origin,
+    string Yaml,
+    /// <summary>Faux pour un fichier livré avec l'application : son répertoire est monté en lecture seule.</summary>
+    bool Writable);

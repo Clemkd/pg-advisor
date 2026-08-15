@@ -116,6 +116,91 @@ public sealed class RulesController(
             Path.GetFileName(e.Path), e.RuleId, e.Message, e.Origin.ToString().ToLowerInvariant()))
         .ToList());
 
+    /// <summary>
+    /// Contenu d'un fichier refusé par le moteur, pour le corriger depuis l'interface.
+    ///
+    /// La liste des erreurs courantes fait office de liste blanche : on ne lit que des chemins que
+    /// le moteur a lui-même rapportés, jamais un chemin construit par l'appelant.
+    /// </summary>
+    [HttpGet("errors/{file}")]
+    public async Task<ActionResult<FailingRuleResponse>> FailingRule(string file, CancellationToken ct)
+    {
+        var error = FindError(file);
+        if (error is null)
+        {
+            return NotFound();
+        }
+
+        string yaml;
+        try
+        {
+            yaml = await System.IO.File.ReadAllTextAsync(error.Path, ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Problem(statusCode: StatusCodes.Status500InternalServerError,
+                title: $"Cannot read {file}: {ex.Message}");
+        }
+
+        return Ok(new FailingRuleResponse(
+            Path.GetFileName(error.Path),
+            error.RuleId,
+            error.Message,
+            error.Origin.ToString().ToLowerInvariant(),
+            yaml,
+            error.Origin == RuleOrigin.User));
+    }
+
+    /// <summary>
+    /// Corrige un fichier refusé. La règle réparée est écrite sous son identifiant, et le fichier
+    /// fautif retiré s'il portait un autre nom — sans quoi il continuerait d'être rejeté.
+    /// </summary>
+    [HttpPut("errors/{file}")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<RuleDetailResponse>> FixFailingRule(
+        string file,
+        SaveRuleRequest request,
+        CancellationToken ct)
+    {
+        var error = FindError(file);
+        if (error is null)
+        {
+            return NotFound();
+        }
+
+        if (error.Origin != RuleOrigin.User)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: "This file ships with the application and its directory is mounted read-only. " +
+                       "Fix it in the mounted directory, or write a user rule with the same identifier to replace it.");
+        }
+
+        var saved = await files.SaveAsync(request.Yaml, expectedId: null, ct);
+        if (!saved.Success || saved.Rule is null)
+        {
+            return ValidationProblem(saved.Errors);
+        }
+
+        if (files.DiscardUserFile(error.Path, saved.Rule.Id))
+        {
+            store.Reload();
+        }
+
+        bus.Publish(AdvisorEventTypes.RulesReloaded, BuildReloadPayload());
+
+        var overrides = await LoadOverridesAsync(ct);
+        var health = await LoadHealthAsync(ct);
+
+        return Ok(new RuleDetailResponse
+        {
+            Rule = ToSummary(saved.Rule, store.Current, overrides, health),
+            Yaml = saved.Rule.RawYaml,
+        });
+    }
+
+    private RuleLoadError? FindError(string file) => store.Current.Errors.FirstOrDefault(
+        e => string.Equals(Path.GetFileName(e.Path), file, StringComparison.Ordinal));
+
     [HttpGet("{id}")]
     public async Task<ActionResult<RuleDetailResponse>> Get(string id, CancellationToken ct)
     {

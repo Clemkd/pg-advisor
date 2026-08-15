@@ -54,6 +54,8 @@ export default function App() {
                 <Route path="/queries" element={<QueriesPage />} />
                 <Route path="/rules" element={<RulesPage />} />
                 <Route path="/rules/new" element={<RuleEditorPage />} />
+                {/* Une règle refusée n'a pas d'identifiant : elle s'ouvre par son fichier. */}
+                <Route path="/rules/errors/:file" element={<RuleEditorPage />} />
                 <Route path="/rules/:id" element={<RuleEditorPage />} />
                 <Route path="/webhooks" element={<WebhooksPage />} />
                 <Route path="/users" element={<UsersPage />} />

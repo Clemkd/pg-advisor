@@ -294,18 +294,30 @@ export function RulesPage() {
           <Card>
             <CardHeader title={tc('rules.failing', errors.length)} description={t('rules.failingHint')} />
             <CardBody className="space-y-2">
+              {/* Une règle refusée n'entre pas dans le catalogue : elle n'a pas d'identifiant à
+                  ouvrir, mais elle a un fichier. Le lien y mène — sans quoi la seule façon de la
+                  corriger serait d'aller dans le volume de données. */}
               {errors.map((ruleError, index) => (
-                <div
+                <Link
                   key={`${ruleError.file}-${index}`}
-                  className="border-danger bg-danger-subtle rounded-[var(--radius-control)] border-l-2 px-3 py-2"
+                  to={`/rules/errors/${encodeURIComponent(ruleError.file)}`}
+                  title={t('rules.fixFile', { file: ruleError.file })}
+                  className="border-danger bg-danger-subtle hover:bg-danger-subtle/70 block rounded-[var(--radius-control)] border-l-2 px-3 py-2 transition-colors"
                 >
-                  <p className="text-ink font-mono font-medium">{ruleError.ruleId ?? ruleError.file}</p>
-                  <p className="text-ink">{ruleError.message}</p>
-                  <p className="text-ink-muted text-meta">
+                  <span className="flex flex-wrap items-center gap-x-2">
+                    <span className="text-ink font-mono font-medium">
+                      {ruleError.ruleId ?? ruleError.file}
+                    </span>
+                    <span className="text-danger-strong text-meta font-medium">
+                      {t('rules.fix')}
+                    </span>
+                  </span>
+                  <span className="text-ink block">{ruleError.message}</span>
+                  <span className="text-ink-muted block text-meta">
                     <span className="font-mono">{ruleError.file}</span> ·{' '}
                     {ruleError.origin === 'user' ? t('rules.customRule') : t('rules.bundledRule')}
-                  </p>
-                </div>
+                  </span>
+                </Link>
               ))}
             </CardBody>
           </Card>

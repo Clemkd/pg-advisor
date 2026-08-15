@@ -5,6 +5,7 @@ import { FlaskConical, RotateCcw, ServerOff } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type {
   Connection,
+  FailingRule,
   DryRunResult,
   RuleApplicability,
   RuleDetail,
@@ -74,8 +75,10 @@ const RUN_KEYS = APPLE ? 'Meta+Enter' : 'Control+Enter'
 const DRAFT_ID = 'nouvelle-regle'
 
 export function RuleEditorPage() {
-  const { id } = useParams<{ id: string }>()
-  const creating = id === undefined
+  const { id, file } = useParams<{ id: string; file: string }>()
+  // Trois modes : créer, éditer une règle chargée, réparer un fichier que le moteur a refusé.
+  const repairing = file !== undefined
+  const creating = id === undefined && !repairing
   const navigate = useNavigate()
   const { isAdmin } = useAuth()
   const t = useT()
@@ -83,6 +86,7 @@ export function RuleEditorPage() {
 
   const [schema, setSchema] = useState<RuleSchema | null>(null)
   const [detail, setDetail] = useState<RuleDetail | null>(null)
+  const [failing, setFailing] = useState<FailingRule | null>(null)
   const [connections, setConnections] = useState<Connection[]>([])
   const [yaml, setYaml] = useState('')
   const [loading, setLoading] = useState(true)
@@ -111,6 +115,17 @@ export function RuleEditorPage() {
       setConnections(instances)
       setDryRunInstance(instances[0]?.id ?? null)
 
+      if (repairing) {
+        // Le fichier est lu tel qu'il est sur le disque : c'est le texte refusé qu'il faut
+        // corriger, pas une version normalisée qui masquerait la faute.
+        const broken = await api.rules.failing(file!)
+        setFailing(broken)
+        setYaml(broken.yaml)
+        setErrors([broken.message])
+        setValidated(false)
+        return
+      }
+
       if (creating) {
         setYaml(ruleSchema.template)
       } else {
@@ -125,7 +140,7 @@ export function RuleEditorPage() {
     } finally {
       setLoading(false)
     }
-  }, [creating, id])
+  }, [creating, id, repairing, file])
 
   useEffect(() => {
     void load()
@@ -205,12 +220,16 @@ export function RuleEditorPage() {
     setNotice(null)
 
     try {
-      const saved = creating ? await api.rules.create(yaml) : await api.rules.update(id!, yaml)
+      const saved = repairing
+        ? await api.rules.fixFailing(file!, yaml)
+        : creating
+          ? await api.rules.create(yaml)
+          : await api.rules.update(id!, yaml)
       setDetail(saved)
       setYaml(saved.yaml)
       setNotice(t('ruleEditor.saved', { id: saved.rule.id }))
 
-      if (creating) {
+      if (creating || repairing) {
         navigate(`/rules/${encodeURIComponent(saved.rule.id)}`, { replace: true })
       }
     } catch (cause) {
@@ -301,11 +320,25 @@ export function RuleEditorPage() {
 
   return (
     <Page
-      title={creating ? t('ruleEditor.newTitle') : (rule?.name ?? rule?.id ?? '')}
+      title={
+        repairing
+          ? t('ruleEditor.repairTitle', { file: failing?.file ?? file! })
+          : creating
+            ? t('ruleEditor.newTitle')
+            : (rule?.name ?? rule?.id ?? '')
+      }
+      description={repairing ? t('ruleEditor.repairHint') : undefined}
       // Le fil d'Ariane de la coquille annonce déjà « Règles / identifiant » : la page n'en
       // repose pas un second. La signalétique de la règle tient sur la ligne du titre.
       meta={
-        rule && (
+        repairing ? (
+          failing && (
+            <Badge tone={failing.writable ? 'warning' : 'danger'}>
+              {failing.writable ? t('rules.customTag') : t('rules.bundledTag')}
+            </Badge>
+          )
+        ) : (
+          rule && (
           <>
             <SeverityBadge severity={rule.severity} />
             <Badge tone="info">{categoryLabel(rule.category)}</Badge>
@@ -317,6 +350,7 @@ export function RuleEditorPage() {
               <Badge>{t('rules.bundledTag')}</Badge>
             )}
           </>
+          )
         )
       }
       actions={
@@ -332,7 +366,7 @@ export function RuleEditorPage() {
               size="lg"
               onClick={save}
               loading={busy}
-              disabled={validated === false}
+              disabled={validated === false || (repairing && failing?.writable === false)}
             >
               {t('common.save')}
             </Button>
@@ -491,7 +525,7 @@ export function RuleEditorPage() {
                         className="shrink-0"
                         onClick={runDryRun}
                         loading={dryRunBusy}
-                        disabled={validated === false}
+                        disabled={validated === false || (repairing && failing?.writable === false)}
                         aria-keyshortcuts={RUN_KEYS}
                       >
                         {t('ruleEditor.dryRunRun')}
