@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using PgAdvisor.Api.Data;
 using PgAdvisor.Api.Postgres;
@@ -36,9 +37,20 @@ public sealed record RuleExecutionResult
     public string? SkipReason { get; init; }
 
     public string? Error { get; init; }
+
+    /// <summary>
+    /// Nature de l'échec : « timeout » quand le délai a été dépassé, « error » pour une erreur
+    /// SQL ordinaire. La distinction dit à l'exploitant s'il doit corriger sa règle ou
+    /// s'inquiéter de sa base.
+    /// </summary>
+    public string? FailureKind { get; init; }
+
     public int RowCount { get; init; }
     public IReadOnlyList<FindingCandidate> Findings { get; init; } = [];
     public TimeSpan Duration { get; init; }
+
+    /// <summary>Délai réellement appliqué à cette exécution, en secondes.</summary>
+    public int TimeoutSeconds { get; init; }
 
     /// <summary>Lignes brutes, uniquement renseignées en mode aperçu depuis l'IHM.</summary>
     public IReadOnlyList<Dictionary<string, object?>> Rows { get; init; } = [];
@@ -48,9 +60,17 @@ public sealed record RuleExecutionResult
 /// Exécute une règle contre une instance : YAML → prérequis → SQL → condition → finding.
 /// Aucune écriture n'est possible, la session PostgreSQL étant forcée en lecture seule.
 /// </summary>
-public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine> logger)
+public sealed class RuleEngine(
+    RuleHandlerRegistry handlers,
+    IOptions<AdvisorOptions> options,
+    ILogger<RuleEngine> logger)
 {
     private const int DefaultLimit = 100;
+
+    /// <summary>SQLSTATE 57014 : requête annulée, ce que produit un statement_timeout atteint.</summary>
+    private const string QueryCanceled = "57014";
+
+    private readonly SchedulerOptions _scheduler = options.Value.Scheduler;
 
     public async Task<RuleExecutionResult> ExecuteAsync(
         EffectiveRule effective,
@@ -61,6 +81,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         bool includeRows = false)
     {
         var rule = effective.Rule;
+        var timeoutSeconds = effective.ResolveTimeoutSeconds(_scheduler.QueryTimeout);
         var stopwatch = Stopwatch.StartNew();
 
         if (!effective.Enabled)
@@ -77,19 +98,28 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         IReadOnlyList<RuleRow> rows;
         try
         {
-            rows = await FetchRowsAsync(effective, connection, capabilities, instance, cancellationToken);
+            await ApplyStatementTimeoutAsync(connection, timeoutSeconds, cancellationToken);
+            rows = await FetchRowsAsync(effective, connection, capabilities, instance, timeoutSeconds, cancellationToken);
         }
         catch (Exception ex) when (ex is PostgresException or NpgsqlException or TimeoutException or InvalidOperationException)
         {
-            logger.LogWarning("Rule {RuleId} failed on instance {Instance}: {Message}",
-                rule.Id, instance.Name, ex.Message);
+            var kind = ClassifyFailure(ex);
+
+            logger.LogWarning("Rule {RuleId} failed on instance {Instance} ({Kind}): {Message}",
+                rule.Id, instance.Name, kind, ex.Message);
 
             return new RuleExecutionResult
             {
                 RuleId = rule.Id,
-                Error = ex.Message,
+                Error = Describe(ex, kind, timeoutSeconds),
+                FailureKind = kind,
                 Duration = stopwatch.Elapsed,
+                TimeoutSeconds = timeoutSeconds,
             };
+        }
+        finally
+        {
+            await RestoreStatementTimeoutAsync(connection, timeoutSeconds, cancellationToken);
         }
 
         var limit = Math.Clamp(rule.Definition.Limit ?? DefaultLimit, 1, 1_000);
@@ -109,13 +139,16 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
             }
             catch (ExpressionException ex)
             {
-                // Erreur d'évaluation sur une ligne : la règle est signalée, pas silencieusement ignorée.
+                // Erreur d'évaluation sur une ligne : la règle est signalée, pas silencieusement
+                // ignorée. La faute est dans la règle, pas dans la base : « error », jamais « timeout ».
                 return new RuleExecutionResult
                 {
                     RuleId = rule.Id,
                     Error = $"Cannot evaluate the condition: {ex.Message}",
+                    FailureKind = RuleFailureKinds.Error,
                     RowCount = rows.Count,
                     Duration = stopwatch.Elapsed,
+                    TimeoutSeconds = timeoutSeconds,
                 };
             }
 
@@ -142,10 +175,93 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
             RowCount = rows.Count,
             Findings = candidates,
             Duration = stopwatch.Elapsed,
+            TimeoutSeconds = timeoutSeconds,
             Rows = includeRows
                 ? rows.Take(limit).Select(r => r.ToDictionary(p => p.Key, p => NormalizeForJson(p.Value))).ToList()
                 : [],
         };
+    }
+
+    /// <summary>
+    /// Applique le délai de la règle à la session, et à elle seule : c'est un réglage de session
+    /// PostgreSQL, jamais une écriture sur l'instance supervisée. Le délai global posé à
+    /// l'ouverture de la connexion reste la valeur de repos.
+    /// </summary>
+    private async Task ApplyStatementTimeoutAsync(
+        NpgsqlConnection connection, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        if (timeoutSeconds == GlobalTimeoutSeconds)
+        {
+            return;
+        }
+
+        await SetStatementTimeoutAsync(connection, timeoutSeconds, cancellationToken);
+    }
+
+    /// <summary>Rend la session à son délai global : la règle suivante ne doit pas hériter du précédent.</summary>
+    private async Task RestoreStatementTimeoutAsync(
+        NpgsqlConnection connection, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        if (timeoutSeconds == GlobalTimeoutSeconds)
+        {
+            return;
+        }
+
+        try
+        {
+            await SetStatementTimeoutAsync(connection, GlobalTimeoutSeconds, cancellationToken);
+        }
+        catch (Exception ex) when (ex is PostgresException or NpgsqlException or TimeoutException
+                                      or InvalidOperationException or OperationCanceledException)
+        {
+            // Connexion perdue, fermée, ou analyse interrompue : elle ne servira plus. Laisser
+            // cette exception remonter masquerait celle qui a réellement fait échouer la règle.
+            logger.LogDebug("Cannot restore the global statement_timeout: {Message}", ex.Message);
+        }
+    }
+
+    private static async Task SetStatementTimeoutAsync(
+        NpgsqlConnection connection, int seconds, CancellationToken cancellationToken)
+    {
+        // Paramètre entier calculé, jamais une valeur venue du YAML : aucune interpolation
+        // d'entrée utilisateur ne se retrouve dans ce SET.
+        await using var command = new NpgsqlCommand($"SET statement_timeout = {seconds * 1000}", connection)
+        {
+            CommandTimeout = 10,
+        };
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private int GlobalTimeoutSeconds => Math.Clamp(
+        (int)Math.Ceiling(_scheduler.QueryTimeout.TotalSeconds),
+        RuleLimits.MinTimeoutSeconds,
+        RuleLimits.MaxTimeoutSeconds);
+
+    /// <summary>
+    /// Sépare le dépassement de délai de l'erreur SQL ordinaire. Le serveur annule la requête
+    /// avec le SQLSTATE 57014 lorsque le statement_timeout est atteint ; Npgsql lève un
+    /// TimeoutException lorsque c'est le délai côté client qui a joué le premier.
+    /// </summary>
+    private static string ClassifyFailure(Exception exception) => exception switch
+    {
+        PostgresException { SqlState: QueryCanceled } => RuleFailureKinds.Timeout,
+        TimeoutException => RuleFailureKinds.Timeout,
+        NpgsqlException { InnerException: TimeoutException } => RuleFailureKinds.Timeout,
+        _ => RuleFailureKinds.Error,
+    };
+
+    /// <summary>Message consigné : il doit dire de lui-même lequel des deux problèmes s'est produit.</summary>
+    private static string Describe(Exception exception, string kind, int timeoutSeconds)
+    {
+        if (kind == RuleFailureKinds.Timeout)
+        {
+            return $"Timed out after {timeoutSeconds}s on the supervised instance.";
+        }
+
+        return exception is PostgresException pg
+            ? $"{pg.SqlState} : {pg.MessageText}"
+            : exception.Message;
     }
 
     private async Task<IReadOnlyList<RuleRow>> FetchRowsAsync(
@@ -153,6 +269,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
         NpgsqlConnection connection,
         PgCapabilities capabilities,
         PostgresConnection instance,
+        int timeoutSeconds,
         CancellationToken cancellationToken)
     {
         var rule = effective.Rule;
@@ -162,7 +279,7 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
             var handler = handlers.Find(rule.Definition.Handler!)
                 ?? throw new InvalidOperationException($"Handler \"{rule.Definition.Handler}\" not found.");
 
-            var context = new RuleHandlerContext(effective, connection, capabilities, instance);
+            var context = new RuleHandlerContext(effective, connection, capabilities, instance, timeoutSeconds);
             return await handler.ExecuteAsync(context, cancellationToken);
         }
 
@@ -172,13 +289,18 @@ public sealed class RuleEngine(RuleHandlerRegistry handlers, ILogger<RuleEngine>
             return [new RuleRow()];
         }
 
-        return await ReadQueryAsync(effective, connection, cancellationToken);
+        return await ReadQueryAsync(effective, connection, timeoutSeconds, cancellationToken);
     }
 
     private static async Task<List<RuleRow>> ReadQueryAsync(
-        EffectiveRule effective, NpgsqlConnection connection, CancellationToken cancellationToken)
+        EffectiveRule effective, NpgsqlConnection connection, int timeoutSeconds, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(effective.Rule.Definition.Query, connection);
+        // Le délai client dépasse celui du serveur : c'est le statement_timeout qui doit couper,
+        // lui seul sait nommer le motif et laisse la connexion utilisable.
+        await using var command = new NpgsqlCommand(effective.Rule.Definition.Query, connection)
+        {
+            CommandTimeout = timeoutSeconds + RuleHandlerContext.ClientTimeoutMarginSeconds,
+        };
 
         // Seuls les seuils réellement référencés sont transmis : Npgsql rejette les paramètres orphelins.
         foreach (var parameter in effective.Parameters)

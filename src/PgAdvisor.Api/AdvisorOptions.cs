@@ -58,8 +58,55 @@ public sealed class SchedulerOptions
 
     public TimeSpan PerInstanceTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
-    /// <summary>Délai maximal d'exécution d'une requête de règle sur l'instance supervisée.</summary>
+    /// <summary>
+    /// Délai maximal d'exécution d'une requête de règle sur l'instance supervisée, appliqué à
+    /// défaut de délai propre à la règle (<c>timeoutSeconds</c>).
+    /// </summary>
     public TimeSpan QueryTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Garde-fou de coût : comptage des exécutions coûteuses et mise en quarantaine.</summary>
+    public RuleGuardOptions RuleGuard { get; set; } = new();
+}
+
+/// <summary>
+/// Garde-fou de coût des règles. Il compte, par couple (règle, instance), les exécutions qui
+/// pèsent sur la base supervisée — dépassement de délai, erreur SQL, ou succès trop lent — puis
+/// avertit, et finit par écarter la règle de cette instance plutôt que de la laisser coûter
+/// indéfiniment. Rien de tout cela n'est écrit sur l'instance supervisée : c'est de l'état de
+/// l'Advisor.
+/// </summary>
+public sealed class RuleGuardOptions
+{
+    /// <summary>Désactive tout le mécanisme : les règles s'exécutent alors sans plafond d'incidents.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Incidents consécutifs à partir desquels la règle est signalée et notifiée, sans cesser
+    /// de s'exécuter. Trois passages écartent l'accident isolé (bascule, verrou, redémarrage)
+    /// sans laisser traîner un vrai problème.
+    /// </summary>
+    public int WarningThreshold { get; set; } = 3;
+
+    /// <summary>
+    /// Incidents consécutifs à partir desquels la règle est mise en quarantaine sur cette
+    /// instance. Deux passages de plus que l'avertissement : l'exploitant a le temps de voir
+    /// l'alerte avant que le diagnostic ne cesse d'être produit.
+    /// </summary>
+    public int QuarantineThreshold { get; set; } = 5;
+
+    /// <summary>
+    /// Durée d'une quarantaine, au terme de laquelle la règle est réessayée d'elle-même. Six
+    /// heures : assez long pour que la règle cesse de peser sur une base en souffrance, assez
+    /// court pour qu'un correctif appliqué dans la journée soit constaté sans intervention.
+    /// </summary>
+    public TimeSpan QuarantineDuration { get; set; } = TimeSpan.FromHours(6);
+
+    /// <summary>
+    /// Fraction du délai maximal au-delà de laquelle une exécution réussie compte quand même
+    /// comme un incident. À 80 % du budget, la règle n'est qu'à une croissance de tables du
+    /// dépassement : elle coûte déjà, et n'échouerait jamais d'elle-même.
+    /// </summary>
+    public double SlowRunRatio { get; set; } = 0.8;
 }
 
 public sealed class SchedulerIntervals

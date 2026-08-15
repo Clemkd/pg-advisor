@@ -46,7 +46,8 @@ public sealed record SaveNotificationRequest
     /// </summary>
     public string Format { get; init; } = "generic";
 
-    public List<string> Events { get; init; } = ["new_finding", "finding_resolved"];
+    public List<string> Events { get; init; } =
+        ["new_finding", "finding_resolved", "rule_degraded", "rule_quarantined"];
 
     /// <summary>Restreint à une instance ; null pour toutes.</summary>
     public int? ConnectionId { get; init; }

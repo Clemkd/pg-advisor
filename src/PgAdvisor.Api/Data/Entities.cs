@@ -39,7 +39,58 @@ public static class NotificationEvents
     public const string NewFinding = "new_finding";
     public const string FindingResolved = "finding_resolved";
 
-    public static bool IsValid(string value) => value is NewFinding or FindingResolved;
+    /// <summary>Une règle accumule les incidents sur une instance : elle s'exécute encore.</summary>
+    public const string RuleDegraded = "rule_degraded";
+
+    /// <summary>Une règle a été écartée d'une instance : son diagnostic n'est plus produit.</summary>
+    public const string RuleQuarantined = "rule_quarantined";
+
+    public static readonly string[] All = [NewFinding, FindingResolved, RuleDegraded, RuleQuarantined];
+
+    public static bool IsValid(string value) => All.Contains(value, StringComparer.Ordinal);
+}
+
+/// <summary>
+/// Nature de l'objet notifié. La déduplication se fait par (webhook, sujet, identifiant du
+/// sujet, événement, cycle) : un finding et une règle peuvent porter le même identifiant
+/// numérique sans jamais se confondre.
+/// </summary>
+public static class NotificationSubjects
+{
+    public const string Finding = "finding";
+    public const string Rule = "rule";
+}
+
+/// <summary>État d'une règle sur une instance, du point de vue du garde-fou de coût.</summary>
+public static class RuleHealthStates
+{
+    /// <summary>Aucun incident en cours : la dernière exécution a réussi dans son budget.</summary>
+    public const string Healthy = "healthy";
+
+    /// <summary>Incidents répétés signalés à l'exploitant ; la règle continue de s'exécuter.</summary>
+    public const string Degraded = "degraded";
+
+    /// <summary>Règle écartée de cette instance jusqu'à l'échéance, puis réessayée.</summary>
+    public const string Quarantined = "quarantined";
+}
+
+/// <summary>
+/// Nature d'un incident. La distinction est ce qui dit à l'exploitant s'il doit corriger sa
+/// règle ou s'inquiéter de sa base : un dépassement de délai dit « cette instance souffre »,
+/// une erreur SQL dit « cette règle est fautive ».
+/// </summary>
+public static class RuleFailureKinds
+{
+    /// <summary>Le statement_timeout de la session a coupé la requête.</summary>
+    public const string Timeout = "timeout";
+
+    /// <summary>Erreur SQL ordinaire : vue absente, colonne inconnue, droits, condition invalide.</summary>
+    public const string Error = "error";
+
+    /// <summary>Exécution réussie, mais assez lente pour peser sur la base observée.</summary>
+    public const string Slow = "slow";
+
+    public static bool IsValid(string? kind) => kind is Timeout or Error or Slow;
 }
 
 /// <summary>
@@ -175,7 +226,7 @@ public class NotificationConfiguration
     public string Format { get; set; } = NotificationFormats.Generic;
 
     /// <summary>Événements souscrits, séparés par des virgules.</summary>
-    public string Events { get; set; } = $"{NotificationEvents.NewFinding},{NotificationEvents.FindingResolved}";
+    public string Events { get; set; } = string.Join(',', NotificationEvents.All);
 
     /// <summary>En-têtes HTTP additionnels, JSON objet. Peut contenir un secret : non renvoyé par l'API.</summary>
     public string? HeadersJson { get; set; }
@@ -198,8 +249,15 @@ public class NotificationHistoryEntry
     public int ConfigurationId { get; set; }
     public NotificationConfiguration? Configuration { get; set; }
 
-    /// <summary>Conservé même si le finding est purgé, d'où l'absence de contrainte de suppression en cascade stricte.</summary>
-    public int FindingId { get; set; }
+    /// <summary>Nature de l'objet notifié : « finding » ou « rule ».</summary>
+    public string Subject { get; set; } = NotificationSubjects.Finding;
+
+    /// <summary>
+    /// Identifiant de l'objet notifié dans son propre référentiel : un finding, ou l'état de
+    /// santé d'une règle sur une instance. Conservé même si l'objet est purgé, d'où l'absence
+    /// de contrainte de suppression en cascade stricte.
+    /// </summary>
+    public int SubjectId { get; set; }
 
     public string Event { get; set; } = string.Empty;
 
@@ -236,7 +294,85 @@ public class RuleOverride
     public string? ParametersJson { get; set; }
 
     public int? IntervalSeconds { get; set; }
+
+    /// <summary>
+    /// Délai maximal accordé à la règle sur cette instance. Une base de 2 To a besoin de plus
+    /// de temps que les autres pour la même règle : le délai se surcharge comme les seuils.
+    /// </summary>
+    public int? TimeoutSeconds { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Mémoire des exécutions d'une règle sur une instance. Persistée pour survivre à un
+/// redémarrage : sans cela, redémarrer l'Advisor remettrait les compteurs à zéro et le
+/// garde-fou ne se déclencherait jamais.
+///
+/// Toujours par couple (règle, instance) : une règle qui suffoque sur une base de 2 To ne doit
+/// pas être coupée sur les autres.
+/// </summary>
+public class RuleHealth
+{
+    public int Id { get; set; }
+    public int ConnectionId { get; set; }
+    public PostgresConnection? Connection { get; set; }
+
+    public string RuleId { get; set; } = string.Empty;
+
+    /// <summary>healthy, degraded ou quarantined.</summary>
+    public string State { get; set; } = RuleHealthStates.Healthy;
+
+    /// <summary>Échecs consécutifs : dépassement de délai ou erreur SQL.</summary>
+    public int ConsecutiveFailures { get; set; }
+
+    /// <summary>
+    /// Exécutions réussies mais trop lentes, consécutives. Elles comptent autant : une règle
+    /// qui réussit en 25 s sous un délai de 30 est déjà un problème, et n'échoue jamais.
+    /// </summary>
+    public int ConsecutiveSlowRuns { get; set; }
+
+    /// <summary>timeout, error ou slow. Null tant qu'aucun incident n'a eu lieu.</summary>
+    public string? LastFailureKind { get; set; }
+
+    /// <summary>Message du dernier incident, borné : il est affiché tel quel dans l'IHM.</summary>
+    public string? LastFailureMessage { get; set; }
+
+    public DateTimeOffset? LastFailureAt { get; set; }
+    public DateTimeOffset? LastSuccessAt { get; set; }
+
+    /// <summary>Durée de la dernière exécution réussie, en millisecondes.</summary>
+    public double? LastDurationMs { get; set; }
+
+    /// <summary>Pire durée réussie depuis la dernière remise à zéro : c'est elle qui alerte avant l'échec.</summary>
+    public double? MaxDurationMs { get; set; }
+
+    /// <summary>Délai en vigueur lors de la dernière exécution, pour situer la durée mesurée.</summary>
+    public int? LastTimeoutSeconds { get; set; }
+
+    /// <summary>
+    /// Début de la série d'incidents en cours. Sert d'identifiant d'épisode à la déduplication
+    /// des notifications : une nouvelle série après un rétablissement se renotifie, la même
+    /// série jamais deux fois.
+    /// </summary>
+    public DateTimeOffset? IncidentsSince { get; set; }
+
+    /// <summary>Date d'entrée en quarantaine, null tant que le second seuil n'est pas franchi.</summary>
+    public DateTimeOffset? QuarantinedAt { get; set; }
+
+    /// <summary>Échéance de la quarantaine ; passée cette date, la règle est réessayée d'elle-même.</summary>
+    public DateTimeOffset? QuarantinedUntil { get; set; }
+
+    /// <summary>Motif consigné, en clair : il dit lequel des deux problèmes s'est produit.</summary>
+    public string? QuarantineReason { get; set; }
+
+    /// <summary>Nombre de mises en quarantaine depuis le dernier rétablissement complet.</summary>
+    public int QuarantineCount { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>Incidents consécutifs, toutes natures confondues : c'est ce que comparent les seuils.</summary>
+    public int Strikes => ConsecutiveFailures + ConsecutiveSlowRuns;
 }
 
 /// <summary>

@@ -27,6 +27,7 @@ public sealed class AnalysisService(
     InstanceCollector collector,
     RuleStore ruleStore,
     RuleEngine engine,
+    RuleGuard guard,
     InstanceHealthService healthService,
     InstanceStateStore states,
     EventBus bus,
@@ -198,9 +199,18 @@ public sealed class AnalysisService(
 
         PublishCollectionState(connection.Id, CollectionStates.Analyzing, null);
 
+        // Mémoire des exécutions passées : elle vient de SQLite, donc elle a survécu au dernier
+        // redémarrage — sans quoi un redémarrage remettrait les compteurs à zéro et le
+        // garde-fou ne se déclencherait jamais.
+        var ruleHealth = (await db.RuleHealth
+                .Where(h => h.ConnectionId == connection.Id)
+                .ToListAsync(cancellationToken))
+            .ToDictionary(h => h.RuleId, StringComparer.OrdinalIgnoreCase);
+
         var now = DateTimeOffset.UtcNow;
         var executedRuleIds = new List<string>();
         var produced = new List<FindingCandidate>();
+        var transitions = new List<(RuleHealth State, RuleGuardTransition Transition, string RuleName)>();
         var processed = 0;
 
         foreach (var rule in candidates)
@@ -215,6 +225,15 @@ public sealed class AnalysisService(
             ReportProgress(connection.Id, processed, candidates.Count);
 
             if (!IsDue(connection.Id, effective, now))
+            {
+                continue;
+            }
+
+            var state = ruleHealth.GetValueOrDefault(rule.Id);
+
+            // Écartée de cette instance seulement, et jamais en silence : l'identifiant remonte
+            // ensuite à l'état d'instance et à l'API pour que l'IHM puisse le montrer.
+            if (guard.IsQuarantined(state, now) && !guard.TryRelease(state!, now))
             {
                 continue;
             }
@@ -234,7 +253,42 @@ public sealed class AnalysisService(
                 logger.LogDebug("Rule {RuleId} did not run on {Instance}: {Error}",
                     rule.Id, connection.Name, result.Error);
             }
+            else
+            {
+                // Règle désactivée ou prérequis non satisfaits : ce n'est pas un incident, et
+                // cela ne doit rien coûter au compteur.
+                continue;
+            }
+
+            if (state is null)
+            {
+                state = RuleGuard.NewState(connection.Id, rule.Id, now);
+                db.RuleHealth.Add(state);
+                ruleHealth[rule.Id] = state;
+            }
+
+            var transition = guard.Record(state, ToOutcome(result), now);
+
+            if (transition is not RuleGuardTransition.None)
+            {
+                transitions.Add((state, transition, rule.Definition.Name ?? rule.Id));
+            }
         }
+
+        // La liste est reconstruite depuis la mémoire complète de l'instance, et non depuis les
+        // seules règles de ce passage : les groupes ne s'exécutent pas au même rythme, et un
+        // passage « santé » effacerait sinon les quarantaines des autres groupes.
+        var quarantined = ruleHealth.Values
+            .Where(h => guard.IsQuarantined(h, now))
+            .Select(h => h.RuleId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        SetState(connection.Id, s => s with { QuarantinedRuleIds = quarantined });
+
+        // Les états sont persistés avant toute notification : une notification renvoie
+        // l'identifiant de la ligne, qui doit exister.
+        await db.SaveChangesAsync(cancellationToken);
+        PublishGuardEvents(connection, transitions);
 
         if (executedRuleIds.Count == 0)
         {
@@ -244,19 +298,80 @@ public sealed class AnalysisService(
         var reconciliation = await findingService.ReconcileAsync(connection.Id, executedRuleIds, produced, cancellationToken);
 
         PublishFindingEvents(connection, reconciliation);
-        await UpdateHealthAsync(findingService, connection, capabilities, cancellationToken);
+        await UpdateHealthAsync(findingService, connection, capabilities, quarantined, cancellationToken);
 
         return true;
+    }
+
+    /// <summary>Traduit le résultat d'exécution en ce que le garde-fou sait consigner.</summary>
+    private static RuleRunOutcome ToOutcome(RuleExecutionResult result) => result.Executed
+        ? RuleRunOutcome.Success(result.Duration, result.TimeoutSeconds)
+        : RuleRunOutcome.Failure(
+            result.FailureKind ?? RuleFailureKinds.Error,
+            result.Error,
+            result.Duration,
+            result.TimeoutSeconds);
+
+    /// <summary>
+    /// Diffuse et notifie les franchissements de seuil. Une quarantaine fait cesser un
+    /// diagnostic : elle ne doit jamais passer inaperçue.
+    /// </summary>
+    private void PublishGuardEvents(
+        PostgresConnection connection,
+        IReadOnlyList<(RuleHealth State, RuleGuardTransition Transition, string RuleName)> transitions)
+    {
+        foreach (var (state, transition, ruleName) in transitions)
+        {
+            var payload = new
+            {
+                connectionId = connection.Id,
+                connectionName = connection.Name,
+                ruleId = state.RuleId,
+                ruleName,
+                state = state.State,
+                strikes = state.Strikes,
+                failureKind = state.LastFailureKind,
+                message = state.LastFailureMessage,
+                quarantinedUntil = state.QuarantinedUntil,
+                reason = state.QuarantineReason,
+            };
+
+            bus.Publish(
+                transition == RuleGuardTransition.Recovered
+                    ? AdvisorEventTypes.RuleRecovered
+                    : AdvisorEventTypes.RuleGuardChanged,
+                payload,
+                connection.Id);
+
+            if (RuleGuardNotifications.Event(transition) is not string @event)
+            {
+                continue;
+            }
+
+            logger.LogWarning(
+                "Rule {RuleId} on instance {Instance}: {Transition} after {Strikes} incident(s), last one {Kind} — {Message}",
+                state.RuleId, connection.Name, transition, state.Strikes,
+                state.LastFailureKind, state.LastFailureMessage);
+
+            notifications.Enqueue(new NotificationRequest(
+                connection.Id,
+                NotificationSubjects.Rule,
+                state.Id,
+                @event,
+                RuleGuardNotifications.Cycle(state, transition),
+                RuleGuardNotifications.Severity(transition)));
+        }
     }
 
     private async Task UpdateHealthAsync(
         FindingService findingService,
         PostgresConnection connection,
         PgCapabilities capabilities,
+        IReadOnlySet<string> quarantinedRuleIds,
         CancellationToken cancellationToken)
     {
         var weights = await findingService.ActiveWeightsAsync(connection.Id, cancellationToken);
-        var score = healthService.Compute(weights, capabilities);
+        var score = healthService.Compute(weights, capabilities, quarantinedRuleIds);
         var previous = states.Get(connection.Id).Health;
 
         SetState(connection.Id, state => state with { Health = score });
@@ -282,14 +397,16 @@ public sealed class AnalysisService(
         {
             bus.Publish(AdvisorEventTypes.FindingCreated, Describe(connection, finding), connection.Id);
             notifications.Enqueue(new NotificationRequest(
-                connection.Id, finding.Id, NotificationEvents.NewFinding, Cycle(finding), finding.Severity));
+                connection.Id, NotificationSubjects.Finding, finding.Id,
+                NotificationEvents.NewFinding, Cycle(finding), finding.Severity));
         }
 
         foreach (var finding in reconciliation.Resolved)
         {
             bus.Publish(AdvisorEventTypes.FindingResolved, Describe(connection, finding), connection.Id);
             notifications.Enqueue(new NotificationRequest(
-                connection.Id, finding.Id, NotificationEvents.FindingResolved, Cycle(finding), finding.Severity));
+                connection.Id, NotificationSubjects.Finding, finding.Id,
+                NotificationEvents.FindingResolved, Cycle(finding), finding.Severity));
         }
 
         if (reconciliation.Updated.Count > 0)

@@ -147,7 +147,7 @@ public sealed class FindingsController(
             .ToListAsync(ct);
 
         var notifications = await db.NotificationHistory
-            .Where(h => h.FindingId == id)
+            .Where(h => h.Subject == NotificationSubjects.Finding && h.SubjectId == id)
             .OrderByDescending(h => h.At)
             .Join(db.NotificationConfigurations, h => h.ConfigurationId, c => c.Id, (h, c) => new NotificationHistoryResponse(
                 h.At, c.Key, h.Event, h.Severity, h.Success, h.Attempts, h.StatusCode, h.Error))

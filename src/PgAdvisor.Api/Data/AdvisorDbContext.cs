@@ -22,6 +22,7 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
     public DbSet<NotificationConfiguration> NotificationConfigurations => Set<NotificationConfiguration>();
     public DbSet<NotificationHistoryEntry> NotificationHistory => Set<NotificationHistoryEntry>();
     public DbSet<RuleOverride> RuleOverrides => Set<RuleOverride>();
+    public DbSet<RuleHealth> RuleHealth => Set<RuleHealth>();
     public DbSet<QueryPlanSnapshot> QueryPlanSnapshots => Set<QueryPlanSnapshot>();
     public DbSet<Setting> Settings => Set<Setting>();
 
@@ -95,9 +96,12 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
 
         b.Entity<NotificationHistoryEntry>(e =>
         {
-            // Support de la déduplication : un événement notifié une seule fois par cycle de finding.
-            e.HasIndex(h => new { h.ConfigurationId, h.FindingId, h.Event, h.Cycle }).IsUnique();
+            // Support de la déduplication : un événement notifié une seule fois par cycle et par
+            // sujet. Le sujet fait partie de la clé : un finding et une règle peuvent porter le
+            // même identifiant numérique sans se confondre.
+            e.HasIndex(h => new { h.ConfigurationId, h.Subject, h.SubjectId, h.Event, h.Cycle }).IsUnique();
             e.Property(h => h.Event).HasMaxLength(32).IsRequired();
+            e.Property(h => h.Subject).HasMaxLength(16).IsRequired().HasDefaultValue(NotificationSubjects.Finding);
 
             e.HasOne(h => h.Configuration)
                 .WithMany()
@@ -114,6 +118,26 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
             e.HasOne(r => r.Connection)
                 .WithMany()
                 .HasForeignKey(r => r.ConnectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<RuleHealth>(e =>
+        {
+            // Une règle, une instance : le garde-fou ne raisonne jamais autrement.
+            e.HasIndex(h => new { h.ConnectionId, h.RuleId }).IsUnique();
+            e.HasIndex(h => h.State);
+            e.Property(h => h.RuleId).HasMaxLength(128).IsRequired();
+            e.Property(h => h.State).HasMaxLength(16).IsRequired();
+            e.Property(h => h.LastFailureKind).HasMaxLength(16);
+            e.Property(h => h.LastFailureMessage).HasMaxLength(500);
+            e.Property(h => h.QuarantineReason).HasMaxLength(500);
+
+            // Compteur dérivé : il se recalcule, il ne se stocke pas.
+            e.Ignore(h => h.Strikes);
+
+            e.HasOne(h => h.Connection)
+                .WithMany()
+                .HasForeignKey(h => h.ConnectionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

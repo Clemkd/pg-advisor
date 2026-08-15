@@ -25,6 +25,12 @@ public sealed record ConnectionResponse
     public double? AnalysisProgress { get; init; }
     public HealthScore? Health { get; init; }
     public InstanceMetrics? Metrics { get; init; }
+
+    /// <summary>
+    /// Règles écartées de cette instance par le garde-fou. Leur catégorie n'est plus notée : un
+    /// score qui remonte doit pouvoir s'expliquer par cette liste plutôt que par une embellie.
+    /// </summary>
+    public IReadOnlyList<string> QuarantinedRules { get; init; } = [];
 }
 
 public sealed record ConnectionDetailResponse

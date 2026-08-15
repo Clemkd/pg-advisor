@@ -84,14 +84,21 @@ public sealed partial class RuleLoader(RuleHandlerRegistry handlers, ILogger<Rul
             errors.Add("The \"version\" field must be a positive integer.");
         }
 
-        if (definition.IntervalSeconds is int interval && (interval < 5 || interval > 86_400))
+        if (definition.IntervalSeconds is int interval &&
+            (interval < RuleLimits.MinIntervalSeconds || interval > RuleLimits.MaxIntervalSeconds))
         {
-            errors.Add("\"intervalSeconds\" must be between 5 and 86400.");
+            errors.Add($"\"intervalSeconds\" must be between {RuleLimits.MinIntervalSeconds} and {RuleLimits.MaxIntervalSeconds}.");
         }
 
-        if (definition.Limit is int limit && (limit < 1 || limit > 1_000))
+        if (definition.TimeoutSeconds is int timeout &&
+            (timeout < RuleLimits.MinTimeoutSeconds || timeout > RuleLimits.MaxTimeoutSeconds))
         {
-            errors.Add("\"limit\" must be between 1 and 1000.");
+            errors.Add($"\"timeoutSeconds\" must be between {RuleLimits.MinTimeoutSeconds} and {RuleLimits.MaxTimeoutSeconds}.");
+        }
+
+        if (definition.Limit is int limit && (limit < RuleLimits.MinLimit || limit > RuleLimits.MaxLimit))
+        {
+            errors.Add($"\"limit\" must be between {RuleLimits.MinLimit} and {RuleLimits.MaxLimit}.");
         }
 
         // --- Source des lignes ------------------------------------------------

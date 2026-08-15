@@ -168,7 +168,12 @@ nesting.
 | `Scheduler__Intervals__Configuration` | Configuration and storage period | `01:00:00` |
 | `Scheduler__MaxConcurrentInstances` | Instances analysed in parallel | `4` |
 | `Scheduler__PerInstanceTimeout` | Maximum time per instance | `00:02:00` |
-| `Scheduler__QueryTimeout` | `statement_timeout` applied to rules | `00:00:30` |
+| `Scheduler__QueryTimeout` | `statement_timeout` applied to rules with no deadline of their own | `00:00:30` |
+| `Scheduler__RuleGuard__Enabled` | Rule cost guard | `true` |
+| `Scheduler__RuleGuard__WarningThreshold` | Consecutive incidents before a warning | `3` |
+| `Scheduler__RuleGuard__QuarantineThreshold` | Consecutive incidents before quarantine | `5` |
+| `Scheduler__RuleGuard__QuarantineDuration` | Quarantine length before an automatic retry | `06:00:00` |
+| `Scheduler__RuleGuard__SlowRunRatio` | Share of the deadline past which a success counts as an incident | `0.8` |
 | `Notifications__MaxRetries` | Webhook delivery attempts | `3` |
 
 Turn `Auth__RequireHttps` on as soon as the Advisor sits behind an HTTPS reverse proxy.

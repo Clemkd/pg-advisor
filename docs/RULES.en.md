@@ -25,6 +25,7 @@ editing a packaged rule from the UI; deleting the user version restores the orig
 | `severity` | yes | `info`, `warning` or `critical`. Overridable per instance. |
 | `group` | no | Scheduling group: `health`, `statistics`, `recommendations` (default) or `configuration`. |
 | `intervalSeconds` | no | Own period, from 5 to 86400. Acts as a throttle inside the group. |
+| `timeoutSeconds` | no | Own execution deadline, from 1 to 300. Defaults to `Scheduler:QueryTimeout`. Overridable per instance. |
 | `enabled` | no | `false` ships the rule disabled by default. |
 | `requires` | no | Capability prerequisites; the rule is skipped when they are not met. |
 | `parameters` | no | Scalar thresholds, overridable from the UI. |
@@ -81,6 +82,24 @@ A read-only query, a single statement. It must start with `SELECT`, `WITH`, `TAB
 `;` anywhere other than at the very end is rejected at load time. The PostgreSQL session is also
 forced read-only with a bounded `statement_timeout`, so a rule can neither write to nor monopolise
 the supervised instance.
+
+### `timeoutSeconds`
+
+```yaml
+timeoutSeconds: 120
+```
+
+The deadline granted to this rule, from 1 to 300 seconds. Without it, the global
+`Scheduler:QueryTimeout` applies. It is set as the `statement_timeout` of the session running the
+rule, then handed back to its global value: a session setting, never a write to the supervised
+instance.
+
+A rule that is legitimately expensive on a large database — a bloat computation, an index scan —
+gets its own budget without stretching everyone else's. The deadline is overridable per instance
+just like thresholds: the same rule may be granted 180 s on a 2 TB database and 30 s elsewhere.
+
+The 300 s ceiling is deliberately low. Beyond that, a supervision rule no longer bounds anything
+and becomes exactly what this mechanism exists to prevent.
 
 ### `condition`
 
@@ -181,6 +200,56 @@ shown in the editor's cheat sheet.
 The periods are configurable (`Scheduler:Intervals`). An instance's own interval replaces the one of
 the `health` group.
 
+## Cost guard
+
+A deadline bounds every run, but nothing stops a rule from spending it forever. The guard therefore
+keeps, **per (rule, instance) pair**, a count of the runs that weigh on the observed database. That
+state is persisted in SQLite: it survives an Advisor restart, without which the counter would reset
+on every relaunch and the guard would never fire.
+
+What counts as an incident:
+
+| Kind | Recorded reason | What it tells you |
+| --- | --- | --- |
+| `timeout` | The `statement_timeout` cancelled the query | The instance is struggling, or the rule needs more time **here** |
+| `error` | Plain SQL error (missing view, unknown column, privileges) | The rule itself is at fault |
+| `slow` | Successful run past `SlowRunRatio` of its deadline | The rule already costs, and would never fail on its own |
+
+A rule succeeding in 25 s under a 30 s deadline is already a problem: it never fails, and nothing
+would report it without this third case.
+
+Two thresholds, two reactions:
+
+1. **`WarningThreshold` (3 by default)** — the rule is marked `degraded`, shown as such in the UI
+   and notified (`rule_degraded`). **It keeps running.**
+2. **`QuarantineThreshold` (5 by default)** — the rule is quarantined **on that instance only**,
+   for `QuarantineDuration` (6 h by default), and notified (`rule_quarantined`). Past the deadline
+   it is retried automatically: a fast success wipes the slate, a fresh incident renews the
+   quarantine without waiting for five more runs.
+
+A rule suffocating on a 2 TB database is never cut off on the others.
+
+**Success wipes the slate.** A successful, fast run resets every counter: an old incident does not
+end up condemning a rule that has become healthy again.
+
+A quarantine never makes a diagnostic vanish silently:
+
+- findings already produced by the rule **are not resolved** — they keep weighing on the score
+  until the rule can observe that they are gone;
+- the rule's category **stops being declared as evaluated** on that instance, instead of scoring
+  100 as if all were well;
+- the state is exposed by the API (`GET /api/rules/{id}`, `GET /api/rules/health`, and the list of
+  quarantined rules in each instance's payload).
+
+An immediate manual reactivation is available: `POST /api/rules/{id}/reactivate`. It starts from a
+clean slate, the operator asserting that the cause is dealt with.
+
+The settings live in the `Scheduler` section (see the configuration table in the
+[README](../README.en.md)): `Scheduler__RuleGuard__Enabled`, `WarningThreshold`,
+`QuarantineThreshold`, `QuarantineDuration`, `SlowRunRatio`.
+
+None of this is written to the supervised instance: it is Advisor state.
+
 ## Rule types and bundled examples
 
 | Type | Example |
@@ -201,9 +270,11 @@ shows the rules that failed to load. A rule's editor lets you:
 - edit the YAML, with validation as you type (nothing is written while the rule is invalid);
 - run the rule against a chosen instance without persisting anything, and see both the raw SQL result
   and the findings it would produce;
-- review its applicability instance by instance, with the reason for each refusal;
+- review its applicability instance by instance, with the reason for each refusal, the deadline in
+  force and the guard state;
 - create, duplicate or delete a user rule;
-- set a global or per-instance override: enablement, severity, period, thresholds.
+- set a global or per-instance override: enablement, severity, period, deadline, thresholds;
+- lift a quarantine immediately.
 
 Every write from the UI produces a YAML file in `<DataDirectory>/rules` and triggers the same reload
 as a hand-made change: the file format remains the source of truth.
@@ -211,15 +282,17 @@ as a hand-made change: the file format remains the source of truth.
 ## Overrides
 
 `RuleOverrides` (SQLite) applies a delta to a rule, either globally (`connectionId` null) or for one
-instance. Precedence runs: file value, then global override, then instance override. A threshold
-override only replaces the thresholds it names; the others keep their file value.
+instance: enablement, severity, period, **execution deadline** and thresholds. Precedence runs: file
+value, then global override, then instance override. A threshold override only replaces the
+thresholds it names; the others keep their file value.
 
 ## API
 
 | Route | Role |
 | --- | --- |
 | `GET /api/rules` | List, filterable by category, origin and free-text search |
-| `GET /api/rules/{id}` | Rule, YAML and per-instance applicability |
+| `GET /api/rules/{id}` | Rule, YAML and per-instance applicability, with deadline and guard state |
+| `GET /api/rules/health` | Guard state for every tracked rule, filterable by instance and state |
 | `GET /api/rules/schema` | Categories, groups, filters, functions, handlers, template |
 | `GET /api/rules/errors` | Rules rejected at load time |
 | `POST /api/rules/validate` | Validates a YAML without writing anything |
@@ -228,7 +301,12 @@ override only replaces the thresholds it names; the others keep their file value
 | `DELETE /api/rules/{id}` | Deletes the user rule |
 | `POST /api/rules/reload` | Forces a reload |
 | `POST /api/rules/{id}/dry-run` | Runs against an instance without persisting |
+| `POST /api/rules/{id}/reactivate` | Lifts the quarantine, on one instance or on all of them |
 | `PUT /api/rules/{id}/override` | Sets an override |
 | `DELETE /api/rules/{id}/override` | Removes an override |
 
 Writes require the `Admin` role.
+
+Two notification events join the two existing ones: `rule_degraded` (warning, `warning` severity)
+and `rule_quarantined` (rule set aside, `critical` severity). They borrow the same deduplication: an
+episode is notified once per webhook, and a relapse after recovery is notified again.

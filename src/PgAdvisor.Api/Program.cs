@@ -71,6 +71,7 @@ builder.Services.AddHttpClient("webhook", client =>
 });
 
 // Collecte périodique.
+builder.Services.AddSingleton<RuleGuard>();
 builder.Services.AddSingleton<AnalysisService>();
 builder.Services.AddHostedService<SchedulerService>();
 

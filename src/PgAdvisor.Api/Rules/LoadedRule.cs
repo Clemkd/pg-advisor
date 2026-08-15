@@ -99,12 +99,13 @@ public sealed record LoadedRule
         return RuleApplicability.Applicable;
     }
 
-    /// <summary>Applique une surcharge d'instance ou globale : sévérité, activation, seuils, périodicité.</summary>
+    /// <summary>Applique une surcharge d'instance ou globale : sévérité, activation, seuils, périodicité, délai.</summary>
     public EffectiveRule ApplyOverrides(RuleOverride? global, RuleOverride? perInstance)
     {
         var enabled = perInstance?.Enabled ?? global?.Enabled ?? Definition.Enabled;
         var severity = perInstance?.Severity ?? global?.Severity ?? Severity;
         var interval = perInstance?.IntervalSeconds ?? global?.IntervalSeconds ?? Definition.IntervalSeconds;
+        var timeout = perInstance?.TimeoutSeconds ?? global?.TimeoutSeconds ?? Definition.TimeoutSeconds;
 
         var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in Definition.Parameters ?? [])
@@ -121,7 +122,7 @@ public sealed record LoadedRule
             }
         }
 
-        return new EffectiveRule(this, enabled, severity.ToLowerInvariant(), interval, parameters);
+        return new EffectiveRule(this, enabled, severity.ToLowerInvariant(), interval, timeout, parameters);
     }
 }
 
@@ -136,9 +137,16 @@ public sealed record EffectiveRule(
     bool Enabled,
     string Severity,
     int? IntervalSeconds,
+    int? TimeoutSeconds,
     Dictionary<string, object?> Parameters)
 {
     public string Id => Rule.Id;
     public string Category => Rule.Category;
     public string Group => Rule.Group;
+
+    /// <summary>Délai réellement appliqué, le délai global servant de valeur par défaut.</summary>
+    public int ResolveTimeoutSeconds(TimeSpan globalTimeout) => Math.Clamp(
+        TimeoutSeconds ?? (int)Math.Ceiling(globalTimeout.TotalSeconds),
+        RuleLimits.MinTimeoutSeconds,
+        RuleLimits.MaxTimeoutSeconds);
 }

@@ -4,6 +4,7 @@ using PgAdvisor.Api.Data;
 using PgAdvisor.Api.Findings;
 using PgAdvisor.Api.Models;
 using PgAdvisor.Api.Rules;
+using PgAdvisor.Api.Scheduler;
 using PgAdvisor.Api.Services;
 using PgAdvisor.Api.State;
 
@@ -16,6 +17,7 @@ public sealed class DashboardController(
     ConnectionPresenter presenter,
     InstanceHealthService health,
     InstanceStateStore states,
+    RuleGuard guard,
     RuleStore ruleStore) : ControllerBase
 {
     [HttpGet]
@@ -32,17 +34,33 @@ public sealed class DashboardController(
             .GroupBy(w => w.ConnectionId)
             .ToDictionary(g => g.Key, g => g.Select(w => new FindingWeight(w.Category, w.Severity)).ToList());
 
+        // Les quarantaines viennent de la base : elles ont survécu au dernier redémarrage,
+        // contrairement à l'état volatil des instances.
+        var now = DateTimeOffset.UtcNow;
+        var quarantined = (await db.RuleHealth
+                .AsNoTracking()
+                .Where(h => h.State == RuleHealthStates.Quarantined)
+                .ToListAsync(ct))
+            .Where(h => guard.IsQuarantined(h, now))
+            .GroupBy(h => h.ConnectionId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlySet<string>)g.Select(h => h.RuleId).ToHashSet(StringComparer.OrdinalIgnoreCase));
+
         var instances = new List<ConnectionResponse>(connections.Count);
 
         foreach (var connection in connections)
         {
+            var excluded = quarantined.GetValueOrDefault(connection.Id);
+
             // Le score du scheduler fait référence ; à froid, il est recalculé à l'identique.
             var score = states.Get(connection.Id).Health
                 ?? health.Compute(
                     byConnection.GetValueOrDefault(connection.Id) ?? [],
-                    presenter.CapabilitiesFor(connection));
+                    presenter.CapabilitiesFor(connection),
+                    excluded);
 
-            instances.Add(presenter.ToResponse(connection, score));
+            instances.Add(presenter.ToResponse(connection, score, excluded?.ToList()));
         }
 
         var scored = instances
