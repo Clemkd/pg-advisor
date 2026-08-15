@@ -9,12 +9,16 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+/** Décompte affiché en pastille à côté d'une entrée. Une seule sorte pour l'instant. */
+export type NavCount = 'activeFindings'
+
 export interface NavLeaf {
   to: string
   /** Clé de traduction : la navigation est décrite une fois, traduite au rendu. */
   labelKey: string
   icon?: LucideIcon
   adminOnly?: boolean
+  count?: NavCount
 }
 
 export interface NavSection {
@@ -36,7 +40,7 @@ export const navigation: NavSection[] = [
     icon: Database,
     children: [
       { to: '/instances', labelKey: 'nav.instances', icon: Database },
-      { to: '/findings', labelKey: 'nav.findings', icon: Flag },
+      { to: '/findings', labelKey: 'nav.findings', icon: Flag, count: 'activeFindings' },
       { to: '/queries', labelKey: 'nav.queries', icon: Terminal },
     ],
   },

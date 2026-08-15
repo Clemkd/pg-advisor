@@ -126,6 +126,10 @@ export const fr: Record<string, string> = {
   'nav.webhooks': 'Notifications',
   'nav.users': 'Utilisateurs',
   'nav.main': 'Navigation principale',
+  // Libellé de la pastille de décompte, lu au survol et par les lecteurs d'écran : la couleur
+  // seule ne dit pas de quoi on compte les unités.
+  'nav.activeFindings.one': '{count} diagnostic actif',
+  'nav.activeFindings.other': '{count} diagnostics actifs',
   'breadcrumbs.aria': 'Fil d’Ariane',
   'breadcrumbs.newRule': 'Nouvelle règle',
 

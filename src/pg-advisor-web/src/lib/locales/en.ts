@@ -126,6 +126,10 @@ export const en: Record<string, string> = {
   'nav.webhooks': 'Notifications',
   'nav.users': 'Users',
   'nav.main': 'Main navigation',
+  // Label behind the count badge, read on hover and by screen readers: colour alone does not
+  // say what is being counted.
+  'nav.activeFindings.one': '{count} active diagnostic',
+  'nav.activeFindings.other': '{count} active diagnostics',
   'breadcrumbs.aria': 'Breadcrumb',
   'breadcrumbs.newRule': 'New rule',
 

@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Languages, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, X } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Breadcrumbs } from './Breadcrumbs'
+import { useActiveFindings } from './useActiveFindings'
 import { useAuth } from '@/app/AuthContext'
 import { useEvents } from '@/app/EventsContext'
 import { useTheme } from '@/app/ThemeContext'
@@ -21,6 +22,7 @@ export function AppShell() {
   const t = useT()
   const location = useLocation()
   const navigate = useNavigate()
+  const findings = useActiveFindings()
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === 'true')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -50,7 +52,7 @@ export function AppShell() {
   return (
     <div className="bg-canvas flex h-dvh overflow-hidden">
       <div className="hidden shrink-0 lg:block">
-        <Sidebar collapsed={collapsed} />
+        <Sidebar collapsed={collapsed} findings={findings} />
       </div>
 
       {drawerOpen && (
@@ -62,7 +64,11 @@ export function AppShell() {
             onClick={() => setDrawerOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 w-64">
-            <Sidebar collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+            <Sidebar
+              collapsed={false}
+              findings={findings}
+              onNavigate={() => setDrawerOpen(false)}
+            />
           </div>
         </div>
       )}
