@@ -35,6 +35,16 @@
   --color-severity-warning: oklch(70% 0.16 70);
   --color-severity-info: oklch(60% 0.14 250);
 
+  /* Coloration syntaxique. Jetons distincts des couleurs sémantiques : celles-ci sont
+     calibrées pour remplir une pastille ou un badge, pas pour porter du texte sur le fond
+     creusé — un jaune d'avertissement y tombait à 2:1. Ici, la lisibilité prime sur la
+     vivacité, et chaque teinte est reprise plus claire en thème sombre. */
+  --color-code-key: oklch(47% 0.16 255);
+  --color-code-string: oklch(45% 0.13 150);
+  --color-code-number: oklch(47% 0.12 70);
+  --color-code-type: oklch(48% 0.14 45);
+  --color-code-param: oklch(47% 0.19 20);
+
   --radius-card: 0.875rem;
   --radius-control: 0.625rem;
 
@@ -70,6 +80,13 @@
 
     --color-severity-warning: oklch(78% 0.15 75);
     --color-severity-info: oklch(70% 0.13 250);
+
+    /* Le fond creusé descend à 14 % de clarté : les teintes de code remontent d'autant. */
+    --color-code-key: oklch(78% 0.12 255);
+    --color-code-string: oklch(78% 0.13 150);
+    --color-code-number: oklch(82% 0.12 80);
+    --color-code-type: oklch(78% 0.12 50);
+    --color-code-param: oklch(76% 0.15 20);
 
     --shadow-card: 0 1px 2px 0 oklch(0% 0 0 / 0.3), 0 1px 3px 0 oklch(0% 0 0 / 0.25);
     --shadow-popover: 0 10px 30px -12px oklch(0% 0 0 / 0.6);

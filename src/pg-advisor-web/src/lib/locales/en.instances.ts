@@ -153,4 +153,11 @@ export const enInstances: Record<string, string> = {
   'users.changeOwn.new': 'New password',
   'users.changeOwn.submit': 'Change',
   'users.changeOwn.done': 'Password changed.',
+  'webhooks.delete.title': 'Delete "{name}"?',
+  'webhooks.delete.body':
+    'The configuration and its delivery history are removed. Findings already notified are not sent again.',
+  'webhooks.deleteFailed': 'Unable to delete.',
+  'users.delete.title': 'Delete "{name}"?',
+  'users.delete.body':
+    'The account loses access immediately. Findings it resolved or ignored keep its name in their history.',
 }

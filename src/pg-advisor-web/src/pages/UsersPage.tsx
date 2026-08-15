@@ -28,6 +28,7 @@ export function UsersPage() {
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [resetting, setResetting] = useState<UserAccount | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<UserAccount | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -135,18 +136,7 @@ export function UsersPage() {
                           <Button
                             variant="ghost"
                             className="text-danger hover:text-danger"
-                            onClick={async () => {
-                              try {
-                                await api.auth.deleteUser(account.id)
-                                void load()
-                              } catch (cause) {
-                                setError(
-                                  cause instanceof ApiError
-                                    ? cause.message
-                                    : t('users.deleteFailed'),
-                                )
-                              }
-                            }}
+                            onClick={() => setConfirmDelete(account)}
                           >
                             {t('common.delete')}
                           </Button>
@@ -182,6 +172,36 @@ export function UsersPage() {
             void load()
           }}
         />
+      )}
+
+      {confirmDelete && (
+        <Modal
+          title={t('users.delete.title', { name: confirmDelete.username })}
+          onClose={() => setConfirmDelete(null)}
+          size="sm"
+          footer={
+            <>
+              <Button onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  try {
+                    await api.auth.deleteUser(confirmDelete.id)
+                    setConfirmDelete(null)
+                    void load()
+                  } catch (cause) {
+                    setError(cause instanceof ApiError ? cause.message : tr('users.deleteFailed'))
+                    setConfirmDelete(null)
+                  }
+                }}
+              >
+                {t('common.delete')}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-ink text-sm">{t('users.delete.body')}</p>
+        </Modal>
       )}
     </div>
   )

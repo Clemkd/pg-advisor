@@ -22,14 +22,14 @@ type TokenKind =
 
 const TOKEN_CLASS: Record<TokenKind, string> = {
   comment: 'text-ink-faint italic',
-  key: 'text-brand font-semibold',
-  string: 'text-success',
-  number: 'text-warning',
-  literal: 'text-accent',
-  template: 'text-danger font-semibold',
-  parameter: 'text-accent font-semibold',
+  key: 'text-code-key font-semibold',
+  string: 'text-code-string',
+  number: 'text-code-number',
+  literal: 'text-code-type',
+  template: 'text-code-param font-semibold',
+  parameter: 'text-code-param font-semibold',
   punctuation: 'text-ink-muted',
-  anchor: 'text-accent',
+  anchor: 'text-code-type',
   plain: '',
 }
 

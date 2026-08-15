@@ -95,6 +95,9 @@ export function WebhooksPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Une suppression au premier clic était la seule action destructrice sans filet de
+  // l'application : les instances en demandaient déjà confirmation.
+  const [confirmDelete, setConfirmDelete] = useState<WebhookConfiguration | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
 
   const load = useCallback(async () => {
@@ -278,10 +281,7 @@ export function WebhooksPage() {
                         <Button
                           variant="ghost"
                           className="text-danger hover:text-danger"
-                          onClick={async () => {
-                            await api.webhooks.remove(webhook.id)
-                            void load()
-                          }}
+                          onClick={() => setConfirmDelete(webhook)}
                         >
                           {t('common.delete')}
                         </Button>
@@ -376,6 +376,36 @@ export function WebhooksPage() {
             void load()
           }}
         />
+      )}
+
+      {confirmDelete && (
+        <Modal
+          title={t('webhooks.delete.title', { name: confirmDelete.key })}
+          onClose={() => setConfirmDelete(null)}
+          size="sm"
+          footer={
+            <>
+              <Button onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  try {
+                    await api.webhooks.remove(confirmDelete.id)
+                    setConfirmDelete(null)
+                    void load()
+                  } catch (cause) {
+                    setError(cause instanceof ApiError ? cause.message : tr('webhooks.deleteFailed'))
+                    setConfirmDelete(null)
+                  }
+                }}
+              >
+                {t('common.delete')}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-ink text-sm">{t('webhooks.delete.body')}</p>
+        </Modal>
       )}
     </div>
   )

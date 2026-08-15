@@ -29,12 +29,12 @@ const TYPES = new Set([
 type TokenKind = 'keyword' | 'type' | 'string' | 'number' | 'comment' | 'parameter' | 'operator' | 'plain'
 
 const TOKEN_CLASS: Record<TokenKind, string> = {
-  keyword: 'text-brand font-semibold',
-  type: 'text-accent',
-  string: 'text-success',
-  number: 'text-warning',
+  keyword: 'text-code-key font-semibold',
+  type: 'text-code-type',
+  string: 'text-code-string',
+  number: 'text-code-number',
   comment: 'text-ink-faint italic',
-  parameter: 'text-danger font-semibold',
+  parameter: 'text-code-param font-semibold',
   operator: 'text-ink-muted',
   plain: '',
 }

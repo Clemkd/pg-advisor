@@ -270,6 +270,7 @@ FindingHistory
 NotificationConfigurations
 NotificationHistory
 RuleOverrides
+QueryPlanSnapshots
 Settings
 ```
 

@@ -157,4 +157,11 @@ export const frInstances: Record<string, string> = {
   'users.changeOwn.new': 'Nouveau mot de passe',
   'users.changeOwn.submit': 'Changer',
   'users.changeOwn.done': 'Mot de passe modifié.',
+  'webhooks.delete.title': 'Supprimer « {name} » ?',
+  'webhooks.delete.body':
+    'La configuration et son historique d’envois sont retirés. Les diagnostics déjà notifiés ne sont pas renvoyés.',
+  'webhooks.deleteFailed': 'Suppression impossible.',
+  'users.delete.title': 'Supprimer « {name} » ?',
+  'users.delete.body':
+    'Le compte perd immédiatement son accès. Les diagnostics qu’il a résolus ou ignorés gardent sa trace dans leur historique.',
 }
