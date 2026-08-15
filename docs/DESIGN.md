@@ -326,19 +326,18 @@ C'est le point le plus mal traité de l'état constaté : cinq vues se rechargen
 
 **Trois obligations pour toute vue qui se met à jour seule.**
 
-### 6.1 Marquer ce qui a changé
+### 6.1 Dater plutôt que teinter
 
-`useFresh(valeur)` renvoie vrai pendant `--motion-fresh` (6 s) après un changement. La classe
-`pg-fresh` pose un liseré `fresh` sur le bord gauche de l'élément et un lavis de fond qui décroît.
+**Aucune coloration de fond ne signale un rafraîchissement.** Une carte qui s'allume puis s'éteint
+demande d'avoir regardé au bon moment ; six secondes plus tard, elle ne dit plus rien. Et sur un
+écran qui se recharge seul toute la journée, la teinte finit par se lire comme un état de la
+donnée — la carte est-elle en alerte ? — alors qu'elle ne parle que de l'instant du chargement.
 
-Six secondes, et non trois cents millisecondes : sur un second écran, l'utilisateur regarde
-*après* le changement. Un éclair qu'il faut avoir vu ne signale rien. Sous
-`prefers-reduced-motion`, le lavis disparaît mais le liseré reste pendant la même durée : le signal
-demeure, seul le mouvement s'en va.
+La fraîcheur se dit par un chiffre qui reste vrai : « Mis à jour il y a 5 s ». Il répond à la même
+question sans exiger d'avoir vu quoi que ce soit, il survit au regard qui arrive en retard, et il
+se lit aussi bien en teinte qu'en noir et blanc.
 
-Ce qui n'a pas changé ne prend aucune marque. Un rechargement complet qui marquerait toutes les
-lignes équivaut à n'en marquer aucune : le rappel de `useFresh` compare les valeurs, il ne se
-déclenche pas sur le seul fait qu'une requête est revenue.
+Voir § 6.2 pour le composant.
 
 ### 6.2 Dire quand
 

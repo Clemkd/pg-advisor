@@ -220,26 +220,6 @@
    * s'effacer de lui-même, et le signal survit intact quand l'animation est refusée — seul le
    * mouvement s'en va, jamais l'information.
    */
-  .pg-fresh {
-    background-image: linear-gradient(
-      to right,
-      var(--color-fresh) 0,
-      var(--color-fresh) 2px,
-      transparent 2px
-    );
-    background-repeat: no-repeat;
-    animation: pg-fresh-wash var(--motion-fresh) ease-out forwards;
-  }
-
-  @keyframes pg-fresh-wash {
-    from {
-      background-color: var(--color-fresh-subtle);
-    }
-    to {
-      background-color: transparent;
-    }
-  }
-
   /* Va-et-vient du liseré de rechargement : dit qu'un travail est en cours sans prétendre en
      connaître l'avancement, ce qu'une requête sur une instance distante ne permet pas. */
   @keyframes pg-sweep {
