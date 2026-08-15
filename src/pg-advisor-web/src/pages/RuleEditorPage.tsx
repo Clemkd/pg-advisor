@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { FlaskConical, ServerOff } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type { Connection, DryRunResult, RuleDetail, RuleSchema, Severity } from '@/api/types'
@@ -11,21 +11,41 @@ import {
   Card,
   CardBody,
   CardHeader,
+  ConfirmDialog,
   EmptyState,
   Field,
   FormSection,
   Input,
+  LastUpdated,
   LoadingBlock,
   Notice,
   Select,
   SeverityBadge,
+  TBody,
+  THead,
+  Table,
+  Td,
+  Th,
+  Tr,
 } from '@/components/ui/primitives'
+import { useFillHeight } from '@/lib/fillHeight'
 import { categoryLabel, severityLabel } from '@/lib/format'
 import { tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
-import { SqlCode } from '@/lib/sqlHighlight'
-import { YamlEditor } from '@/lib/yamlHighlight'
+import { SqlCommand } from '@/lib/sqlHighlight'
+import { errorLine, YamlEditor } from '@/lib/yamlHighlight'
 import { cn } from '@/lib/utils'
+
+/**
+ * Raccourci d'exécution à blanc. Affiché sur le bouton : un raccourci qu'on ne voit pas n'existe
+ * pas, et l'établi se juge à la longueur de la boucle écrire / exécuter / lire.
+ */
+const APPLE = /mac|iphone|ipad/i.test(navigator.userAgent)
+const RUN_SHORTCUT = APPLE ? '⌘ ↵' : 'Ctrl ↵'
+const RUN_KEYS = APPLE ? 'Meta+Enter' : 'Control+Enter'
+
+/** Identifiant de repli d'une règle en cours de création, le temps de l'exécuter à blanc. */
+const DRAFT_ID = 'nouvelle-regle'
 
 export function RuleEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -46,10 +66,16 @@ export function RuleEditorPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const [dryRunInstance, setDryRunInstance] = useState<number | null>(null)
   const [dryRun, setDryRun] = useState<DryRunResult | null>(null)
+  const [dryRunAt, setDryRunAt] = useState<string | null>(null)
   const [dryRunBusy, setDryRunBusy] = useState(false)
+
+  const editorBox = useRef<HTMLDivElement>(null)
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const available = useFillHeight(editorBox)
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +127,17 @@ export function RuleEditorPage() {
     return () => window.clearTimeout(timer)
   }, [yaml])
 
+  // Chaque erreur est rapportée à sa ligne quand le message permet de la retrouver : la ligne
+  // est teintée dans l'éditeur, et l'erreur y conduit d'un clic.
+  const located = useMemo(
+    () => errors.map((message) => ({ message, line: errorLine(message, yaml) })),
+    [errors, yaml],
+  )
+  const errorLines = useMemo(
+    () => new Set(located.map((item) => item.line).filter((line): line is number => line !== null)),
+    [located],
+  )
+
   async function save() {
     setBusy(true)
     setFailure(null)
@@ -136,29 +173,63 @@ export function RuleEditorPage() {
       navigate('/rules')
     } catch (cause) {
       setFailure(cause instanceof ApiError ? cause.message : t('ruleEditor.deleteFailed'))
+      setConfirmDelete(false)
     } finally {
       setBusy(false)
     }
   }
 
-  async function runDryRun() {
-    if (dryRunInstance === null) return
+  const runDryRun = useCallback(async () => {
+    if (dryRunInstance === null || dryRunBusy) return
 
     setDryRunBusy(true)
-    setDryRun(null)
 
     try {
-      setDryRun(await api.rules.dryRun(detail?.rule.id ?? 'nouvelle-regle', dryRunInstance, yaml))
+      // Le résultat précédent reste affiché jusqu'à l'arrivée du suivant : on compare ce qu'on
+      // vient d'écrire à ce qu'on avait, plutôt que de regarder un cadre vide.
+      const result = await api.rules.dryRun(detail?.rule.id ?? DRAFT_ID, dryRunInstance, yaml)
+      setDryRun(result)
+      setDryRunAt(new Date().toISOString())
     } catch (cause) {
       if (cause instanceof ApiError) {
         setFailure(cause.message)
         setErrors(cause.details ?? [])
       } else {
-        setFailure(t('ruleEditor.dryRunFailed'))
+        // `tr` et non `t` : ce dernier change avec la langue et recréerait le rappel, donc le
+        // raccourci clavier, à chaque bascule.
+        setFailure(tr('ruleEditor.dryRunFailed'))
       }
     } finally {
       setDryRunBusy(false)
     }
+  }, [detail?.rule.id, dryRunInstance, dryRunBusy, yaml])
+
+  // Le raccourci est lu au moment où il sert : la fonction qu'il déclenche change à chaque
+  // frappe dans l'éditeur, on ne réabonne pas la fenêtre pour autant.
+  const runRef = useRef(runDryRun)
+  runRef.current = runDryRun
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault()
+        void runRef.current()
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  /** Pose le curseur sur une ligne et l'amène sous les yeux. */
+  function goToLine(line: number) {
+    const element = textarea.current
+    if (!element) return
+
+    const lines = yaml.split('\n')
+    const start = lines.slice(0, line - 1).reduce((total, text) => total + text.length + 1, 0)
+    element.focus()
+    element.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0))
   }
 
   if (loading) {
@@ -176,11 +247,11 @@ export function RuleEditorPage() {
         rule && (
           <>
             <SeverityBadge severity={rule.severity} />
-            <Badge tone="brand">{categoryLabel(rule.category)}</Badge>
+            <Badge tone="info">{categoryLabel(rule.category)}</Badge>
             <Badge>{t('ruleEditor.group', { group: rule.group })}</Badge>
             <Badge>{t('ruleEditor.version', { version: rule.version })}</Badge>
             {rule.origin === 'user' ? (
-              <Badge tone="brand">{t('rules.customTag')}</Badge>
+              <Badge tone="info">{t('rules.customTag')}</Badge>
             ) : (
               <Badge>{t('rules.bundledTag')}</Badge>
             )}
@@ -191,11 +262,17 @@ export function RuleEditorPage() {
         isAdmin && (
           <>
             {!creating && rule?.origin === 'user' && (
-              <Button variant="danger" onClick={remove} disabled={busy}>
+              <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={busy}>
                 {t('common.delete')}
               </Button>
             )}
-            <Button variant="primary" onClick={save} loading={busy} disabled={validated === false}>
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={save}
+              loading={busy}
+              disabled={validated === false}
+            >
               {t('common.save')}
             </Button>
           </>
@@ -226,7 +303,7 @@ export function RuleEditorPage() {
             `grid-cols-1` explicite en dessous de xl : sans lui, la colonne implicite se
             dimensionne sur le contenu le plus large — l'éditeur, un tableau de résultat — et
             débordait la fenêtre en largeur réduite. */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
           <Card>
             <CardHeader
               title={t('ruleEditor.yamlTitle')}
@@ -255,26 +332,63 @@ export function RuleEditorPage() {
                 </>
               }
             />
-            <CardBody className="space-y-3">
-              <YamlEditor
-                value={yaml}
-                onChange={setYaml}
-                readOnly={!isAdmin}
-                rows={26}
-                label={t('ruleEditor.yamlLabel')}
-              />
+            <CardBody>
+              {/* L'éditeur occupe la hauteur restante, mesurée et non budgétée : un avertissement
+                  au-dessus de lui change la place disponible, et un `calc()` deviendrait faux. */}
+              <div
+                ref={editorBox}
+                style={{ height: available }}
+                className="flex min-h-72 flex-col gap-3"
+              >
+                <YamlEditor
+                  value={yaml}
+                  onChange={setYaml}
+                  readOnly={!isAdmin}
+                  label={t('ruleEditor.yamlLabel')}
+                  errorLines={errorLines}
+                  textareaRef={textarea}
+                  fill
+                />
 
-              {errors.length > 0 && (
-                <Notice tone="danger" title={t('ruleEditor.invalidTitle')}>
-                  <ErrorList errors={errors} />
-                </Notice>
-              )}
+                {located.length > 0 && (
+                  <div className="border-danger bg-danger-subtle max-h-40 shrink-0 overflow-auto rounded-[var(--radius-control)] border-l-2 px-3 py-2">
+                    <p className="text-ink font-medium">{t('ruleEditor.invalidTitle')}</p>
+                    <ul className="mt-1 space-y-0.5">
+                      {located.map((item, index) => (
+                        <li key={index}>
+                          {item.line === null ? (
+                            <span className="text-ink text-meta">{item.message}</span>
+                          ) : (
+                            // L'erreur conduit à la ligne fautive : la lire ne suffit pas, il
+                            // faut y aller.
+                            <button
+                              type="button"
+                              onClick={() => goToLine(item.line!)}
+                              title={t('ruleEditor.goToLine', { line: item.line })}
+                              className="text-ink hover:bg-danger/10 flex w-full gap-2 rounded-[var(--radius-control)] px-1 py-0.5 text-left text-meta"
+                            >
+                              <span className="text-danger-strong shrink-0 font-semibold tabular-nums">
+                                {t('ruleEditor.line', { line: item.line })}
+                              </span>
+                              <span className="min-w-0">{item.message}</span>
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </CardBody>
           </Card>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <Card>
-              <CardHeader title={t('ruleEditor.dryRunTitle')} description={t('ruleEditor.dryRunHint')} />
+              <CardHeader
+                title={t('ruleEditor.dryRunTitle')}
+                description={t('ruleEditor.dryRunHint')}
+                action={dryRunAt && <LastUpdated at={dryRunAt} />}
+              />
               <CardBody className="space-y-3">
                 {connections.length === 0 ? (
                   <EmptyState
@@ -283,12 +397,9 @@ export function RuleEditorPage() {
                     description={t('ruleEditor.noInstanceBody')}
                     action={
                       isAdmin && (
-                        <Link
-                          to="/instances"
-                          className="bg-brand text-brand-ink hover:bg-brand-hover inline-flex h-8 items-center rounded-[var(--radius-control)] px-3 text-sm font-medium"
-                        >
+                        <Button variant="primary" size="lg" onClick={() => navigate('/instances')}>
                           {t('ruleEditor.addInstance')}
-                        </Link>
+                        </Button>
                       )
                     }
                   />
@@ -313,12 +424,16 @@ export function RuleEditorPage() {
 
                       <Button
                         variant="primary"
-                        className="h-9 shrink-0"
+                        className="shrink-0"
                         onClick={runDryRun}
                         loading={dryRunBusy}
                         disabled={validated === false}
+                        aria-keyshortcuts={RUN_KEYS}
                       >
                         {t('ruleEditor.dryRunRun')}
+                        <span className="opacity-70" aria-hidden>
+                          {RUN_SHORTCUT}
+                        </span>
                       </Button>
                     </div>
 
@@ -338,9 +453,12 @@ export function RuleEditorPage() {
 
             {detail && detail.applicability.length > 0 && (
               <Card>
-                <CardHeader title={t('ruleEditor.applicability')} />
+                <CardHeader
+                  title={t('ruleEditor.applicability')}
+                  description={t('ruleEditor.applicabilityHint')}
+                />
                 <CardBody>
-                  <ul className="space-y-1.5 text-sm">
+                  <ul className="space-y-1.5">
                     {detail.applicability.map((entry) => (
                       <li key={entry.connectionId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         {entry.applicable ? (
@@ -349,7 +467,7 @@ export function RuleEditorPage() {
                           <Badge tone="warning">{t('ruleEditor.skippedTag')}</Badge>
                         )}
                         <span className="text-ink">{entry.connectionName}</span>
-                        {entry.reason && <span className="text-ink-muted text-xs">{entry.reason}</span>}
+                        {entry.reason && <span className="text-ink-muted text-meta">{entry.reason}</span>}
                       </li>
                     ))}
                   </ul>
@@ -365,13 +483,24 @@ export function RuleEditorPage() {
           <OverridesCard detail={detail} connections={connections} onChanged={() => void load()} />
         )}
       </div>
+
+      {confirmDelete && rule && (
+        <ConfirmDialog
+          title={t('ruleEditor.deleteTitle', { id: rule.id })}
+          description={t('ruleEditor.deleteBody')}
+          confirmLabel={t('ruleEditor.deleteConfirm')}
+          onConfirm={remove}
+          onCancel={() => setConfirmDelete(false)}
+          busy={busy}
+        />
+      )}
     </Page>
   )
 }
 
 function ErrorList({ errors }: { errors: string[] }) {
   return (
-    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs">
+    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-meta">
       {errors.map((error, index) => (
         <li key={index}>{error}</li>
       ))}
@@ -426,16 +555,20 @@ function DryRunPanel({
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <SeverityBadge severity={finding.severity} />
-                  <span className="text-ink text-sm font-medium">{finding.title}</span>
+                  <span className="text-ink font-medium">{finding.title}</span>
                   {finding.target && (
-                    <code className="bg-surface-sunken text-ink-muted rounded px-1 font-mono text-xs">
+                    <code className="bg-surface-sunken text-ink-muted rounded px-1 font-mono text-meta">
                       {finding.target}
                     </code>
                   )}
                 </div>
-                <p className="text-ink-muted mt-1 text-xs">{finding.message}</p>
+                <p className="text-ink-muted mt-1 text-meta">{finding.message}</p>
                 {finding.remediationSql && (
-                  <SqlCode sql={finding.remediationSql} wrap className="mt-1.5" />
+                  <SqlCommand
+                    sql={finding.remediationSql}
+                    label={t('findings.detail.remediation')}
+                    className="mt-1"
+                  />
                 )}
               </li>
             ))}
@@ -445,33 +578,35 @@ function DryRunPanel({
 
       {columns.length > 0 && (
         <FormSection title={t('ruleEditor.dryRunSqlTitle')}>
+          {/* Le résultat brut défile dans son propre cadre : c'est ce qui permet de le comparer à
+              la définition sans perdre l'éditeur de vue. */}
           <div className="border-border-subtle max-h-72 overflow-auto rounded-[var(--radius-control)] border">
-            <table className="w-full text-xs">
-              <thead className="bg-surface-sunken sticky top-0 text-left">
-                <tr>
+            <Table>
+              <THead>
+                <Tr>
                   {columns.map((column) => (
-                    <th key={column} className="text-ink-muted px-2 py-1.5 font-medium whitespace-nowrap">
+                    <Th key={column} className="whitespace-nowrap normal-case">
                       {column}
-                    </th>
+                    </Th>
                   ))}
-                </tr>
-              </thead>
-              <tbody className="divide-border-subtle divide-y">
+                </Tr>
+              </THead>
+              <TBody>
                 {result.rows.map((row, index) => (
-                  <tr key={index}>
+                  <Tr key={index}>
                     {columns.map((column) => (
-                      <td
+                      <Td
                         key={column}
-                        className="text-ink max-w-64 truncate px-2 py-1.5 font-mono"
+                        className="max-w-64 truncate font-mono"
                         title={row[column] === null || row[column] === undefined ? '' : String(row[column])}
                       >
                         {row[column] === null || row[column] === undefined ? '—' : String(row[column])}
-                      </td>
+                      </Td>
                     ))}
-                  </tr>
+                  </Tr>
                 ))}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           </div>
         </FormSection>
       )}
@@ -501,19 +636,19 @@ function SchemaHelp({ schema }: { schema: RuleSchema }) {
       />
       {open && (
         <CardBody>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-xs md:grid-cols-2 xl:grid-cols-3">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
             <Help label={t('ruleEditor.helpCategories')} items={schema.categories.map(categoryLabel)} />
             <Help label={t('ruleEditor.helpGroups')} items={schema.groups} />
             <Help label={t('ruleEditor.helpFilters')} items={schema.filters} />
             <Help label={t('ruleEditor.helpFunctions')} items={schema.functions} />
             <Help label={t('ruleEditor.helpExtensions')} items={schema.notableExtensions} />
             <div className="min-w-0">
-              <dt className="text-ink-faint mb-1 text-[11px] font-semibold tracking-wider uppercase">
+              <dt className="text-ink-muted mb-1 text-micro font-semibold tracking-wider uppercase">
                 {t('ruleEditor.helpHandlers')}
               </dt>
               <dd className="space-y-1">
                 {schema.handlers.map((handler) => (
-                  <p key={handler.name} className="text-ink-muted">
+                  <p key={handler.name} className="text-ink-muted text-meta">
                     <code className="bg-surface-sunken text-ink rounded px-1 font-mono">
                       {handler.name}
                     </code>{' '}
@@ -532,10 +667,10 @@ function SchemaHelp({ schema }: { schema: RuleSchema }) {
 function Help({ label, items }: { label: string; items: string[] }) {
   return (
     <div className="min-w-0">
-      <dt className="text-ink-faint mb-1 text-[11px] font-semibold tracking-wider uppercase">{label}</dt>
+      <dt className="text-ink-muted mb-1 text-micro font-semibold tracking-wider uppercase">{label}</dt>
       <dd className="flex flex-wrap gap-1">
         {items.map((item) => (
-          <code key={item} className="bg-surface-sunken text-ink rounded px-1 font-mono">
+          <code key={item} className="bg-surface-sunken text-ink rounded px-1 font-mono text-meta">
             {item}
           </code>
         ))}
@@ -628,8 +763,8 @@ function OverridesCard({
           formulaire par un paragraphe. */}
       <CardHeader title={t('ruleEditor.overrides')} description={t('ruleEditor.overridesHint')} />
       <CardBody className="space-y-5">
-        <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label={t('ruleEditor.scope')}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label={t('ruleEditor.scope')} hint={t('ruleEditor.scopeHint')}>
             <Select value={target} onChange={(event) => setTarget(event.target.value)}>
               <option value="">{t('ruleEditor.allInstances')}</option>
               {connections.map((connection) => (
@@ -676,7 +811,7 @@ function OverridesCard({
 
         {ruleParameters.length > 0 && (
           <FormSection title={t('ruleEditor.thresholds')}>
-            <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {ruleParameters.map(([key, value]) => (
                 <Field
                   key={key}
@@ -699,7 +834,7 @@ function OverridesCard({
         {error && <Notice tone="danger">{error}</Notice>}
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" onClick={save} loading={busy}>
+          <Button variant="primary" size="lg" onClick={save} loading={busy}>
             {t('ruleEditor.saveOverride')}
           </Button>
           {existing && (
@@ -727,28 +862,28 @@ function OverridesCard({
                       aria-pressed={active}
                       title={t('ruleEditor.editOverride', { scope })}
                       className={cn(
-                        'flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-control)] px-2 py-1.5 text-left text-xs transition-colors',
+                        'flex min-h-8 w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-control)] px-2 py-1 text-left transition-colors',
                         active ? 'bg-brand-subtle' : 'hover:bg-surface-sunken',
                       )}
                     >
-                      <Badge tone="brand">{scope}</Badge>
+                      <Badge tone="info">{scope}</Badge>
                       {item.enabled !== null && (
-                        <span className="text-ink-muted">
+                        <span className="text-ink-muted text-meta">
                           {item.enabled ? t('rules.enabledTag') : t('rules.disabledTag')}
                         </span>
                       )}
                       {item.severity && (
-                        <span className="text-ink-muted">
+                        <span className="text-ink-muted text-meta">
                           {t('ruleEditor.overrideSeverity', { severity: severityLabel(item.severity) })}
                         </span>
                       )}
                       {item.intervalSeconds && (
-                        <span className="text-ink-muted">
+                        <span className="text-ink-muted text-meta">
                           {t('ruleEditor.overrideInterval', { seconds: item.intervalSeconds })}
                         </span>
                       )}
                       {Object.keys(item.parameters).length > 0 && (
-                        <span className="text-ink-muted font-mono">
+                        <span className="text-ink-muted font-mono text-meta">
                           {Object.entries(item.parameters)
                             .map(([key, parameter]) => `${key}=${String(parameter)}`)
                             .join(', ')}

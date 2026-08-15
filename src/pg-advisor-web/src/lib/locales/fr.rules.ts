@@ -3,71 +3,106 @@
  * peuvent avancer en parallèle sans se disputer un catalogue unique.
  *
  * La zone couvre les deux vues du travail quotidien sur les diagnostics : la liste des
- * recommandations avec son détail, et l'éditeur d'une règle avec son exécution à blanc. Les
+ * diagnostics avec son détail, et l'éditeur d'une règle avec son exécution à blanc. Les
  * clés sont préfixées par la vue, puis par le bloc où elles servent — `detail`, `action`,
  * `empty`, `notice`.
+ *
+ * Vocabulaire : un diagnostic est un fait constaté sur une instance, pas une tâche à cocher. Il
+ * naît et meurt avec le fait ; l'utilisateur ne le résout pas, il peut seulement décider que le
+ * constat ne l'intéresse pas. Aucun libellé ne doit laisser croire l'inverse.
  */
 export const frRules: Record<string, string> = {
-  // --- Recommandations : en-tête et onglets ---------------------------------
-  'findings.subtitle':
-    'Chaque diagnostic indique la règle qui l’a produit, ses preuves et la commande corrective — jamais exécutée automatiquement.',
+  // --- Diagnostics : en-tête et onglets -------------------------------------
+  // Le descriptif tient sur la ligne du titre : sur une vue lue tous les jours, un en-tête de
+  // trois lignes vole un tiers de l'écran utile.
+  'findings.subtitle': 'Faits constatés sur vos instances. L’Advisor n’exécute jamais de commande.',
   'findings.statusTabs': 'Statut',
-  'findings.tab.active': 'À traiter',
-  'findings.tab.ignored': 'Ignorées',
-  'findings.tab.resolved': 'Résolues',
-  'findings.tab.all': 'Toutes',
-  'findings.count.one': '{count} recommandation',
-  'findings.count.other': '{count} recommandations',
-  'findings.virtualized': 'liste virtualisée',
-  'findings.limited': 'affichage limité aux {count} premières : affinez les filtres',
+  'findings.tab.active': 'Actifs',
+  'findings.tab.ignored': 'Ignorés',
+  'findings.tab.resolved': 'Résolus',
+  'findings.tab.all': 'Tous',
+  'findings.count.one': '{count} diagnostic',
+  'findings.count.other': '{count} diagnostics',
+  'findings.limited': '{count} premiers seulement',
 
-  // --- Recommandations : filtres --------------------------------------------
+  // --- Diagnostics : point d'entrée -----------------------------------------
+  'findings.hero.pending.one': 'sur {count} diagnostic actif',
+  'findings.hero.pending.other': 'sur {count} diagnostics actifs',
+  'findings.hero.warnings.one': '{count} avertissement',
+  'findings.hero.warnings.other': '{count} avertissements',
+  'findings.hero.infos.one': '{count} information',
+  'findings.hero.infos.other': '{count} informations',
+  'findings.hero.showCritical': 'Voir les critiques',
+
+  // --- Diagnostics : colonnes et filtres -------------------------------------
+  // Filtre et tri vivent dans l'en-tête de la colonne qu'ils gouvernent : le libellé de colonne
+  // sert donc aussi de nom au contrôle.
+  'findings.column.diagnostic': 'Diagnostic',
+  'findings.column.detected': 'Détecté',
+  'findings.rowTitle': 'Ouvrir le détail',
   'findings.searchPlaceholder': 'titre, objet, règle',
-  'findings.searchHint': 'Entrée pour valider',
+  'findings.unit.severity': 'sévérité',
+  'findings.unit.severities': 'sévérités',
+  'findings.unit.instance': 'instance',
+  'findings.unit.instances': 'instances',
+  'findings.unit.category': 'catégorie',
+  'findings.unit.categories': 'catégories',
 
-  // --- Recommandations : messages -------------------------------------------
+  // --- Diagnostics : temps réel ---------------------------------------------
+  'findings.live.new.one': '{count} nouveau diagnostic',
+  'findings.live.new.other': '{count} nouveaux diagnostics',
+  'findings.live.newCritical.one': '{count} nouveau diagnostic critique',
+  'findings.live.newCritical.other': '{count} nouveaux diagnostics critiques',
+
+  // --- Diagnostics : messages -----------------------------------------------
   'findings.ignoredNotice':
-    'Une recommandation ignorée n’est plus notifiée et ne pèse plus sur le score de santé. Elle continue d’être rafraîchie : « Ne plus ignorer » la remet dans la liste à traiter.',
+    'Un diagnostic ignoré n’est plus notifié et ne pèse plus sur le score de santé. Il continue d’être rafraîchi : « Reconsidérer » le remet parmi les diagnostics actifs.',
+  'findings.resolvedNotice':
+    'Un diagnostic est résolu par le moteur lorsque le fait constaté a disparu de l’instance, à la prochaine exécution de la règle ou à la vérification. Personne ne le coche à la main.',
   'findings.statusFailed': 'Changement de statut impossible.',
   'findings.verifyFailed': 'Vérification impossible.',
-  'findings.notice.resolved': '« {title} » marquée résolue.',
-  'findings.notice.ignored': '« {title} » est désormais ignorée.',
-  'findings.notice.reactivated': '« {title} » revient à traiter.',
+  'findings.notice.ignored': '« {title} » est désormais ignoré.',
+  'findings.notice.reconsidered': '« {title} » revient parmi les diagnostics actifs.',
 
-  // --- Recommandations : liste vide -----------------------------------------
-  'findings.empty.title': 'Aucune recommandation pour ces filtres',
-  'findings.empty.active': 'Aucun diagnostic à traiter sur le périmètre sélectionné.',
+  // --- Diagnostics : liste vide ---------------------------------------------
+  // Un état vide filtré n'est pas un état vide initial : le premier propose d'effacer les
+  // filtres, le second dit ce que l'absence signifie.
+  'findings.empty.title': 'Aucun diagnostic',
+  'findings.empty.active': 'Rien de constaté sur les instances supervisées.',
   'findings.empty.ignored':
-    'Aucune recommandation ignorée. Le menu d’une ligne à traiter permet de l’y ranger.',
-  'findings.empty.other': 'Essayez un autre statut ou élargissez les filtres.',
+    'Aucun diagnostic ignoré. Le menu d’une ligne active permet de l’y ranger.',
+  'findings.empty.other': 'Essayez un autre statut.',
+  'findings.empty.filtered': 'Aucun diagnostic pour ces filtres',
+  'findings.empty.filteredHint': 'Le périmètre choisi ne renvoie rien : élargissez-le.',
 
-  // --- Recommandations : ligne de liste --------------------------------------
-  'findings.detected': 'détecté {when}',
+  // --- Diagnostics : ligne de liste -----------------------------------------
   'findings.occurrences.one': '{count} occurrence',
   'findings.occurrences.other': '{count} occurrences',
   'findings.durationMs': '{ms} ms',
 
-  // --- Recommandations : actions --------------------------------------------
-  'findings.action.resolve': 'Marquer résolue',
+  // --- Diagnostics : actions ------------------------------------------------
+  // Deux gestes, et deux seulement : décider que le constat n'intéresse pas, et se dédire. Clore
+  // un diagnostic n'appartient qu'au moteur.
   'findings.action.ignore': 'Ignorer',
-  'findings.action.ignoreHint': 'Sort de la liste à traiter, sans notification ni impact sur le score.',
-  'findings.action.unignore': 'Ne plus ignorer',
-  'findings.action.reactivate': 'Réactiver',
+  'findings.action.reconsider': 'Reconsidérer',
   'findings.action.verify': 'Vérifier',
-  'findings.action.verifyHint': 'Rejoue la règle sur l’instance et résout si le problème a disparu.',
+  'findings.action.verifyHint':
+    'Rejoue la règle sur l’instance : le moteur clôt le diagnostic si le fait a disparu.',
 
-  // --- Recommandations : détail ---------------------------------------------
-  'findings.detail.fallbackTitle': 'Recommandation',
-  'findings.detail.diagnosis': 'Diagnostic',
+  // --- Diagnostics : détail -------------------------------------------------
+  'findings.detail.fallbackTitle': 'Diagnostic',
+  'findings.detail.resolutionHint':
+    'Ce constat disparaît de lui-même quand le fait qui l’a produit disparaît : c’est le moteur qui le clôt, à la prochaine exécution de la règle ou à la vérification.',
   'findings.detail.impact': 'Impact estimé',
   'findings.detail.confidence': 'Confiance',
   'findings.detail.occurrences': 'Occurrences',
-  'findings.detail.lastSeen': 'Vue pour la dernière fois',
+  'findings.detail.lastSeen': 'Vu pour la dernière fois',
   'findings.detail.detectedAt': 'Détecté le',
   'findings.detail.resolvedAt': 'Résolu le',
   'findings.detail.rule': 'Règle déclenchante',
   'findings.detail.ruleVersion': 'version {version}',
-  'findings.detail.ruleMissing': 'Cette règle n’est plus chargée : le finding ne sera plus rafraîchi.',
+  'findings.detail.ruleMissing':
+    'Cette règle n’est plus chargée : ce diagnostic ne sera plus rafraîchi.',
   'findings.detail.evidence': 'Preuves collectées',
   'findings.detail.remediation': 'Commande corrective proposée',
   'findings.detail.remediationHint':
@@ -79,6 +114,29 @@ export const frRules: Record<string, string> = {
   'findings.detail.failed': 'échec {status}',
   'findings.detail.actor': 'par {actor}',
 
+  // --- Catalogue des règles -------------------------------------------------
+  // Vue rare, consultée à l'installation puis à l'occasion : elle s'explique au lieu de se
+  // compacter. Les clés historiques `rules.*` vivent dans le catalogue général ; celles-ci
+  // complètent la reprise de la vue.
+  'rules.new': 'Nouvelle règle',
+  'rules.catalog': 'Catalogue',
+  'rules.failing.one': '{count} règle en erreur',
+  'rules.failing.other': '{count} règles en erreur',
+  // Unités du résumé d'une sélection multiple : « 2 catégories » plutôt qu'une énumération.
+  'rules.unit.category': 'catégorie',
+  'rules.unit.categories': 'catégories',
+  'rules.unit.severity': 'sévérité',
+  'rules.unit.severities': 'sévérités',
+  'rules.unit.origin': 'origine',
+  'rules.unit.origins': 'origines',
+  'rules.unit.state': 'état',
+  'rules.unit.states': 'états',
+  'rules.empty.title': 'Aucune règle chargée',
+  'rules.empty.hint':
+    'Les règles livrées avec l’application sont lues au démarrage. Une règle écrite ici s’ajoute à elles et se recharge à chaud.',
+  'rules.noMatchHint': 'Aucune règle du catalogue ne répond à ces critères. Levez un filtre pour en revoir.',
+  'rules.live.reloaded': 'Règles rechargées',
+
   // --- Éditeur de règle : en-tête -------------------------------------------
   'ruleEditor.newTitle': 'Nouvelle règle',
   'ruleEditor.group': 'groupe {group}',
@@ -89,6 +147,10 @@ export const frRules: Record<string, string> = {
   'ruleEditor.saved': 'Règle « {id} » enregistrée et rechargée.',
   'ruleEditor.saveFailed': 'Enregistrement impossible.',
   'ruleEditor.deleteFailed': 'Suppression impossible.',
+  'ruleEditor.deleteTitle': 'Supprimer la règle « {id} » ?',
+  'ruleEditor.deleteBody':
+    'La définition écrite dans le volume de données est effacée. Si elle remplaçait une règle intégrée, celle-ci reprend sa place au prochain rechargement.',
+  'ruleEditor.deleteConfirm': 'Supprimer la règle',
 
   // --- Éditeur de règle : définition YAML -----------------------------------
   'ruleEditor.yamlTitle': 'Définition YAML',
@@ -99,6 +161,10 @@ export const frRules: Record<string, string> = {
   'ruleEditor.unsavedTag': 'non enregistrée',
   'ruleEditor.unsavedTitle': 'Modifications non enregistrées.',
   'ruleEditor.invalidTitle': 'La règle n’est pas valide',
+  // Une erreur de validation se pose au plus près de la ligne fautive : elle la nomme, la teinte
+  // dans l'éditeur, et y conduit d'un clic.
+  'ruleEditor.line': 'ligne {line}',
+  'ruleEditor.goToLine': 'Aller à la ligne {line}',
 
   // --- Éditeur de règle : exécution à blanc ---------------------------------
   'ruleEditor.dryRunTitle': 'Aperçu sur une instance',
@@ -125,6 +191,7 @@ export const frRules: Record<string, string> = {
 
   // --- Éditeur de règle : applicabilité et aide-mémoire ---------------------
   'ruleEditor.applicability': 'Applicabilité',
+  'ruleEditor.applicabilityHint': 'où cette règle s’exécutera, en l’état des instances connues',
   'ruleEditor.applicableTag': 'applicable',
   'ruleEditor.skippedTag': 'ignorée',
   'ruleEditor.help': 'Aide-mémoire',
@@ -144,6 +211,7 @@ export const frRules: Record<string, string> = {
   'ruleEditor.overridesHint':
     'Une surcharge n’écrit pas dans le fichier : elle ajuste l’activation, la sévérité, la périodicité ou les seuils, globalement ou pour une seule instance.',
   'ruleEditor.scope': 'Portée',
+  'ruleEditor.scopeHint': 'une instance, ou toutes',
   'ruleEditor.allInstances': 'Toutes les instances',
   'ruleEditor.activation': 'Activation',
   'ruleEditor.ruleValue': 'Valeur de la règle ({value})',
