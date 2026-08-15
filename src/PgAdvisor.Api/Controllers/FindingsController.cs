@@ -161,16 +161,29 @@ public sealed class FindingsController(
         });
     }
 
-    /// <summary>Passe un finding à ignored, resolved ou active. Un finding ignoré n'est plus notifié ni compté dans le score.</summary>
+    /// <summary>
+    /// Passe un finding à ignored ou active. Un finding ignoré n'est plus notifié ni compté dans
+    /// le score, et repasser à active revient à le reconsidérer.
+    ///
+    /// `resolved` est délibérément refusé ici : un finding décrit un fait constaté sur l'instance,
+    /// il n'est pas une tâche à cocher. Sa résolution appartient au moteur — à la prochaine
+    /// exécution de la règle, ou à la vérification à la demande, qui rejoue la règle et conclut.
+    /// </summary>
     [HttpPost("{id:int}/status")]
     public async Task<ActionResult<FindingResponse>> ChangeStatus(
         int id, ChangeFindingStatusRequest request, CancellationToken ct)
     {
         var status = request.Status.ToLowerInvariant();
-        if (status is not (FindingStatus.Active or FindingStatus.Resolved or FindingStatus.Ignored))
+        if (status is FindingStatus.Resolved)
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
-                title: $"Unknown status. Accepted values: {FindingStatus.Active}, {FindingStatus.Resolved}, {FindingStatus.Ignored}.");
+                title: "A finding cannot be resolved by hand. It is resolved when the rule no longer reports it: wait for the next run, or verify it on demand.");
+        }
+
+        if (status is not (FindingStatus.Active or FindingStatus.Ignored))
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: $"Unknown status. Accepted values: {FindingStatus.Active}, {FindingStatus.Ignored}.");
         }
 
         var actor = User.FindFirstValue(ClaimTypes.Name);

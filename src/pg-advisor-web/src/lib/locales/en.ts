@@ -118,7 +118,8 @@ export const en: Record<string, string> = {
   'nav.overview': 'Overview',
   'nav.supervision': 'Monitoring',
   'nav.instances': 'Instances',
-  'nav.findings': 'Recommendations',
+  // The /findings route is unchanged: existing links point at it, and the API speaks of findings.
+  'nav.findings': 'Diagnostics',
   'nav.queries': 'Queries',
   'nav.configuration': 'Configuration',
   'nav.rules': 'Rules',

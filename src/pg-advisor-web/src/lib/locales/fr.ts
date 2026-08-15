@@ -118,7 +118,8 @@ export const fr: Record<string, string> = {
   'nav.overview': 'Vue d’ensemble',
   'nav.supervision': 'Supervision',
   'nav.instances': 'Instances',
-  'nav.findings': 'Recommandations',
+  // La route reste /findings : des liens existants la visent, et l'API parle de findings.
+  'nav.findings': 'Diagnostics',
   'nav.queries': 'Requêtes',
   'nav.configuration': 'Configuration',
   'nav.rules': 'Règles',
