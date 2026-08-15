@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { FlaskConical, ServerOff } from 'lucide-react'
+import { ArrowRight, FlaskConical, RotateCcw, ServerOff } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type {
   Connection,
   DryRunResult,
   RuleApplicability,
   RuleDetail,
+  RuleOverride,
   RuleSchema,
   Severity,
 } from '@/api/types'
@@ -956,12 +958,34 @@ function OverridesCard({
     )
   }, [existing])
 
+  /*
+   * Ce que la surcharge en cours d'édition remplace réellement.
+   *
+   * L'ordre de précédence est : fichier, puis surcharge globale, puis surcharge d'instance. Une
+   * surcharge d'instance ne remplace donc pas la valeur du YAML mais celle qui s'applique déjà —
+   * afficher le YAML barré alors qu'une surcharge globale l'a déjà remplacé dirait faux.
+   */
+  const globalOverride = useMemo(
+    () => detail.rule.overrides.find((item) => (item.connectionId ?? null) === null),
+    [detail.rule.overrides],
+  )
+  const inherited = connectionId === null ? undefined : globalOverride
+
+  const from = (fromGlobal: boolean) =>
+    fromGlobal ? t('ruleEditor.fromGlobal') : t('ruleEditor.fromRule')
+
+  const baseEnabled = inherited?.enabled ?? detail.rule.enabled
+  const baseSeverity = inherited?.severity ?? detail.rule.severity
+  const baseInterval = inherited?.intervalSeconds ?? detail.rule.intervalSeconds
   // Délai appliqué à défaut de surcharge : celui du fichier, sinon celui du scheduler. Ce dernier
   // n'a pas de valeur devinable côté interface — une API qui ne le renvoie pas laisse un tiret
   // plutôt qu'un chiffre inventé.
   const defaultTimeout = detail.rule.timeoutSeconds ?? detail.rule.defaultTimeoutSeconds ?? null
+  const baseTimeout = inherited?.timeoutSeconds ?? defaultTimeout
 
   const ruleParameters = Object.entries(detail.rule.parameters)
+  const baseParameter = (key: string) =>
+    String(inherited?.parameters?.[key] ?? detail.rule.parameters[key] ?? '—')
 
   async function save() {
     setBusy(true)
@@ -1009,85 +1033,138 @@ function OverridesCard({
           formulaire par un paragraphe. */}
       <CardHeader title={t('ruleEditor.overrides')} description={t('ruleEditor.overridesHint')} />
       <CardBody className="space-y-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label={t('ruleEditor.scope')} hint={t('ruleEditor.scopeHint')}>
-            <Select value={target} onChange={(event) => setTarget(event.target.value)}>
-              <option value="">{t('ruleEditor.allInstances')}</option>
-              {connections.map((connection) => (
-                <option key={connection.id} value={connection.id}>
-                  {connection.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label={t('ruleEditor.activation')}>
-            <Select value={enabled} onChange={(event) => setEnabled(event.target.value)}>
-              <option value="">
-                {t('ruleEditor.ruleValue', {
-                  value: detail.rule.enabled ? t('rules.enabledTag') : t('rules.disabledTag'),
-                })}
+        <Field label={t('ruleEditor.scope')} hint={t('ruleEditor.scopeHint')} className="max-w-sm">
+          <Select value={target} onChange={(event) => setTarget(event.target.value)}>
+            <option value="">{t('ruleEditor.allInstances')}</option>
+            {connections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.name}
               </option>
-              <option value="true">{t('ruleEditor.enabledOption')}</option>
-              <option value="false">{t('ruleEditor.disabledOption')}</option>
-            </Select>
-          </Field>
+            ))}
+          </Select>
+        </Field>
 
-          <Field label={t('common.severity')}>
-            <Select value={severity} onChange={(event) => setSeverity(event.target.value)}>
-              <option value="">
-                {t('ruleEditor.ruleValue', { value: severityLabel(detail.rule.severity) })}
-              </option>
-              <option value="info">{t('severity.info')}</option>
-              <option value="warning">{t('severity.warning')}</option>
-              <option value="critical">{t('severity.critical')}</option>
-            </Select>
-          </Field>
+        {/* La convention de lecture se dit une fois, au-dessus du tableau : sans elle, une valeur
+            barrée se lit comme une valeur interdite plutôt que comme une valeur remplacée. */}
+        <p className="text-ink-muted text-meta">{t('ruleEditor.overrideLegend')}</p>
 
-          <Field label={t('ruleEditor.interval')} hint={t('ruleEditor.intervalHint')}>
-            <Input
-              type="number"
-              min={5}
-              max={86400}
-              value={interval}
-              onChange={(event) => setInterval(event.target.value)}
-            />
-          </Field>
-
-          {/* Le délai est ce que le garde-fou surveille : au-delà, l'exécution est comptée comme
-              un incident, et la règle finit par être écartée de l'instance. */}
-          <Field
-            label={t('ruleEditor.timeout')}
-            hint={t('ruleEditor.timeoutHint', { value: defaultTimeout ?? '—' })}
+        <div className="border-border-subtle overflow-hidden rounded-[var(--radius-control)] border">
+          <OverrideRow
+            label={t('ruleEditor.activation')}
+            base={baseEnabled ? t('rules.enabledTag') : t('rules.disabledTag')}
+            baseFrom={from(inherited?.enabled != null)}
+            overridden={enabled !== ''}
+            onReset={() => setEnabled('')}
           >
-            <Input
-              type="number"
-              min={1}
-              max={300}
-              placeholder={defaultTimeout === null ? '' : String(defaultTimeout)}
-              value={timeout}
-              onChange={(event) => setTimeout(event.target.value)}
-            />
-          </Field>
+            {(id) => (
+              <Select
+                id={id}
+                value={enabled}
+                onChange={(event) => setEnabled(event.target.value)}
+                className={overriddenControl(enabled !== '')}
+              >
+                <option value="">{t('ruleEditor.noOverrideOption')}</option>
+                <option value="true">{t('ruleEditor.enabledOption')}</option>
+                <option value="false">{t('ruleEditor.disabledOption')}</option>
+              </Select>
+            )}
+          </OverrideRow>
+
+          <OverrideRow
+            label={t('common.severity')}
+            base={severityLabel(baseSeverity)}
+            baseFrom={from(inherited?.severity != null)}
+            overridden={severity !== ''}
+            onReset={() => setSeverity('')}
+          >
+            {(id) => (
+              <Select
+                id={id}
+                value={severity}
+                onChange={(event) => setSeverity(event.target.value)}
+                className={overriddenControl(severity !== '')}
+              >
+                <option value="">{t('ruleEditor.noOverrideOption')}</option>
+                <option value="info">{t('severity.info')}</option>
+                <option value="warning">{t('severity.warning')}</option>
+                <option value="critical">{t('severity.critical')}</option>
+              </Select>
+            )}
+          </OverrideRow>
+
+          <OverrideRow
+            label={t('ruleEditor.interval')}
+            hint={t('ruleEditor.intervalHint')}
+            base={
+              baseInterval === null
+                ? t('ruleEditor.intervalFromGroup', { group: detail.rule.group })
+                : `${baseInterval} s`
+            }
+            baseFrom={from(inherited?.intervalSeconds != null)}
+            overridden={interval !== ''}
+            onReset={() => setInterval('')}
+          >
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                min={5}
+                max={86400}
+                value={interval}
+                onChange={(event) => setInterval(event.target.value)}
+                className={overriddenControl(interval !== '')}
+              />
+            )}
+          </OverrideRow>
+
+          {/* Le timeout est ce que le garde-fou surveille : au-delà, l'exécution est comptée
+              comme un incident, et la règle finit par être écartée de l'instance. */}
+          <OverrideRow
+            label={t('ruleEditor.timeout')}
+            hint={t('ruleEditor.timeoutHint')}
+            base={baseTimeout === null ? '—' : `${baseTimeout} s`}
+            baseFrom={from(inherited?.timeoutSeconds != null)}
+            overridden={timeout !== ''}
+            onReset={() => setTimeout('')}
+          >
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                min={1}
+                max={300}
+                value={timeout}
+                onChange={(event) => setTimeout(event.target.value)}
+                className={overriddenControl(timeout !== '')}
+              />
+            )}
+          </OverrideRow>
         </div>
 
         {ruleParameters.length > 0 && (
           <FormSection title={t('ruleEditor.thresholds')}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {ruleParameters.map(([key, value]) => (
-                <Field
+            <div className="border-border-subtle overflow-hidden rounded-[var(--radius-control)] border">
+              {ruleParameters.map(([key]) => (
+                <OverrideRow
                   key={key}
                   label={key}
-                  hint={t('ruleEditor.thresholdDefault', { value: String(value) })}
+                  mono
+                  base={baseParameter(key)}
+                  baseFrom={from(inherited?.parameters?.[key] !== undefined)}
+                  overridden={(parameters[key] ?? '') !== ''}
+                  onReset={() => setParameters((current) => ({ ...current, [key]: '' }))}
                 >
-                  <Input
-                    value={parameters[key] ?? ''}
-                    placeholder={String(value)}
-                    onChange={(event) =>
-                      setParameters((current) => ({ ...current, [key]: event.target.value }))
-                    }
-                  />
-                </Field>
+                  {(id) => (
+                    <Input
+                      id={id}
+                      value={parameters[key] ?? ''}
+                      onChange={(event) =>
+                        setParameters((current) => ({ ...current, [key]: event.target.value }))
+                      }
+                      className={overriddenControl((parameters[key] ?? '') !== '')}
+                    />
+                  )}
+                </OverrideRow>
               ))}
             </div>
           </FormSection>
@@ -1128,34 +1205,19 @@ function OverridesCard({
                         active ? 'bg-brand-subtle' : 'hover:bg-surface-sunken',
                       )}
                     >
-                      <Badge tone="info">{scope}</Badge>
-                      {item.enabled !== null && (
-                        <span className="text-ink-muted text-meta">
-                          {item.enabled ? t('rules.enabledTag') : t('rules.disabledTag')}
+                      <Badge tone="neutral">{scope}</Badge>
+
+                      {/* Ce que la surcharge change, dans la teinte qui dit « valeur posée » —
+                          la même que dans le tableau au-dessus. Un ruban de fragments gris ne
+                          laissait pas voir combien de réglages étaient en jeu. */}
+                      {changesOf(item, t).map((change) => (
+                        <span
+                          key={change}
+                          className="bg-info-subtle text-info-strong rounded-full px-1.5 py-0.5 font-mono text-micro"
+                        >
+                          {change}
                         </span>
-                      )}
-                      {item.severity && (
-                        <span className="text-ink-muted text-meta">
-                          {t('ruleEditor.overrideSeverity', { severity: severityLabel(item.severity) })}
-                        </span>
-                      )}
-                      {item.intervalSeconds && (
-                        <span className="text-ink-muted text-meta">
-                          {t('ruleEditor.overrideInterval', { seconds: item.intervalSeconds })}
-                        </span>
-                      )}
-                      {item.timeoutSeconds && (
-                        <span className="text-ink-muted text-meta">
-                          {t('ruleEditor.overrideTimeout', { seconds: item.timeoutSeconds })}
-                        </span>
-                      )}
-                      {Object.keys(item.parameters).length > 0 && (
-                        <span className="text-ink-muted font-mono text-meta">
-                          {Object.entries(item.parameters)
-                            .map(([key, parameter]) => `${key}=${String(parameter)}`)
-                            .join(', ')}
-                        </span>
-                      )}
+                      ))}
                     </button>
                   </li>
                 )
@@ -1166,4 +1228,103 @@ function OverridesCard({
       </CardBody>
     </Card>
   )
+}
+
+/** Encre d'une valeur posée par la surcharge : la même partout, tableau comme récapitulatif. */
+function overriddenControl(overridden: boolean): string {
+  return overridden ? 'text-info-strong font-semibold' : ''
+}
+
+/**
+ * Un réglage, sur une ligne : ce qui s'applique aujourd'hui, puis ce qui le remplace.
+ *
+ * Le formulaire d'origine n'affichait que des champs vides dont le `placeholder` portait la
+ * valeur héritée. Un champ vide et un champ rempli se ressemblent trop pour dire lequel des deux
+ * commande, et la valeur remplacée disparaissait dès qu'on saisissait. Ici elle reste — barrée et
+ * effacée quand une surcharge la remplace, à l'encre normale quand rien ne la remplace.
+ */
+function OverrideRow({
+  label,
+  hint,
+  base,
+  baseFrom,
+  overridden,
+  mono = false,
+  onReset,
+  children,
+}: {
+  label: string
+  hint?: string
+  /** Valeur qui s'applique en l'absence de cette surcharge, telle qu'elle se lit. */
+  base: string
+  /** D'où elle vient : le fichier de la règle, ou la surcharge globale. */
+  baseFrom: string
+  overridden: boolean
+  /** Libellé technique — un nom de paramètre — à composer en chasse fixe. */
+  mono?: boolean
+  onReset: () => void
+  children: (controlId: string) => ReactNode
+}) {
+  const t = useT()
+  const controlId = useId()
+
+  return (
+    <div className="border-border-subtle grid gap-x-4 gap-y-2 border-t px-3 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:items-center">
+      <div className="min-w-0">
+        <label
+          htmlFor={controlId}
+          className={cn('text-ink block truncate text-body font-medium', mono && 'font-mono')}
+        >
+          {label}
+        </label>
+        {hint && <p className="text-ink-muted truncate text-meta">{hint}</p>}
+      </div>
+
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2">
+        {/* La valeur remplacée reste à l'encre `ink-muted`, pas `ink-faint` : à 12 px, cette
+            dernière tient 4,1:1 sur le fond, sous le seuil AA. Le barré dit déjà « remplacée » —
+            l'effacer davantage la rendrait illisible sans rien ajouter au sens. */}
+        <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
+          <span className="text-ink-muted text-micro tracking-wider uppercase">{baseFrom}</span>
+          <span className={cn('text-ink-muted truncate font-mono text-meta', overridden && 'line-through')}>
+            {base}
+          </span>
+        </span>
+
+        <ArrowRight
+          className={cn('size-3.5 shrink-0', overridden ? 'text-info' : 'text-ink-faint')}
+          aria-hidden
+        />
+
+        <div className="min-w-0 flex-1 basis-40">{children(controlId)}</div>
+
+        {/* Le retour en arrière n'existe qu'une fois qu'il y a quelque chose à défaire : vider le
+            champ à la main marche aussi, encore faut-il deviner que le vide veut dire « hérité ». */}
+        {overridden && (
+          <Button variant="ghost" size="sm" onClick={onReset} title={t('ruleEditor.resetTitle', { label })}>
+            <RotateCcw className="size-3.5" aria-hidden />
+            {t('ruleEditor.reset')}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Ce qu'une surcharge enregistrée change, en une suite de fragments lisibles. */
+function changesOf(item: RuleOverride, t: Translator): string[] {
+  const changes: string[] = []
+
+  if (item.enabled !== null) {
+    changes.push(item.enabled ? t('rules.enabledTag') : t('rules.disabledTag'))
+  }
+  if (item.severity) changes.push(severityLabel(item.severity))
+  if (item.intervalSeconds) changes.push(t('ruleEditor.overrideInterval', { seconds: item.intervalSeconds }))
+  if (item.timeoutSeconds) changes.push(t('ruleEditor.overrideTimeout', { seconds: item.timeoutSeconds }))
+
+  for (const [key, value] of Object.entries(item.parameters)) {
+    changes.push(`${key} = ${String(value)}`)
+  }
+
+  return changes
 }

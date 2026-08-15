@@ -8,7 +8,7 @@ modifier côté serveur (principe *zero-touch*), et produit un health score et d
 diagnostics à partir d'un moteur de règles YAML rechargeable à chaud et **éditable depuis
 l'interface**.
 
-La supervision ne doit pas peser sur ce qu'elle observe : une règle qui dépasse son délai,
+La supervision ne doit pas peser sur ce qu'elle observe : une règle qui dépasse son timeout,
 échoue ou s'exécute trop lentement est signalée, puis écartée de l'instance concernée le temps
 que la situation se rétablisse — jamais en silence.
 
@@ -177,12 +177,12 @@ la hiérarchie.
 | `Scheduler__Intervals__Configuration` | Périodicité configuration et stockage | `01:00:00` |
 | `Scheduler__MaxConcurrentInstances` | Instances analysées en parallèle | `4` |
 | `Scheduler__PerInstanceTimeout` | Délai maximal par instance | `00:02:00` |
-| `Scheduler__QueryTimeout` | `statement_timeout` appliqué aux règles sans délai propre | `00:00:30` |
+| `Scheduler__QueryTimeout` | `statement_timeout` appliqué aux règles sans timeout propre | `00:00:30` |
 | `Scheduler__RuleGuard__Enabled` | Garde-fou de coût des règles | `true` |
 | `Scheduler__RuleGuard__WarningThreshold` | Incidents consécutifs avant avertissement | `3` |
 | `Scheduler__RuleGuard__QuarantineThreshold` | Incidents consécutifs avant mise en quarantaine | `5` |
 | `Scheduler__RuleGuard__QuarantineDuration` | Durée d'une quarantaine avant réessai automatique | `06:00:00` |
-| `Scheduler__RuleGuard__SlowRunRatio` | Part du délai au-delà de laquelle un succès compte comme incident | `0.8` |
+| `Scheduler__RuleGuard__SlowRunRatio` | Part du timeout au-delà de laquelle un succès compte comme incident | `0.8` |
 | `Notifications__MaxRetries` | Tentatives d'envoi d'un webhook | `3` |
 
 Activer `Auth__RequireHttps` dès que l'Advisor est exposé derrière un reverse proxy en HTTPS.

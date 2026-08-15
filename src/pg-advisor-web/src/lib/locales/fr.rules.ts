@@ -144,13 +144,13 @@ export const frRules: Record<string, string> = {
   'ruleHealth.state.healthy': 'saine',
   'ruleHealth.state.degraded': 'dégradée',
   'ruleHealth.state.quarantined': 'en quarantaine',
-  'ruleHealth.kind.timeout': 'dépassement de délai',
+  'ruleHealth.kind.timeout': 'timeout',
   'ruleHealth.kind.error': 'erreur SQL',
   'ruleHealth.kind.slow': 'exécution trop lente',
   // La nature de l'incident ne conduit pas à la même conclusion : le délai dépassé et la lenteur
   // disent que l'instance souffre, l'erreur SQL que la règle est fautive.
   'ruleHealth.kindHint.timeout':
-    'L’instance n’a pas rendu la main dans le délai accordé : c’est elle qui souffre, pas la règle.',
+    'L’instance n’a pas rendu la main dans le timeout accordé : c’est elle qui souffre, pas la règle.',
   'ruleHealth.kindHint.error':
     'La requête de la règle a échoué : c’est la règle qu’il faut corriger, pas l’instance.',
   'ruleHealth.kindHint.slow':
@@ -245,7 +245,7 @@ export const frRules: Record<string, string> = {
   'ruleEditor.strikes.one': '{count} sur {max}',
   'ruleEditor.strikes.other': '{count} sur {max}',
   'ruleEditor.lastIncidentLabel': 'Dernier incident',
-  'ruleEditor.durationLabel': 'Durée / délai',
+  'ruleEditor.durationLabel': 'Durée / timeout',
   'ruleEditor.durationTitle': '{observed} observées pour {timeout} accordées',
   'ruleEditor.quarantineUntilLabel': 'Écartée jusqu’au',
   'ruleEditor.reactivate': 'Réactiver',
@@ -278,21 +278,29 @@ export const frRules: Record<string, string> = {
   'ruleEditor.scope': 'Portée',
   'ruleEditor.scopeHint': 'une instance, ou toutes',
   'ruleEditor.allInstances': 'Toutes les instances',
+  // Convention de lecture du tableau : sans elle, une valeur barrée se lit comme interdite.
+  'ruleEditor.overrideLegend':
+    'À gauche, la valeur qui s’applique aujourd’hui ; à droite, ce qui la remplace. Une valeur barrée est une valeur remplacée.',
+  'ruleEditor.fromRule': 'règle',
+  'ruleEditor.fromGlobal': 'globale',
+  'ruleEditor.noOverrideOption': 'Sans surcharge',
+  'ruleEditor.reset': 'Rétablir',
+  'ruleEditor.resetTitle': 'Rétablir « {label} » à la valeur héritée',
   'ruleEditor.activation': 'Activation',
-  'ruleEditor.ruleValue': 'Valeur de la règle ({value})',
   'ruleEditor.enabledOption': 'Activée',
   'ruleEditor.disabledOption': 'Désactivée',
   'ruleEditor.interval': 'Périodicité (s)',
   'ruleEditor.intervalHint': 'vide = celle du groupe',
-  'ruleEditor.timeout': 'Délai maximal (s)',
-  'ruleEditor.timeoutHint': 'défaut {value} s, de 1 à 300',
+  'ruleEditor.intervalFromGroup': 'groupe {group}',
+  // « Timeout » et non « délai maximal » : c'est le mot du champ YAML, du garde-fou et des
+  // journaux. Le traduire obligerait à retraduire mentalement à chaque aller-retour.
+  'ruleEditor.timeout': 'Timeout (s)',
+  'ruleEditor.timeoutHint': 'de 1 à 300',
   'ruleEditor.thresholds': 'Seuils',
-  'ruleEditor.thresholdDefault': 'défaut : {value}',
   'ruleEditor.saveOverride': 'Enregistrer la surcharge',
   'ruleEditor.deleteOverride': 'Supprimer cette surcharge',
   'ruleEditor.savedOverrides': 'Surcharges enregistrées',
   'ruleEditor.editOverride': 'Modifier la surcharge de « {scope} »',
-  'ruleEditor.overrideSeverity': 'sévérité {severity}',
   'ruleEditor.overrideInterval': 'toutes les {seconds} s',
-  'ruleEditor.overrideTimeout': 'délai {seconds} s',
+  'ruleEditor.overrideTimeout': 'timeout {seconds} s',
 }

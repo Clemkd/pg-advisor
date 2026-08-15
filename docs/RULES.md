@@ -27,7 +27,7 @@ rétablit la règle d'origine.
 | `severity` | oui | `info`, `warning` ou `critical`. Surchargeable par instance. |
 | `group` | non | Groupe de périodicité : `health`, `statistics`, `recommendations` (défaut) ou `configuration`. |
 | `intervalSeconds` | non | Périodicité propre, de 5 à 86400. Sert de limitation à l'intérieur du groupe. |
-| `timeoutSeconds` | non | Délai maximal d'exécution, de 1 à 300. Défaut : `Scheduler:QueryTimeout`. Surchargeable par instance. |
+| `timeoutSeconds` | non | Timeout d'exécution, de 1 à 300. Défaut : `Scheduler:QueryTimeout`. Surchargeable par instance. |
 | `enabled` | non | `false` livre la règle désactivée par défaut. |
 | `requires` | non | Prérequis de capacités ; la règle est ignorée si non satisfaits. |
 | `parameters` | non | Seuils scalaires, surchargeables depuis l'IHM. |
@@ -93,13 +93,13 @@ si bien qu'une règle ne peut ni écrire ni monopoliser l'instance supervisée.
 timeoutSeconds: 120
 ```
 
-Délai maximal accordé à cette règle, de 1 à 300 secondes. À défaut, le délai global
+Timeout accordé à cette règle, de 1 à 300 secondes. À défaut, le timeout global
 `Scheduler:QueryTimeout` s'applique. Il est posé en `statement_timeout` sur la session qui
 exécute la règle, puis rendu à sa valeur globale : c'est un réglage de session, jamais une
 écriture sur l'instance supervisée.
 
 Une règle légitimement coûteuse sur une grosse base — un calcul de bloat, un parcours d'index —
-se voit ainsi accorder son propre budget sans allonger celui de toutes les autres. Le délai est
+se voit ainsi accorder son propre budget sans allonger celui de toutes les autres. Le timeout est
 surchargeable par instance comme les seuils : la même règle peut disposer de 180 s sur une base
 de 2 To et de 30 s ailleurs.
 
@@ -209,7 +209,7 @@ instance remplace celui du groupe `health`.
 
 ## Garde-fou de coût
 
-Un délai borne chaque exécution, mais rien n'empêche une règle de le consommer indéfiniment. Le
+Un timeout borne chaque exécution, mais rien n'empêche une règle de le consommer indéfiniment. Le
 garde-fou tient donc, **par couple (règle, instance)**, le compte des exécutions qui pèsent sur
 la base observée. Cet état est persisté en SQLite : il survit à un redémarrage de l'Advisor,
 sans quoi le compteur repartirait de zéro à chaque relance et le garde-fou ne se déclencherait
@@ -221,9 +221,9 @@ Compte comme incident :
 | --- | --- | --- |
 | `timeout` | Le `statement_timeout` a coupé la requête | L'instance souffre, ou la règle a besoin de plus de temps **ici** |
 | `error` | Erreur SQL ordinaire (vue absente, colonne inconnue, droits) | La règle est fautive |
-| `slow` | Exécution réussie mais au-delà de `SlowRunRatio` du délai | La règle coûte déjà, et n'échouerait jamais d'elle-même |
+| `slow` | Exécution réussie mais au-delà de `SlowRunRatio` du timeout | La règle coûte déjà, et n'échouerait jamais d'elle-même |
 
-Une règle qui réussit en 25 s sous un délai de 30 est déjà un problème : elle n'échoue jamais,
+Une règle qui réussit en 25 s sous un timeout de 30 est déjà un problème : elle n'échoue jamais,
 et rien ne la signalerait sans ce troisième cas.
 
 Deux seuils, deux réactions :
@@ -280,10 +280,10 @@ et affiche les règles en erreur. L'éditeur d'une règle permet de :
   invalide) ;
 - exécuter la règle sur une instance choisie sans rien persister, et voir le résultat SQL brut
   comme les findings qui en découleraient ;
-- consulter son applicabilité instance par instance, avec le motif du refus, le délai en vigueur
+- consulter son applicabilité instance par instance, avec le motif du refus, le timeout en vigueur
   et l'état du garde-fou ;
 - créer, dupliquer ou supprimer une règle utilisateur ;
-- poser une surcharge globale ou par instance : activation, sévérité, périodicité, délai, seuils ;
+- poser une surcharge globale ou par instance : activation, sévérité, périodicité, timeout, seuils ;
 - lever immédiatement une quarantaine.
 
 Toute écriture depuis l'IHM produit un fichier YAML dans `<DataDirectory>/rules` et déclenche
@@ -293,7 +293,7 @@ de vérité.
 ## Surcharges
 
 `RuleOverrides` (SQLite) applique un delta à une règle, globalement (`connectionId` nul) ou
-pour une instance : activation, sévérité, périodicité, **délai maximal** et seuils. L'ordre de
+pour une instance : activation, sévérité, périodicité, **timeout** et seuils. L'ordre de
 précédence est : valeur du fichier, puis surcharge globale, puis surcharge d'instance. Une
 surcharge de seuils ne remplace que les seuils cités ; les autres gardent la valeur du fichier.
 
@@ -302,7 +302,7 @@ surcharge de seuils ne remplace que les seuils cités ; les autres gardent la va
 | Route | Rôle |
 | --- | --- |
 | `GET /api/rules` | Liste, filtrable par catégorie, origine et recherche |
-| `GET /api/rules/{id}` | Règle, YAML et applicabilité par instance, avec délai et état du garde-fou |
+| `GET /api/rules/{id}` | Règle, YAML et applicabilité par instance, avec timeout et état du garde-fou |
 | `GET /api/rules/health` | État du garde-fou pour toutes les règles suivies, filtrable par instance et par état |
 | `GET /api/rules/schema` | Catégories, groupes, filtres, fonctions, handlers, gabarit |
 | `GET /api/rules/errors` | Règles refusées au chargement |
