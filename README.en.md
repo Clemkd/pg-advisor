@@ -4,8 +4,14 @@
 
 A self-hosted PostgreSQL advisor, shipped as a **single Docker container**. One instance supervises
 **several separate PostgreSQL databases**, read-only, without installing or changing anything on the
-server side (*zero-touch*), and produces a health score and recommendations from a YAML rule engine
+server side (*zero-touch*), and produces a health score and diagnostics from a YAML rule engine
 that reloads without a restart and is **editable from the interface**.
+
+Supervision must not weigh on what it observes: a rule that overruns its deadline, fails, or runs
+too slowly is flagged, then set aside on that instance until the situation recovers — never
+silently.
+
+→ [Cost guard](docs/RULES.en.md#cost-guard)
 
 The tool is useful with no PostgreSQL extension at all, and grows more precise as
 `pg_stat_statements`, `pgstattuple` or HypoPG become available. TimescaleDB, where present,
@@ -13,9 +19,9 @@ additionally enables the rules specific to it.
 
 ## Overview
 
-| Dashboard | Recommendations |
+| Dashboard | Diagnostics |
 | --- | --- |
-| [![Dashboard](docs/images/01-tableau-de-bord.png)](docs/OVERVIEW.md#overview) | [![Recommendations](docs/images/02-recommandations.png)](docs/OVERVIEW.md#recommendations) |
+| [![Dashboard](docs/images/01-tableau-de-bord.png)](docs/OVERVIEW.md#overview) | [![Diagnostics](docs/images/02-recommandations.png)](docs/OVERVIEW.md#diagnostics) |
 
 A query plan reads as an activity diagram: rows flow from the leaves up to the root, the thickness of
 a link gives the rows returned, and every counter is coloured according to its weight. Each step
@@ -46,7 +52,7 @@ PGADVISOR_Auth__BootstrapPassword=... docker compose up -d
 ```
 
 Then: add an instance → the Advisor detects its capabilities → the applicable rules run → health
-score and recommendations, with a webhook notification for each new diagnostic.
+score and diagnostics, with a webhook notification for each new diagnostic.
 
 ## The PostgreSQL role to create
 
@@ -72,7 +78,7 @@ pg-advisor
 │   ├── Collectors/          read-only collection of activity and statistics
 │   ├── Postgres/            Npgsql connections, capability detection
 │   ├── Rules/               YAML model, validation, expressions, templates, hot reload
-│   ├── Scheduler/           BackgroundService, per-instance analysis
+│   ├── Scheduler/           BackgroundService, per-instance analysis, cost guard
 │   ├── Findings/            finding lifecycle, health score
 │   ├── Notifications/       webhook queue and dispatcher
 │   └── Sse/                 real-time event bus
@@ -140,7 +146,7 @@ docker compose -f docker-compose.test.yml up -d
 
 The script below builds the image, starts the container, loads the test instance with a dataset that
 trips rules, registers both instances, waits for the first analysis, then prints detected
-capabilities, health score, recommendations, notifications and the result of every rule executed as
+capabilities, health score, diagnostics, notifications and the result of every rule executed as
 a dry run:
 
 ```bash

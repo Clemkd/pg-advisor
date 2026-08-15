@@ -9,23 +9,25 @@ from a real database, not from a mockup.
 
 ## Overview
 
-Overall health, recommendations broken down by severity, score per category, and the state of each
+Overall health, diagnostics broken down by severity, score per category, and the state of each
 instance. Everything refreshes without a reload, over an SSE stream.
 
 ![Overview](images/01-tableau-de-bord.png)
 
-## Recommendations
+## Diagnostics
 
 Every diagnostic carries its severity, its subject, the rule that produced it, and when it was
-detected. A row can be resolved, ignored, or re-checked — re-checking replays the rule against the
-instance and resolves the diagnostic if the problem is gone.
+detected. A diagnostic is not a box to tick: it describes a fact observed on the instance, and
+resolving it belongs to the engine. A row can be ignored or reconsidered, and re-checked on
+demand — re-checking replays the rule against the instance and closes the diagnostic if the
+problem is gone.
 
-![Recommendations](images/02-recommandations.png)
+![Diagnostics](images/02-recommandations.png)
 
 The detail view gives the measurements that triggered the rule, the estimated impact, the
 confidence level and, when one exists, the corrective SQL statement.
 
-![Recommendation detail](images/03-recommandation-detail.png)
+![Diagnostic detail](images/03-recommandation-detail.png)
 
 ## Queries
 

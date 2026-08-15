@@ -34,7 +34,7 @@ pg-advisor
 │ │ REST API      │ │ React SPA               │ │
 │ │ Authentication│ │ Dashboard               │ │
 │ │ Configuration │ │ PostgreSQL analysis     │ │
-│ └───────────────┘ │ Recommendations         │ │
+│ └───────────────┘ │ Diagnostics             │ │
 │                   │ Rules                   │ │
 │ ┌───────────────┐ └─────────────────────────┘ │
 │ │ Collectors    │                             │
@@ -84,7 +84,7 @@ The system automatically detects the available extensions and capabilities, per 
 ```
 
 Features that depend on an extension are only enabled when it is available. If an important
-extension is missing, the Advisor raises a recommendation to install it, without ever attempting the
+extension is missing, the Advisor raises a diagnostic asking for it, without ever attempting the
 installation itself:
 
 > `pg_stat_statements` is not available. Installing it would provide query history and a ranking of
@@ -196,9 +196,13 @@ Configuration  89
 Connections    96
 ```
 
-Every recommendation shows: severity; title; description; evidence/metrics; estimated impact;
-confidence; the rule that raised the diagnostic; a corrective SQL statement when there is one;
+Every diagnostic shows: severity; title; description; evidence/metrics; estimated impact;
+confidence; the rule that raised it; a corrective SQL statement when there is one;
 documentation; detection date; and status `active` / `resolved` / `ignored`.
+
+A diagnostic is not a box to tick: it describes a fact observed on the instance. Only the engine
+moves it to `resolved`, once the rule stops reporting it. An operator ignores or reconsiders it —
+`resolved` is refused by the API if a UI sends it.
 
 ## Managing PostgreSQL instances
 
@@ -230,7 +234,13 @@ webhooks:
     events:
       - new_finding
       - finding_resolved
+      - rule_degraded
+      - rule_quarantined
 ```
+
+`rule_degraded` and `rule_quarantined` come from the cost guard: a rule piling up incidents on an
+instance, then a rule set aside from it. Without them, a database stops being analysed on one
+point and nobody is told.
 
 Deduplication is mandatory:
 
@@ -254,6 +264,8 @@ Keep a notification history, and handle errors with reasonable retries.
 - robust password hashing
 - `[Authorize]` on the API
 - logout
+- a **My profile** view: every account sees its username and role there, and changes its own
+  password — the old one is required, and managing other accounts stays with administrators
 - possibly Admin / Viewer roles
 
 No IdentityServer/OIDC for the MVP.
@@ -270,6 +282,7 @@ FindingHistory
 NotificationConfigurations
 NotificationHistory
 RuleOverrides
+RuleHealth
 QueryPlanSnapshots
 Settings
 ```
@@ -305,10 +318,16 @@ Every 1 h   → configuration / storage analysis
 
 The frequencies are configurable. A heavy analysis on one instance must never block the others.
 
+A cost guard protects the instance being observed: every rule has a time limit, its own or
+inherited from `Scheduler:QueryTimeout`, and incidents are counted per (rule, instance) pair. At
+the warning threshold the rule is flagged; at the quarantine threshold it is set aside from that
+instance for a few hours, then retried. The detail is in [the rule format](RULES.en.md#cost-guard).
+
 ## SSE
 
 Server-Sent Events to push to the frontend: new finding; resolved finding; health score change;
-collection state; analysis progress. No WebSocket for the MVP.
+collection state; analysis progress; a rule flagged or set aside by the cost guard, and its
+recovery. No WebSocket for the MVP.
 
 ## Docker
 
@@ -382,7 +401,7 @@ Automatic analysis
  ↓
 Health Score
  ↓
-Recommendations
+Diagnostics
  ↓
 Webhook notifications
 ```

@@ -9,23 +9,25 @@ base réelle, pas d'une maquette.
 
 ## Vue d'ensemble
 
-Santé globale, répartition des recommandations par sévérité, score par catégorie et état de
+Santé globale, répartition des diagnostics par sévérité, score par catégorie et état de
 chaque instance. Le tout se met à jour sans rechargement, par flux SSE.
 
 ![Vue d'ensemble](images/01-tableau-de-bord.png)
 
-## Recommandations
+## Diagnostics
 
 Chaque diagnostic porte sa sévérité, son objet, la règle qui l'a produit et sa date de
-détection. Une ligne se résout, s'ignore ou se vérifie — la vérification rejoue la règle sur
-l'instance et résout le diagnostic si le problème a disparu.
+détection. Un diagnostic ne se coche pas : il décrit un fait constaté sur l'instance, et sa
+résolution appartient au moteur. Une ligne s'ignore ou se reconsidère, et se vérifie à la
+demande — la vérification rejoue la règle sur l'instance et clôt le diagnostic si le problème
+a disparu.
 
-![Recommandations](images/02-recommandations.png)
+![Diagnostics](images/02-recommandations.png)
 
 Le détail donne les mesures qui ont déclenché la règle, l'impact estimé, la confiance et, quand
 elle existe, la commande SQL corrective.
 
-![Détail d'une recommandation](images/03-recommandation-detail.png)
+![Détail d'un diagnostic](images/03-recommandation-detail.png)
 
 ## Requêtes
 

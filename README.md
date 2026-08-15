@@ -5,8 +5,14 @@
 Advisor PostgreSQL self-hosted, livré comme un **unique conteneur Docker**. Une seule instance
 supervise **plusieurs bases PostgreSQL distinctes**, en lecture seule, sans rien installer ni
 modifier côté serveur (principe *zero-touch*), et produit un health score et des
-recommandations à partir d'un moteur de règles YAML rechargeable à chaud et **éditable depuis
+diagnostics à partir d'un moteur de règles YAML rechargeable à chaud et **éditable depuis
 l'interface**.
+
+La supervision ne doit pas peser sur ce qu'elle observe : une règle qui dépasse son délai,
+échoue ou s'exécute trop lentement est signalée, puis écartée de l'instance concernée le temps
+que la situation se rétablisse — jamais en silence.
+
+→ [Garde-fou de coût](docs/RULES.md#garde-fou-de-coût)
 
 L'outil est utile sans aucune extension PostgreSQL et devient plus précis à mesure que
 `pg_stat_statements`, `pgstattuple` ou HypoPG sont disponibles. TimescaleDB, lorsqu'elle est
@@ -14,9 +20,9 @@ présente, active en plus les règles qui lui sont propres.
 
 ## Aperçu
 
-| Vue d'ensemble | Recommandations |
+| Vue d'ensemble | Diagnostics |
 | --- | --- |
-| [![Vue d'ensemble](docs/images/01-tableau-de-bord.png)](docs/APERCU.md#vue-densemble) | [![Recommandations](docs/images/02-recommandations.png)](docs/APERCU.md#recommandations) |
+| [![Vue d'ensemble](docs/images/01-tableau-de-bord.png)](docs/APERCU.md#vue-densemble) | [![Diagnostics](docs/images/02-recommandations.png)](docs/APERCU.md#diagnostics) |
 
 Le plan d'une requête se lit comme un diagramme d'activité : les données remontent des feuilles
 vers la racine, l'épaisseur d'un lien donne les lignes remontées, et chaque compteur est coloré
@@ -47,7 +53,7 @@ PGADVISOR_Auth__BootstrapPassword=... docker compose up -d
 ```
 
 Puis : ajouter une instance → l'Advisor détecte ses capacités → les règles applicables
-s'exécutent → health score et recommandations, avec notification webhook des nouveaux
+s'exécutent → health score et diagnostics, avec notification webhook des nouveaux
 diagnostics.
 
 ## Rôle PostgreSQL à créer
@@ -74,7 +80,7 @@ pg-advisor
 │   ├── Collectors/          collecte read-only de l'activité et des statistiques
 │   ├── Postgres/            connexions Npgsql, détection des capacités
 │   ├── Rules/               modèle YAML, validation, expressions, gabarits, hot reload
-│   ├── Scheduler/           BackgroundService, analyse par instance
+│   ├── Scheduler/           BackgroundService, analyse par instance, garde-fou de coût
 │   ├── Findings/            cycle de vie des findings, health score
 │   ├── Notifications/       file d'attente et dispatcher webhook
 │   └── Sse/                 bus d'événements temps réel
@@ -143,7 +149,7 @@ docker compose -f docker-compose.test.yml up -d
 
 Le script suivant construit l'image, démarre le conteneur, alimente l'instance de test avec un
 jeu de données qui déclenche des règles, enregistre les deux instances, attend la première
-analyse, puis affiche capacités détectées, health score, recommandations, notifications et le
+analyse, puis affiche capacités détectées, health score, diagnostics, notifications et le
 résultat de chaque règle exécutée à blanc :
 
 ```bash

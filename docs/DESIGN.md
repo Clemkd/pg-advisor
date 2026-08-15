@@ -13,16 +13,16 @@ document, liste ce qui doit être repris vue par vue.
 ## 1. L'usage
 
 Un Advisor PostgreSQL en lecture seule qui supervise N instances, calcule un score de santé et
-produit des recommandations depuis un moteur de règles YAML. Trois traits commandent tout le
+produit des diagnostics depuis un moteur de règles YAML. Trois traits commandent tout le
 reste.
 
 **La fréquence d'usage est très inégale.** Elle décide de la densité, et elle seule.
 
 | Famille | Vues | Usage réel |
 |---|---|---|
-| **Balayage** | Vue d'ensemble, Recommandations | Quotidien, en diagonale, parfois dans l'urgence |
+| **Balayage** | Vue d'ensemble, Diagnostics | Quotidien, en diagonale, parfois dans l'urgence |
 | **Étude** | Requêtes, plan d'exécution | Session longue et concentrée sur un seul objet |
-| **Installation** | Instances, Règles, Notifications, Comptes | Rare : à l'installation, puis à l'occasion |
+| **Installation** | Instances, Règles, Notifications, Comptes, Mon profil | Rare : à l'installation, puis à l'occasion |
 | **Établi** | Éditeur de règle | Écrire du YAML, l'exécuter à blanc, lire le résultat |
 
 **L'outil reste ouvert et se met à jour seul**, par flux SSE, souvent sur un second écran. Ce qui
@@ -77,7 +77,7 @@ le fond, `-strong` pour l'encre posée dessus. Le jeton nu sert à remplir une p
 jauge ; employé comme encre sur son propre fond clair, il tombait sous 3,5:1. Le couple
 `-subtle` / `-strong` tient 6,3:1 au minimum en thème clair et 8:1 en sombre.
 
-`info` est un bleu, distinct du violet de marque : sans quoi une recommandation d'information se
+`info` est un bleu, distinct du violet de marque : sans quoi un diagnostic d'information se
 lit comme un bouton.
 
 **Sévérité** — `severity-critical` → `danger`, `severity-warning` → `warning`,
@@ -172,7 +172,7 @@ l'animation.
 
 Trois densités, une par famille de vue. Elles se choisissent, elles ne se dosent pas.
 
-### Balayage — Vue d'ensemble, Recommandations
+### Balayage — Vue d'ensemble, Diagnostics
 
 Lu tous les jours, en diagonale, parfois pendant un incident. La question posée est *« qu'est-ce
 qui a changé, et qu'est-ce qui est grave ? »* — pas *« quelle est la valeur exacte de ce
@@ -180,7 +180,7 @@ paramètre ? »*.
 
 - Ligne de liste : **hauteur minimale 40 px**, gouttière 16 px, deux niveaux de texte au plus —
   un titre en `text-body`, un accompagnement en `text-meta`. Une troisième ligne par élément coûte
-  un écran entier sur trente recommandations.
+  un écran entier sur trente diagnostics.
 - Barre de filtres en `Toolbar` : contrôles `sm`, sur une seule ligne, jamais repliée en bloc.
 - **Un point d'entrée par écran, et un seul** : le chiffre qui commande la lecture — score global,
   nombre de critiques — en `text-display`, teinté par sa valeur. Tout le reste lui est
@@ -201,7 +201,7 @@ Session longue sur un seul objet. La surface appartient à l'objet.
   filtres au défilement oblige à remonter à chaque changement de critère.
 - Le monospace est de rigueur pour tout SQL, tout identifiant d'objet et toute mesure de plan.
 
-### Installation — Instances, Règles, Notifications, Comptes
+### Installation — Instances, Règles, Notifications, Comptes, Mon profil
 
 Vues rares. Un utilisateur qui y revient après six mois ne se souvient de rien : elles doivent être
 explicites, pas compactes.
@@ -369,7 +369,7 @@ jour ? », et un chiffre immobile ne répond pas.
 
 ### 6.3 Annoncer
 
-`LiveRegion` (`aria-live="polite"`) annonce ce qui vient d'arriver — « 2 nouvelles recommandations
+`LiveRegion` (`aria-live="polite"`) annonce ce qui vient d'arriver — « 2 nouveaux diagnostics
 critiques ». L'état constaté ne comportait **aucune** région live : une interface qui se réécrit
 seule est muette pour un lecteur d'écran.
 
@@ -397,8 +397,21 @@ commande à exécuter ailleurs. Deux conséquences fermes :
   « Copié ». L'état constaté n'avait **aucune** copie vers le presse-papiers dans toute
   l'application, alors que les clés de traduction existaient — un diagnostic qu'on doit resaisir à
   la main n'est pas exploitable.
-- Les boutons ne prennent pas le centre. Le diagnostic occupe la colonne de lecture ; changer le
-  statut d'une recommandation est un geste de rangement, pas l'objet de la page.
+- Les boutons ne prennent pas le centre. Le diagnostic occupe la colonne de lecture ; changer son
+  statut est un geste de rangement, pas l'objet de la page.
+
+**Un score qui remonte n'est pas forcément une bonne nouvelle.** Le garde-fou de coût écarte d'une
+instance les règles qui pèsent trop sur elle. La catégorie qu'une règle notait cesse alors d'être
+notée, et le score monte sans qu'aucune base n'aille mieux. C'est le seul cas où une amélioration
+affichée doit être expliquée avant d'être crue :
+
+- une quarantaine ne fait jamais disparaître un diagnostic en silence — la vue d'ensemble et le
+  détail d'instance portent un bandeau `warning` qui nomme le nombre de règles écartées ;
+- le badge vert « aucun diagnostic » s'efface dès qu'une règle a cessé de regarder : il dirait
+  autrement le calme là où il n'y a plus d'observation ;
+- la nature du dernier incident se dit, car elle ne mène pas à la même conclusion — un dépassement
+  de délai ou une exécution lente disent que l'instance souffre, une erreur SQL que la règle est
+  fautive.
 
 ---
 
@@ -408,13 +421,15 @@ commande à exécuter ailleurs. Deux conséquences fermes :
 trois vues écrivaient la même modale à la main. Un pas, jamais deux ; le titre nomme l'objet, le
 corps dit la conséquence, le bouton porte le verbe (« Supprimer l'instance »).
 
-**Réversible = pas de confirmation.** Résoudre ou ignorer une recommandation se défait : la
-confirmer serait un péage. Le retour se fait par un `Notice` de succès porteur de l'action inverse.
+**Réversible = pas de confirmation.** Ignorer un diagnostic, ou le reconsidérer, se défait : le
+confirmer serait un péage. Le retour se fait par un `Notice` de succès porteur de l'action
+inverse. Le résoudre n'est pas offert : un diagnostic décrit un fait constaté sur l'instance, et
+seul le moteur le clôt lorsque la règle cesse de le remonter.
 
 **Actions destructrices.** `variant="danger"`, à droite, jamais en position de défaut ; le focus
 initial va sur l'annulation, `Échap` annule.
 
-**Valeurs par défaut.** Elles répondent à la question quotidienne : Recommandations ouvre sur les
+**Valeurs par défaut.** Elles répondent à la question quotidienne : Diagnostics ouvre sur les
 actives, les plus graves d'abord. Les filtres vivent dans l'URL — un état d'investigation doit se
 partager et survivre à un rechargement — et ne se réinitialisent jamais tout seuls.
 
@@ -521,7 +536,7 @@ Les primitives restent compatibles : rien ne casse à la compilation, et l'adapt
   est faux.
 - Lignes d'instance à `px-5` : passer à `px-4`.
 
-**Recommandations** (`FindingsPage.tsx`) — famille *balayage*.
+**Diagnostics** (`FindingsPage.tsx`) — famille *balayage*.
 - `loading ? <LoadingBlock/>` remplace la liste à chaque changement de filtre : appliquer le cas 2
   du § 5 (contenu conservé, `aria-busy`, `RefreshBar`).
 - Les onglets de statut sont un `<nav>` de `<button aria-current="page">` : `aria-current="page"`

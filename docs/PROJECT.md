@@ -34,7 +34,7 @@ pg-advisor
 │ │ REST API      │ │ React SPA               │ │
 │ │ Authentication│ │ Dashboard               │ │
 │ │ Configuration │ │ PostgreSQL analysis     │ │
-│ └───────────────┘ │ Recommendations         │ │
+│ └───────────────┘ │ Diagnostics             │ │
 │                   │ Rules                   │ │
 │ ┌───────────────┐ └─────────────────────────┘ │
 │ │ Collectors    │                             │
@@ -84,8 +84,8 @@ Le système détecte automatiquement les extensions et capacités disponibles, p
 ```
 
 Les fonctionnalités dépendant d'une extension ne sont activées que si celle-ci est
-disponible. Si une extension importante est absente, l'Advisor crée une recommandation
-d'installation, sans jamais tenter de l'installer :
+disponible. Si une extension importante est absente, l'Advisor crée un diagnostic qui invite
+à l'installer, sans jamais tenter de le faire :
 
 > `pg_stat_statements` n'est pas disponible. Son installation permettrait d'obtenir
 > l'historique et le classement des requêtes par temps d'exécution.
@@ -200,9 +200,13 @@ Configuration  89
 Connections    96
 ```
 
-Chaque recommandation affiche : sévérité ; titre ; description ; preuves/métriques ;
-impact estimé ; confiance ; règle ayant déclenché le diagnostic ; éventuelle commande SQL
+Chaque diagnostic affiche : sévérité ; titre ; description ; preuves/métriques ;
+impact estimé ; confiance ; règle l'ayant déclenché ; éventuelle commande SQL
 corrective ; documentation ; date de détection ; statut `active` / `resolved` / `ignored`.
+
+Un diagnostic ne se coche pas : il décrit un fait constaté sur l'instance. Seul le moteur le
+passe à `resolved`, lorsque la règle cesse de le remonter. Un opérateur l'ignore ou le
+reconsidère — `resolved` est refusé par l'API si elle le reçoit d'une IHM.
 
 ## Gestion des instances PostgreSQL
 
@@ -234,7 +238,13 @@ webhooks:
     events:
       - new_finding
       - finding_resolved
+      - rule_degraded
+      - rule_quarantined
 ```
+
+`rule_degraded` et `rule_quarantined` viennent du garde-fou de coût : une règle qui accumule
+les incidents sur une instance, puis une règle qui en est écartée. Sans eux, une base cesse
+d'être analysée sur un point sans que personne en soit averti.
 
 Déduplication obligatoire :
 
@@ -258,6 +268,8 @@ Conserver l'historique des notifications et gérer les erreurs/retry raisonnable
 - hash de mot de passe robuste
 - `[Authorize]` sur l'API
 - logout
+- vue « Mon profil » : tout compte y voit son identifiant et son rôle, et y change son mot de
+  passe — l'ancien est exigé, et la gestion des autres comptes reste réservée aux administrateurs
 - éventuellement rôles Admin / Viewer
 
 Pas d'IdentityServer/OIDC pour le MVP.
@@ -274,6 +286,7 @@ FindingHistory
 NotificationConfigurations
 NotificationHistory
 RuleOverrides
+RuleHealth
 QueryPlanSnapshots
 Settings
 ```
@@ -312,11 +325,17 @@ Toutes les 1 h   → configuration / storage analysis
 Les fréquences sont configurables. Une analyse lourde sur une instance ne doit jamais
 bloquer les autres.
 
+Un garde-fou de coût protège l'instance observée : chaque règle a un délai maximal, propre ou
+hérité de `Scheduler:QueryTimeout`, et les incidents se comptent par couple (règle, instance).
+Au seuil d'avertissement la règle est signalée, au seuil de quarantaine elle est écartée de
+cette instance pour quelques heures, puis réessayée. Le détail est dans
+[le format des règles](RULES.md#garde-fou-de-coût).
+
 ## SSE
 
 Server-Sent Events pour pousser au frontend : nouveau finding ; finding résolu ; changement
-du health score ; état de collecte ; progression d'une analyse. Pas de WebSocket pour le
-MVP.
+du health score ; état de collecte ; progression d'une analyse ; règle signalée ou écartée
+par le garde-fou, et son rétablissement. Pas de WebSocket pour le MVP.
 
 ## Docker
 
@@ -392,7 +411,7 @@ Analyse automatique
  ↓
 Health Score
  ↓
-Recommandations
+Diagnostics
  ↓
 Notifications webhook
 ```
