@@ -43,7 +43,7 @@ public sealed class RedundantIndexHandler : IRuleHandler
     {
         var indexes = new List<IndexInfo>();
 
-        await using var command = new NpgsqlCommand(Sql, context.Connection);
+        await using var command = context.CreateCommand(Sql);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {

@@ -54,27 +54,38 @@ export function ScoreRing({
         <span
           className={cn(
             'font-semibold tabular-nums',
-            size < 96 ? 'text-lg' : 'text-2xl',
+            size < 96 ? 'text-title' : 'text-metric',
             colors.text,
           )}
         >
           {score === null ? '—' : score}
         </span>
         {size >= 96 && (
-          <span className="text-ink-faint mt-1 text-[10px] tracking-wide uppercase">{t('score.outOf')}</span>
+          <span className="text-ink-muted mt-1 text-micro tracking-wide uppercase">{t('score.outOf')}</span>
         )}
       </div>
     </div>
   )
 }
 
-/** Barre horizontale d'un score par catégorie. L'étiquette rétrécit au lieu de pousser la barre. */
+/**
+ * Barre horizontale d'un score par catégorie.
+ *
+ * La colonne d'étiquettes est fixe : c'est la condition pour que les barres d'un même groupe
+ * s'alignent et se comparent d'un coup d'œil — sans cet alignement, la jauge ne dit plus rien. Sa
+ * largeur est exprimée en `ch`, donc elle suit la taille du texte, et l'anglais — couramment 30 %
+ * plus long — dispose de la moitié en plus au-delà de `sm`. Ce qui déborde encore est tronqué et
+ * reste lisible en entier au survol.
+ */
 export function ScoreBar({ label, score }: { label: string; score: number }) {
   const colors = SCORE_COLORS[scoreTone(score)]
 
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="text-ink-muted w-20 shrink-0 truncate text-xs sm:w-28" title={label}>
+    <div className="flex items-center gap-3">
+      <span
+        className="text-ink-muted text-meta w-[10ch] shrink-0 truncate sm:w-[15ch]"
+        title={label}
+      >
         {label}
       </span>
       <div className="bg-surface-sunken h-1.5 min-w-8 flex-1 overflow-hidden rounded-full">
@@ -83,7 +94,9 @@ export function ScoreBar({ label, score }: { label: string; score: number }) {
           style={{ width: `${Math.max(2, score)}%` }}
         />
       </div>
-      <span className={cn('w-7 shrink-0 text-right text-xs font-semibold tabular-nums', colors.text)}>
+      {/* Le chiffre double la barre : un score porté par la seule longueur d'un trait coloré
+          n'est pas lisible pour qui distingue mal les teintes. */}
+      <span className={cn('text-meta w-[3ch] shrink-0 text-right font-semibold tabular-nums', colors.text)}>
         {score}
       </span>
     </div>

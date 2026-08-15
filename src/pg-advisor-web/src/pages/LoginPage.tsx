@@ -3,10 +3,23 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { Database } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import { useAuth } from '@/app/AuthContext'
-import { Button, Card, Field, Input, LoadingBlock, Notice } from '@/components/ui/primitives'
+import {
+  Button,
+  Card,
+  CardBody,
+  Field,
+  Input,
+  LoadingBlock,
+  Notice,
+} from '@/components/ui/primitives'
 import { LOCALES, LOCALE_LABELS, useLocale, useT } from '@/lib/i18n'
-import { cn } from '@/lib/utils'
 
+/**
+ * Connexion — hors coquille applicative.
+ *
+ * Seule page atteinte sans session : elle porte donc elle-même le choix de la langue, que la
+ * barre supérieure offrira ensuite.
+ */
 export function LoginPage() {
   const { user, loading, login, refresh } = useAuth()
   const navigate = useNavigate()
@@ -75,77 +88,80 @@ export function LoginPage() {
           <span className="bg-brand text-brand-ink mb-3 grid size-11 place-items-center rounded-[var(--radius-card)]">
             <Database className="size-5" aria-hidden />
           </span>
-          <h1 className="text-ink text-lg font-semibold tracking-tight">{t('login.title')}</h1>
-          <p className="text-ink-muted mt-1 text-sm">{t('login.subtitle')}</p>
+          <h1 className="text-ink text-title font-semibold tracking-tight">{t('login.title')}</h1>
+          <p className="text-ink-muted mt-1 text-body">{t('login.subtitle')}</p>
         </div>
 
-        <Card className="p-5">
-          {user?.mustChangePassword ? (
-            <form onSubmit={submitPasswordChange} className="space-y-4">
-              <Notice tone="warning" title={t('login.mustChangeTitle')}>
-                {t('login.mustChangeBody')}
-              </Notice>
+        <Card>
+          <CardBody>
+            {user?.mustChangePassword ? (
+              <form onSubmit={submitPasswordChange} className="space-y-3">
+                <Notice tone="warning" title={t('login.mustChangeTitle')}>
+                  {t('login.mustChangeBody')}
+                </Notice>
 
-              <Field label={t('login.newPassword')} hint={t('login.passwordHint')}>
-                <Input
-                  type="password"
-                  value={newPassword}
-                  minLength={10}
-                  required
-                  autoComplete="new-password"
-                  onChange={(event) => setNewPassword(event.target.value)}
-                />
-              </Field>
+                <Field label={t('login.newPassword')} hint={t('login.passwordHint')}>
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    minLength={10}
+                    required
+                    autoComplete="new-password"
+                    onChange={(event) => setNewPassword(event.target.value)}
+                  />
+                </Field>
 
-              <Field label={t('login.confirmation')}>
-                <Input
-                  type="password"
-                  value={confirmation}
-                  minLength={10}
-                  required
-                  autoComplete="new-password"
-                  onChange={(event) => setConfirmation(event.target.value)}
-                />
-              </Field>
+                <Field label={t('login.confirmation')}>
+                  <Input
+                    type="password"
+                    value={confirmation}
+                    minLength={10}
+                    required
+                    autoComplete="new-password"
+                    onChange={(event) => setConfirmation(event.target.value)}
+                  />
+                </Field>
 
-              {error && <Notice tone="danger">{error}</Notice>}
+                {error && <Notice tone="danger">{error}</Notice>}
 
-              <Button type="submit" variant="primary" size="md" className="w-full" loading={busy}>
-                {t('login.saveAndContinue')}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={submitLogin} className="space-y-4">
-              <Field label={t('login.username')}>
-                <Input
-                  value={username}
-                  required
-                  autoFocus
-                  autoComplete="username"
-                  onChange={(event) => setUsername(event.target.value)}
-                />
-              </Field>
+                {/* Action principale d'un formulaire rare, et seule cible de la page au doigt. */}
+                <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>
+                  {t('login.saveAndContinue')}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={submitLogin} className="space-y-3">
+                <Field label={t('login.username')}>
+                  <Input
+                    value={username}
+                    required
+                    autoFocus
+                    autoComplete="username"
+                    onChange={(event) => setUsername(event.target.value)}
+                  />
+                </Field>
 
-              <Field label={t('login.password')}>
-                <Input
-                  type="password"
-                  value={password}
-                  required
-                  autoComplete="current-password"
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </Field>
+                <Field label={t('login.password')}>
+                  <Input
+                    type="password"
+                    value={password}
+                    required
+                    autoComplete="current-password"
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                </Field>
 
-              {error && <Notice tone="danger">{error}</Notice>}
+                {error && <Notice tone="danger">{error}</Notice>}
 
-              <Button type="submit" variant="primary" size="md" className="w-full" loading={busy}>
-                {t('login.submit')}
-              </Button>
-            </form>
-          )}
+                <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>
+                  {t('login.submit')}
+                </Button>
+              </form>
+            )}
+          </CardBody>
         </Card>
 
-        <p className="text-ink-faint mt-4 text-center text-xs">{t('login.bootstrapHint')}</p>
+        <p className="text-ink-muted mt-4 text-center text-meta">{t('login.bootstrapHint')}</p>
 
         {/* Le choix de la langue est offert avant la connexion : la coquille applicative, où il
             vit ensuite, n'est pas encore accessible. */}
@@ -155,27 +171,27 @@ export function LoginPage() {
   )
 }
 
+/**
+ * Choix de la langue. Des boutons de plein droit, hauts de 32 px : écrits à la main, ils
+ * mesuraient 24 px — sous le minimum d'une cible de clic, et c'était la seule de la page.
+ */
 function LocalePicker() {
   const { locale, setLocale } = useLocale()
+  const t = useT()
 
   return (
-    <div className="mt-4 flex items-center justify-center gap-1">
+    <div role="group" aria-label={t('shell.language')} className="mt-4 flex items-center justify-center gap-1">
       {LOCALES.map((option) => (
-        <button
+        <Button
           key={option}
-          type="button"
+          size="sm"
           lang={option}
-          onClick={() => setLocale(option)}
+          variant={option === locale ? 'secondary' : 'ghost'}
           aria-pressed={option === locale}
-          className={cn(
-            'rounded-[var(--radius-control)] px-2 py-1 text-xs transition-colors',
-            option === locale
-              ? 'bg-surface-sunken text-ink font-medium'
-              : 'text-ink-faint hover:text-ink',
-          )}
+          onClick={() => setLocale(option)}
         >
           {LOCALE_LABELS[option]}
-        </button>
+        </Button>
       ))}
     </div>
   )

@@ -1,52 +1,118 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { api } from '../api/client'
-import type { Rule, RuleError } from '../api/types'
-import { useAuth } from '../app/AuthContext'
-import { useEventListener } from '../app/EventsContext'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { FilterX, ScrollText } from 'lucide-react'
+import { api } from '@/api/client'
+import type { Rule, RuleError } from '@/api/types'
+import { useAuth } from '@/app/AuthContext'
+import { useEventListener } from '@/app/EventsContext'
+import { Page } from '@/components/layout/Page'
+import { FilterInput } from '@/components/ui/FilterInput'
 import {
-  Alert,
+  Badge,
   Button,
   Card,
+  CardBody,
+  CardHeader,
   EmptyState,
-  Field,
-  Input,
-  PageHeader,
-  Select,
+  LastUpdated,
+  LiveRegion,
+  LoadingBlock,
+  MultiSelect,
+  Notice,
+  RefreshBar,
   SeverityBadge,
-  Spinner,
+  TBody,
+  THead,
+  Table,
   TableScroll,
-  Tag,
-} from '../components/ui'
-import { categoryLabel, formatRelative } from '../lib/format'
-import { tr, useT, useTc } from '../lib/i18n'
-import type { Translator } from '../lib/i18n'
+  Td,
+  Th,
+  Tr,
+} from '@/components/ui/primitives'
+import { categoryLabel, severityLabel } from '@/lib/format'
+import { tr, useT, useTc } from '@/lib/i18n'
+import type { PluralTranslator, Translator } from '@/lib/i18n'
+
+/** Colonnes triables. Le tri se fait ici : le catalogue tient en mémoire, il est chargé en entier. */
+type SortKey = 'rule' | 'category' | 'severity' | 'origin' | 'state'
+
+/** La sévérité se trie par gravité, jamais par ordre alphabétique. */
+const SEVERITY_RANK: Record<string, number> = { critical: 0, warning: 1, info: 2 }
+
+const SEVERITIES = ['critical', 'warning', 'info']
+
+/*
+ * Capitales de l'en-tête. `Th` les pose sur la cellule, mais le libellé triable vit dans un
+ * bouton, et la remise à zéro du navigateur annule l'héritage de `text-transform` sur les
+ * boutons : sans cela, les colonnes triables s'écrivaient en minuscules et la seule qui ne l'est
+ * pas ressortait.
+ */
+const HEAD = '[&>button]:uppercase whitespace-nowrap'
+
+/** Largeur en deçà de laquelle le tableau défile plutôt que d'écraser ses colonnes. */
+const TABLE_MIN_WIDTH = 940
+
+/** Paramètres d'URL portant l'état du tableau : une vue filtrée se partage par simple lien. */
+const FILTER_KEYS = ['q', 'category', 'severity', 'origin', 'state']
 
 export function RulesPage() {
   const { isAdmin } = useAuth()
+  const navigate = useNavigate()
   const t = useT()
   const tc = useTc()
+  const [params, setParams] = useSearchParams()
+
   const [rules, setRules] = useState<Rule[]>([])
   const [errors, setErrors] = useState<RuleError[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
   const [loadedAt, setLoadedAt] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState<string | null>(null)
 
-  const [category, setCategory] = useState('')
-  const [origin, setOrigin] = useState('')
-  const [search, setSearch] = useState('')
+  const search = params.get('q') ?? ''
+  const sortKey = (params.get('sort') as SortKey | null) ?? 'rule'
+  const descending = params.get('dir') === 'desc'
+
+  const readList = useCallback(
+    (key: string) => {
+      const raw = params.get(key)
+      return raw ? raw.split(',').filter(Boolean) : []
+    },
+    [params],
+  )
+
+  const categoryFilter = readList('category')
+  const severityFilter = readList('severity')
+  const originFilter = readList('origin')
+  const stateFilter = readList('state')
+  const filtering = FILTER_KEYS.some((key) => params.get(key))
+
+  const setParam = useCallback(
+    (key: string, value: string) => {
+      const next = new URLSearchParams(params)
+      if (value) next.set(key, value)
+      else next.delete(key)
+      setParams(next, { replace: true })
+    },
+    [params, setParams],
+  )
 
   const load = useCallback(async () => {
+    setRefreshing(true)
+
     try {
       const [list, ruleErrors] = await Promise.all([api.rules.list(), api.rules.errors()])
       setRules(list)
       setErrors(ruleErrors)
+      setLoadedAt(new Date().toISOString())
       setFailure(null)
     } catch (cause) {
       setFailure(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
@@ -54,37 +120,69 @@ export function RulesPage() {
     void load()
   }, [load])
 
-  useEventListener(['rules.reloaded'], (event) => {
-    const data = event.data as { loadedAt?: string } | null
-    setLoadedAt(data?.loadedAt ?? event.at)
+  // Les règles se rechargent à chaud, y compris depuis un fichier déposé sur le volume : la vue
+  // le dit au lieu d'afficher un catalogue périmé sans le savoir.
+  useEventListener(['rules.reloaded'], () => {
+    setAnnouncement(tr('rules.live.reloaded'))
     void load()
   })
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase()
+
     return rules.filter((rule) => {
-      if (category && rule.category !== category) return false
-      if (origin && rule.origin !== origin) return false
+      if (categoryFilter.length > 0 && !categoryFilter.includes(rule.category)) return false
+      if (severityFilter.length > 0 && !severityFilter.includes(rule.severity)) return false
+      if (originFilter.length > 0 && !originFilter.includes(rule.origin)) return false
+      if (stateFilter.length > 0 && !stateFilter.includes(rule.enabled ? 'enabled' : 'disabled')) {
+        return false
+      }
       if (!needle) return true
+
+      // La recherche porte sur ce qui identifie la règle et sur ce qu'elle dit d'elle-même :
+      // on cherche aussi bien « bloat » que « lignes mortes ».
       return (
         rule.id.toLowerCase().includes(needle) ||
         rule.name.toLowerCase().includes(needle) ||
         (rule.description ?? '').toLowerCase().includes(needle)
       )
     })
-  }, [rules, category, origin, search])
+  }, [rules, search, categoryFilter, severityFilter, originFilter, stateFilter])
 
-  const categories = useMemo(
-    () => [...new Set(rules.map((rule) => rule.category))].sort(),
-    [rules],
-  )
+  const ordered = useMemo(() => {
+    const sign = descending ? -1 : 1
+
+    const compare = (left: Rule, right: Rule) => {
+      switch (sortKey) {
+        case 'category':
+          return categoryLabel(left.category).localeCompare(categoryLabel(right.category))
+        case 'severity':
+          return (SEVERITY_RANK[left.severity] ?? 9) - (SEVERITY_RANK[right.severity] ?? 9)
+        case 'origin':
+          return left.origin.localeCompare(right.origin)
+        case 'state':
+          return Number(right.enabled) - Number(left.enabled)
+        default:
+          return 0
+      }
+    }
+
+    // Le nom départage toujours : deux règles de même catégorie gardent un ordre stable d'un
+    // affichage à l'autre, sans quoi la liste bouge à chaque rechargement du catalogue.
+    return [...filtered].sort(
+      (left, right) => sign * (compare(left, right) || left.name.localeCompare(right.name)),
+    )
+  }, [filtered, sortKey, descending])
+
+  const categories = useMemo(() => [...new Set(rules.map((rule) => rule.category))].sort(), [rules])
 
   async function reload() {
     setReloading(true)
+
     try {
-      const status = await api.rules.reload()
-      setLoadedAt(status.loadedAt)
+      await api.rules.reload()
       await load()
+      setAnnouncement(tr('rules.live.reloaded'))
     } catch (cause) {
       setFailure(cause instanceof Error ? cause.message : tr('rules.reloadFailed'))
     } finally {
@@ -92,206 +190,302 @@ export function RulesPage() {
     }
   }
 
+  function clearFilters() {
+    const next = new URLSearchParams(params)
+    FILTER_KEYS.forEach((key) => next.delete(key))
+    setParams(next, { replace: true })
+  }
+
+  function toggleSort(key: SortKey) {
+    const next = new URLSearchParams(params)
+    next.set('sort', key)
+    // Une nouvelle colonne s'ouvre en ordre croissant ; la même colonne s'inverse.
+    if (key === sortKey && !descending) next.set('dir', 'desc')
+    else next.delete('dir')
+    setParams(next, { replace: true })
+  }
+
+  const sortOf = (key: SortKey) => (sortKey === key ? (descending ? 'desc' : 'asc') : null)
+  const setList = (key: string) => (values: string[]) => setParam(key, values.join(','))
+
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title={t('nav.rules')}
-        subtitle={t('rules.subtitle')}
-        actions={
+    <Page
+      title={t('nav.rules')}
+      description={t('rules.subtitle')}
+      meta={<LastUpdated at={loadedAt} />}
+      actions={
+        isAdmin && (
           <>
-            {loadedAt && (
-              <span className="hidden text-xs text-ink-muted sm:inline">
-                {t('rules.reloadedAt', { when: formatRelative(loadedAt) })}
-              </span>
-            )}
-            {isAdmin && (
-              <>
-                <Button onClick={reload} disabled={reloading}>
-                  {reloading && <Spinner />} {t('rules.reload')}
-                </Button>
-                <Link
-                  to="/rules/new"
-                  className="bg-brand text-brand-ink hover:bg-brand-hover inline-flex h-8 items-center rounded-[var(--radius-control)] px-3 text-sm font-medium"
-                >
-                  {t('breadcrumbs.newRule')}
-                </Link>
-              </>
-            )}
+            <Button onClick={reload} loading={reloading}>
+              {t('rules.reload')}
+            </Button>
+            {/* Action principale d'une vue d'installation : 44 px, et un verbe. */}
+            <Button variant="primary" size="lg" onClick={() => navigate('/rules/new')}>
+              {t('rules.new')}
+            </Button>
           </>
-        }
-      />
+        )
+      }
+      wide
+    >
+      <div className="space-y-4">
+        <LiveRegion message={announcement} />
 
-      {failure && <Alert title={t('common.error')}>{failure}</Alert>}
+        {failure && (
+          <Notice tone="danger" title={t('common.error')}>
+            {failure}
+          </Notice>
+        )}
 
-      {errors.length > 0 && (
-        <Card title={t('rules.failingTitle', { count: errors.length })}>
-          <div className="space-y-2">
-            {errors.map((ruleError, index) => (
-              <Alert key={`${ruleError.file}-${index}`} title={ruleError.ruleId ?? ruleError.file}>
-                <p className="text-xs">{ruleError.message}</p>
-                <p className="text-xs opacity-70">
-                  {ruleError.file} ·{' '}
-                  {ruleError.origin === 'user' ? t('rules.customRule') : t('rules.bundledRule')}
-                </p>
-              </Alert>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-ink-muted">
-            {t('rules.failingHint')}
-          </p>
-        </Card>
-      )}
-
-      <Card
-        title={tc('rules.countOf', filtered.length, { total: rules.length })}
-        padded={false}
-      >
-        <div className="grid gap-3 border-b border-border-subtle p-4 sm:grid-cols-3">
-          <Field label={t('common.category')}>
-            <Select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option value="">{t('common.all')}</option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {categoryLabel(item)}
-                </option>
+        {/* Les règles en erreur passent avant le catalogue : une règle écartée ne produit plus
+            aucun diagnostic, et rien d'autre dans l'application ne le signale. */}
+        {errors.length > 0 && (
+          <Card>
+            <CardHeader title={tc('rules.failing', errors.length)} description={t('rules.failingHint')} />
+            <CardBody className="space-y-2">
+              {errors.map((ruleError, index) => (
+                <div
+                  key={`${ruleError.file}-${index}`}
+                  className="border-danger bg-danger-subtle rounded-[var(--radius-control)] border-l-2 px-3 py-2"
+                >
+                  <p className="text-ink font-mono font-medium">{ruleError.ruleId ?? ruleError.file}</p>
+                  <p className="text-ink">{ruleError.message}</p>
+                  <p className="text-ink-muted text-meta">
+                    <span className="font-mono">{ruleError.file}</span> ·{' '}
+                    {ruleError.origin === 'user' ? t('rules.customRule') : t('rules.bundledRule')}
+                  </p>
+                </div>
               ))}
-            </Select>
-          </Field>
+            </CardBody>
+          </Card>
+        )}
 
-          <Field label={t('rules.origin')}>
-            <Select value={origin} onChange={(event) => setOrigin(event.target.value)}>
-              <option value="">{t('common.all')}</option>
-              <option value="provided">{t('rules.bundled')}</option>
-              <option value="user">{t('rules.custom')}</option>
-            </Select>
-          </Field>
+        <Card>
+          {/* Le décompte dit ce que les filtres ont laissé, et le geste qui les lève se tient
+              juste à côté du chiffre qu'il fait bouger. */}
+          <CardHeader
+            title={t('rules.catalog')}
+            description={tc('rules.countOf', ordered.length, { total: rules.length })}
+            action={
+              filtering && (
+                <Button variant="ghost" onClick={clearFilters} className="gap-1.5">
+                  <FilterX className="size-4" aria-hidden />
+                  {t('common.clearFilters')}
+                </Button>
+              )
+            }
+          />
 
-          <Field label={t('common.search')}>
-            <Input
-              value={search}
-              placeholder={t('rules.searchPlaceholder')}
-              onChange={(event) => setSearch(event.target.value)}
+          <RefreshBar active={refreshing && !loading} />
+
+          {loading ? (
+            <LoadingBlock />
+          ) : rules.length === 0 ? (
+            <EmptyState
+              icon={<ScrollText className="size-6" aria-hidden />}
+              title={t('rules.empty.title')}
+              description={t('rules.empty.hint')}
+              // Un état vide d'installation porte le geste attendu, pas un constat.
+              action={
+                isAdmin && (
+                  <Button variant="primary" size="lg" onClick={() => navigate('/rules/new')}>
+                    {t('rules.new')}
+                  </Button>
+                )
+              }
             />
-          </Field>
-        </div>
+          ) : (
+            <div aria-busy={refreshing}>
+              <TableScroll minWidth={TABLE_MIN_WIDTH}>
+                <Table>
+                  {/*
+                   * Filtre et tri sont posés dans l'en-tête de la colonne qu'ils gouvernent : une
+                   * barre séparée oblige à faire le lien de tête entre un champ et sa colonne, et
+                   * coûte une carte entière de hauteur. Le contrôle suit la nature de la donnée —
+                   * saisie libre pour du texte, sélection multiple pour une valeur énumérée.
+                   */}
+                  <THead>
+                    <Tr>
+                      {/* La colonne d'identité prend la largeur ; les autres restent étroites. */}
+                      {/* La colonne d'identité absorbe la place restante — `w-full` sur une
+                          seule cellule, la règle habituelle des tableaux à disposition
+                          automatique — et garde un minimum : sans lui, une colonne qui peut se
+                          replier cède tout à celles qui ne le peuvent pas, et le nom de la règle
+                          finissait sur trois lignes pendant qu'une liste de prérequis s'étalait. */}
+                      <Th
+                        className={`w-full min-w-56 ${HEAD}`}
+                        sort={sortOf('rule')}
+                        onSort={() => toggleSort('rule')}
+                      >
+                        {t('rules.rule')}
+                      </Th>
+                      <Th className={HEAD} sort={sortOf('category')} onSort={() => toggleSort('category')}>
+                        {t('common.category')}
+                      </Th>
+                      <Th className={HEAD} sort={sortOf('severity')} onSort={() => toggleSort('severity')}>
+                        {t('common.severity')}
+                      </Th>
+                      <Th className="whitespace-nowrap">{t('rules.requirements')}</Th>
+                      <Th className={HEAD} sort={sortOf('origin')} onSort={() => toggleSort('origin')}>
+                        {t('rules.origin')}
+                      </Th>
+                      <Th className={HEAD} sort={sortOf('state')} onSort={() => toggleSort('state')}>
+                        {t('common.state')}
+                      </Th>
+                    </Tr>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Spinner className="size-6" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="p-4">
-            <EmptyState title={t('rules.noMatch')} />
-          </div>
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <TableScroll minWidth={880}>
-                <table className="w-full text-sm">
-                  <thead className="bg-surface-sunken text-left text-xs uppercase tracking-wide text-ink-muted">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">{t('rules.rule')}</th>
-                      <th className="px-4 py-2 font-medium">{t('common.category')}</th>
-                      <th className="px-4 py-2 font-medium">{t('common.severity')}</th>
-                      <th className="px-4 py-2 font-medium">{t('rules.requirements')}</th>
-                      <th className="px-4 py-2 font-medium">{t('rules.origin')}</th>
-                      <th className="px-4 py-2 font-medium">{t('common.state')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border-subtle">
-                    {filtered.map((rule) => (
-                      <tr key={rule.id} className="align-top hover:bg-surface-sunken">
-                        <td className="px-4 py-2.5">
-                          <Link
-                            to={`/rules/${encodeURIComponent(rule.id)}`}
-                            className="font-medium text-ink hover:text-brand hover:underline"
-                          >
-                            {rule.name}
-                          </Link>
-                          <p className="font-mono text-xs text-ink-muted">{rule.id}</p>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-ink-muted">
-                          {categoryLabel(rule.category)}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <SeverityBadge severity={rule.severity} />
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <Requirements rule={rule} t={t} />
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {rule.origin === 'user' ? (
-                            <Tag tone="accent">{t('rules.customTag')}</Tag>
-                          ) : (
-                            <Tag>{t('rules.bundledTag')}</Tag>
-                          )}
-                          {rule.overridesProvided && (
-                            <p className="mt-0.5 text-xs text-ink-muted">{t('rules.replacesBundled')}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {rule.enabled ? (
-                            <Tag tone="good">{t('rules.enabledTag')}</Tag>
-                          ) : (
-                            <Tag tone="warn">{t('rules.disabledTag')}</Tag>
-                          )}
-                          {rule.overrides.length > 0 && (
-                            <p className="mt-0.5 whitespace-nowrap text-xs text-ink-muted">
-                              {tc('rules.overrides', rule.overrides.length)}
-                            </p>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    {/* Rangée de filtres : les contrôles y sont resserrés d'un cran, comme dans
+                        une barre d'outils, et la casse revient à la normale — l'en-tête est en
+                        capitales, et un champ de saisie en hérite.
+                        Largeur imposée aux sélecteurs : le résumé d'une sélection vide s'écrit
+                        « Aucune sélection », et cette phrase dictait la largeur de quatre
+                        colonnes — le tableau débordait de 150 px sur une fenêtre de 1280. */}
+                    <Tr className="[--control-md:var(--control-sm)] normal-case">
+                      <Th className="font-normal normal-case">
+                        <FilterInput
+                          label={t('rules.rule')}
+                          value={search}
+                          onValueChange={(value) => setParam('q', value)}
+                          placeholder={t('rules.searchPlaceholder')}
+                        />
+                      </Th>
+                      <Th className="font-normal normal-case">
+                        <MultiSelect
+                          className="w-28"
+                          label={t('common.category')}
+                          values={categoryFilter}
+                          onChange={setList('category')}
+                          unit={t('rules.unit.category')}
+                          unitPlural={t('rules.unit.categories')}
+                          options={categories.map((item) => ({
+                            value: item,
+                            label: categoryLabel(item),
+                          }))}
+                        />
+                      </Th>
+                      <Th className="font-normal normal-case">
+                        <MultiSelect
+                          className="w-28"
+                          label={t('common.severity')}
+                          values={severityFilter}
+                          onChange={setList('severity')}
+                          unit={t('rules.unit.severity')}
+                          unitPlural={t('rules.unit.severities')}
+                          options={SEVERITIES.map((item) => ({
+                            value: item,
+                            label: severityLabel(item),
+                          }))}
+                        />
+                      </Th>
+                      {/* Prérequis : une liste hétérogène d'extensions, de versions et de rôles.
+                          Aucun filtre n'y aurait de sens qui ne soit pas trompeur. */}
+                      <Th />
+                      <Th className="font-normal normal-case">
+                        <MultiSelect
+                          className="w-28"
+                          label={t('rules.origin')}
+                          values={originFilter}
+                          onChange={setList('origin')}
+                          unit={t('rules.unit.origin')}
+                          unitPlural={t('rules.unit.origins')}
+                          options={[
+                            { value: 'provided', label: t('rules.bundled') },
+                            { value: 'user', label: t('rules.custom') },
+                          ]}
+                        />
+                      </Th>
+                      <Th className="font-normal normal-case">
+                        <MultiSelect
+                          className="w-28"
+                          label={t('common.state')}
+                          values={stateFilter}
+                          onChange={setList('state')}
+                          unit={t('rules.unit.state')}
+                          unitPlural={t('rules.unit.states')}
+                          options={[
+                            { value: 'enabled', label: t('rules.enabledTag') },
+                            { value: 'disabled', label: t('rules.disabledTag') },
+                          ]}
+                        />
+                      </Th>
+                    </Tr>
+                  </THead>
+
+                  <TBody>
+                    {ordered.length === 0 ? (
+                      <Tr>
+                        {/* L'état vide reste sous l'en-tête : le filtre qui a tout écarté doit
+                            rester à portée de main pour être levé. */}
+                        <Td colSpan={6}>
+                          <EmptyState
+                            icon={<FilterX className="size-6" aria-hidden />}
+                            title={t('rules.noMatch')}
+                            description={t('rules.noMatchHint')}
+                            action={<Button onClick={clearFilters}>{t('common.clearFilters')}</Button>}
+                          />
+                        </Td>
+                      </Tr>
+                    ) : (
+                      ordered.map((rule) => (
+                        <Tr key={rule.id}>
+                          <Td className="align-top">
+                            <Link
+                              to={`/rules/${encodeURIComponent(rule.id)}`}
+                              className="text-ink hover:text-brand font-medium hover:underline"
+                              title={rule.description ?? undefined}
+                            >
+                              {rule.name}
+                            </Link>
+                            <p className="text-ink-muted font-mono text-meta">{rule.id}</p>
+                          </Td>
+                          <Td className="align-top whitespace-nowrap">{categoryLabel(rule.category)}</Td>
+                          <Td className="align-top">
+                            <SeverityBadge severity={rule.severity} />
+                          </Td>
+                          <Td className="align-top">
+                            <Requirements rule={rule} t={t} tc={tc} />
+                          </Td>
+                          <Td className="align-top">
+                            {rule.origin === 'user' ? (
+                              <Badge tone="info">{t('rules.customTag')}</Badge>
+                            ) : (
+                              <Badge>{t('rules.bundledTag')}</Badge>
+                            )}
+                            {rule.overridesProvided && (
+                              <p className="text-ink-muted mt-1 text-meta">{t('rules.replacesBundled')}</p>
+                            )}
+                          </Td>
+                          <Td className="align-top">
+                            {rule.enabled ? (
+                              <Badge tone="success">{t('rules.enabledTag')}</Badge>
+                            ) : (
+                              <Badge tone="warning">{t('rules.disabledTag')}</Badge>
+                            )}
+                            {rule.overrides.length > 0 && (
+                              <p className="text-ink-muted mt-1 whitespace-nowrap text-meta">
+                                {tc('rules.overrides', rule.overrides.length)}
+                              </p>
+                            )}
+                          </Td>
+                        </Tr>
+                      ))
+                    )}
+                  </TBody>
+                </Table>
               </TableScroll>
             </div>
-
-            <ul className="divide-y divide-border-subtle md:hidden">
-              {filtered.map((rule) => (
-                <li key={rule.id} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <Link
-                      to={`/rules/${encodeURIComponent(rule.id)}`}
-                      className="min-w-0 font-medium text-ink"
-                    >
-                      {rule.name}
-                    </Link>
-                    <SeverityBadge severity={rule.severity} />
-                  </div>
-
-                  <p className="mt-0.5 truncate font-mono text-xs text-ink-muted">{rule.id}</p>
-
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <Tag tone="accent">{categoryLabel(rule.category)}</Tag>
-                    {rule.origin === 'user' ? (
-                      <Tag tone="accent">{t('rules.customTag')}</Tag>
-                    ) : (
-                      <Tag>{t('rules.bundledTag')}</Tag>
-                    )}
-                    {rule.enabled ? (
-                      <Tag tone="good">{t('rules.enabledTag')}</Tag>
-                    ) : (
-                      <Tag tone="warn">{t('rules.disabledTag')}</Tag>
-                    )}
-                    {rule.overrides.length > 0 && (
-                      <Tag>
-                        {tc('rules.overrides', rule.overrides.length)}
-                      </Tag>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Card>
-    </div>
+          )}
+        </Card>
+      </div>
+    </Page>
   )
 }
 
-function Requirements({ rule, t }: { rule: Rule; t: Translator }) {
+/**
+ * Ce que la règle exige de l'instance pour être exécutable. Sans prérequis, la seule chose à dire
+ * est le nombre de vues interrogées : une règle qui ne demande rien s'exécute partout.
+ */
+function Requirements({ rule, t, tc }: { rule: Rule; t: Translator; tc: PluralTranslator }) {
   const parts: string[] = []
 
   if (rule.requires.extensions.length > 0) {
@@ -314,17 +508,13 @@ function Requirements({ rule, t }: { rule: Rule; t: Translator }) {
   }
 
   if (parts.length === 0) {
-    return (
-      <span className="text-xs text-ink-faint">
-        {t('rules.viewCount', { count: rule.requires.views.length })}
-      </span>
-    )
+    return <span className="text-ink-muted">{tc('rules.viewCount', rule.requires.views.length)}</span>
   }
 
   return (
     <div className="flex flex-wrap gap-1">
       {parts.map((part) => (
-        <Tag key={part}>{part}</Tag>
+        <Badge key={part}>{part}</Badge>
       ))}
     </div>
   )

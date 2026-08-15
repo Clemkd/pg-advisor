@@ -16,7 +16,22 @@ public sealed record RuleHandlerContext(
     EffectiveRule Rule,
     NpgsqlConnection Connection,
     PgCapabilities Capabilities,
-    PostgresConnection Instance);
+    PostgresConnection Instance,
+    int TimeoutSeconds)
+{
+    /// <summary>
+    /// Aligne le délai côté client sur celui de la session : sans cela, une règle au délai
+    /// allongé serait coupée par Npgsql avant que le statement_timeout du serveur ne joue, et
+    /// l'incident serait consigné comme une erreur ordinaire au lieu d'un dépassement.
+    /// </summary>
+    public NpgsqlCommand CreateCommand(string sql) => new(sql, Connection)
+    {
+        CommandTimeout = TimeoutSeconds + ClientTimeoutMarginSeconds,
+    };
+
+    /// <summary>Marge laissée au serveur pour couper lui-même la requête et nommer le motif.</summary>
+    public const int ClientTimeoutMarginSeconds = 5;
+}
 
 /// <summary>
 /// Règle dont la logique dépasse « SQL + condition » : plusieurs requêtes, corrélations en

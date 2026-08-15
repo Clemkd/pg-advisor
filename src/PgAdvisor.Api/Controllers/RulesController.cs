@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using PgAdvisor.Api.Data;
 using PgAdvisor.Api.Models;
 using PgAdvisor.Api.Postgres;
@@ -27,10 +28,14 @@ public sealed class RulesController(
     RuleFileService files,
     RuleHandlerRegistry handlers,
     AnalysisService analysis,
+    RuleGuard guard,
     ConnectionPresenter presenter,
+    IOptions<AdvisorOptions> options,
     EventBus bus,
     ILogger<RulesController> logger) : ControllerBase
 {
+    private readonly SchedulerOptions _scheduler = options.Value.Scheduler;
+
     [HttpGet]
     public async Task<ActionResult<IEnumerable<RuleSummaryResponse>>> List(
         [FromQuery] string? category,
@@ -40,6 +45,7 @@ public sealed class RulesController(
     {
         var snapshot = store.Current;
         var overrides = await LoadOverridesAsync(ct);
+        var health = await LoadHealthAsync(ct);
 
         var rules = snapshot.Rules.AsEnumerable();
 
@@ -62,7 +68,32 @@ public sealed class RulesController(
                 (r.Definition.Description ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase));
         }
 
-        return Ok(rules.Select(rule => ToSummary(rule, snapshot, overrides)).ToList());
+        return Ok(rules.Select(rule => ToSummary(rule, snapshot, overrides, health)).ToList());
+    }
+
+    /// <summary>
+    /// État du garde-fou pour toutes les règles suivies. C'est ce que consulte l'IHM pour
+    /// avertir globalement, sans avoir à ouvrir chaque règle.
+    /// </summary>
+    [HttpGet("health")]
+    public async Task<ActionResult<IEnumerable<RuleHealthResponse>>> Health(
+        [FromQuery] int? connectionId,
+        [FromQuery] string? state,
+        CancellationToken ct = default)
+    {
+        var names = await ConnectionNamesAsync(ct);
+        var rows = await LoadHealthAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+
+        var responses = rows
+            .Where(h => connectionId is null || h.ConnectionId == connectionId)
+            .Select(h => ToHealth(h, names.GetValueOrDefault(h.ConnectionId) ?? string.Empty, now))
+            .Where(h => state is null || string.Equals(h.State, state, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(h => h.RuleId, StringComparer.Ordinal)
+            .ThenBy(h => h.ConnectionName, StringComparer.Ordinal)
+            .ToList();
+
+        return Ok(responses);
     }
 
     [HttpGet("schema")]
@@ -96,20 +127,86 @@ public sealed class RulesController(
         }
 
         var overrides = await LoadOverridesAsync(ct);
+        var health = await LoadHealthAsync(ct);
         var connections = await db.PostgresConnections.OrderBy(c => c.Name).ToListAsync(ct);
+        var now = DateTimeOffset.UtcNow;
 
         var applicability = connections.Select(connection =>
         {
             var result = rule.EvaluateApplicability(presenter.CapabilitiesFor(connection));
-            return new RuleApplicabilityResponse(connection.Id, connection.Name, result.IsApplicable, result.Reason);
+            var effective = rule.ApplyOverrides(
+                overrides.FirstOrDefault(o => Matches(o, id) && o.ConnectionId is null),
+                overrides.FirstOrDefault(o => Matches(o, id) && o.ConnectionId == connection.Id));
+
+            var state = health.FirstOrDefault(h =>
+                h.ConnectionId == connection.Id && string.Equals(h.RuleId, rule.Id, StringComparison.OrdinalIgnoreCase));
+
+            return new RuleApplicabilityResponse
+            {
+                ConnectionId = connection.Id,
+                ConnectionName = connection.Name,
+                Applicable = result.IsApplicable,
+                Reason = result.Reason,
+                TimeoutSeconds = effective.ResolveTimeoutSeconds(_scheduler.QueryTimeout),
+                // La quarantaine se lit ici : elle ne doit jamais faire disparaître un
+                // diagnostic en silence.
+                Health = state is null ? null : ToHealth(state, connection.Name, now),
+            };
         }).ToList();
 
         return Ok(new RuleDetailResponse
         {
-            Rule = ToSummary(rule, snapshot, overrides),
+            Rule = ToSummary(rule, snapshot, overrides, health),
             Yaml = rule.RawYaml,
             Applicability = applicability,
         });
+    }
+
+    /// <summary>
+    /// Réactivation manuelle immédiate d'une règle mise en quarantaine, sur une instance ou sur
+    /// toutes. L'exploitant a corrigé la cause : on n'attend pas l'échéance.
+    /// </summary>
+    [HttpPost("{id}/reactivate")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<ActionResult<IEnumerable<RuleHealthResponse>>> Reactivate(
+        string id, ReleaseQuarantineRequest request, CancellationToken ct)
+    {
+        if (store.Current.Find(id) is null)
+        {
+            return NotFound();
+        }
+
+        var rows = await db.RuleHealth
+            .Where(h => h.RuleId == id && (request.ConnectionId == null || h.ConnectionId == request.ConnectionId))
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var row in rows)
+        {
+            RuleGuard.Reactivate(row, now);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var names = await ConnectionNamesAsync(ct);
+
+        foreach (var row in rows)
+        {
+            logger.LogInformation("Rule {RuleId} reactivated on instance {ConnectionId} by an operator.",
+                row.RuleId, row.ConnectionId);
+
+            bus.Publish(AdvisorEventTypes.RuleRecovered, new
+            {
+                connectionId = row.ConnectionId,
+                connectionName = names.GetValueOrDefault(row.ConnectionId),
+                ruleId = row.RuleId,
+                state = row.State,
+            }, row.ConnectionId);
+        }
+
+        return Ok(rows
+            .Select(row => ToHealth(row, names.GetValueOrDefault(row.ConnectionId) ?? string.Empty, now))
+            .ToList());
     }
 
     /// <summary>Valide un YAML sans rien écrire : utilisé à la frappe dans l'éditeur.</summary>
@@ -121,7 +218,7 @@ public sealed class RulesController(
         return Ok(new ValidateRuleResponse(
             compilation.Rule is not null,
             compilation.Errors,
-            compilation.Rule is null ? null : ToSummary(compilation.Rule, store.Current, [])));
+            compilation.Rule is null ? null : ToSummary(compilation.Rule, store.Current, [], [])));
     }
 
     [HttpPost]
@@ -310,6 +407,7 @@ public sealed class RulesController(
         existing.Enabled = request.Enabled;
         existing.Severity = request.Severity?.ToLowerInvariant();
         existing.IntervalSeconds = request.IntervalSeconds;
+        existing.TimeoutSeconds = request.TimeoutSeconds;
         existing.ParametersJson = request.Parameters is null || request.Parameters.Count == 0
             ? null
             : RuleParameterSerializer.Serialize(request.Parameters);
@@ -356,10 +454,11 @@ public sealed class RulesController(
 
         var snapshot = store.Current;
         var overrides = await LoadOverridesAsync(ct);
+        var health = await LoadHealthAsync(ct);
 
         return Ok(new RuleDetailResponse
         {
-            Rule = ToSummary(result.Rule, snapshot, overrides),
+            Rule = ToSummary(result.Rule, snapshot, overrides, health),
             Yaml = result.Rule.RawYaml,
         });
     }
@@ -388,12 +487,53 @@ public sealed class RulesController(
     private async Task<List<RuleOverride>> LoadOverridesAsync(CancellationToken ct) =>
         await db.RuleOverrides.AsNoTracking().ToListAsync(ct);
 
-    private RuleSummaryResponse ToSummary(LoadedRule rule, RuleSnapshot snapshot, List<RuleOverride> overrides)
+    private async Task<List<RuleHealth>> LoadHealthAsync(CancellationToken ct) =>
+        await db.RuleHealth.AsNoTracking().ToListAsync(ct);
+
+    private async Task<Dictionary<int, string>> ConnectionNamesAsync(CancellationToken ct) =>
+        await db.PostgresConnections.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+
+    private static bool Matches(RuleOverride source, string ruleId) =>
+        string.Equals(source.RuleId, ruleId, StringComparison.OrdinalIgnoreCase);
+
+    private RuleHealthResponse ToHealth(RuleHealth source, string connectionName, DateTimeOffset now) => new()
+    {
+        ConnectionId = source.ConnectionId,
+        ConnectionName = connectionName,
+        RuleId = source.RuleId,
+        State = source.State,
+        Quarantined = guard.IsQuarantined(source, now),
+        Strikes = source.Strikes,
+        ConsecutiveFailures = source.ConsecutiveFailures,
+        ConsecutiveSlowRuns = source.ConsecutiveSlowRuns,
+        FailureKind = source.LastFailureKind,
+        FailureMessage = source.LastFailureMessage,
+        LastFailureAt = source.LastFailureAt,
+        LastSuccessAt = source.LastSuccessAt,
+        LastDurationMs = source.LastDurationMs,
+        MaxDurationMs = source.MaxDurationMs,
+        LastTimeoutSeconds = source.LastTimeoutSeconds,
+        QuarantinedAt = source.QuarantinedAt,
+        QuarantinedUntil = source.QuarantinedUntil,
+        QuarantineReason = source.QuarantineReason,
+        QuarantineCount = source.QuarantineCount,
+        WarningThreshold = guard.WarningThreshold,
+        QuarantineThreshold = guard.QuarantineThreshold,
+        UpdatedAt = source.UpdatedAt,
+    };
+
+    private RuleSummaryResponse ToSummary(
+        LoadedRule rule, RuleSnapshot snapshot, List<RuleOverride> overrides, List<RuleHealth> health)
     {
         var requires = rule.Definition.Requires;
         var connectionNames = db.PostgresConnections
             .AsNoTracking()
             .ToDictionary(c => c.Id, c => c.Name);
+
+        var now = DateTimeOffset.UtcNow;
+        var states = health
+            .Where(h => string.Equals(h.RuleId, rule.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         return new RuleSummaryResponse
         {
@@ -412,6 +552,10 @@ public sealed class RulesController(
             Handler = rule.Definition.Handler,
             HasQuery = !string.IsNullOrWhiteSpace(rule.Definition.Query),
             IntervalSeconds = rule.Definition.IntervalSeconds,
+            TimeoutSeconds = rule.Definition.TimeoutSeconds,
+            DefaultTimeoutSeconds = (int)Math.Ceiling(_scheduler.QueryTimeout.TotalSeconds),
+            DegradedInstances = states.Count(h => h.State == RuleHealthStates.Degraded),
+            QuarantinedInstances = states.Count(h => guard.IsQuarantined(h, now)),
             Requires = new RuleRequirementsResponse
             {
                 Views = requires?.Views ?? [],
@@ -437,6 +581,7 @@ public sealed class RulesController(
         Enabled = source.Enabled,
         Severity = source.Severity,
         IntervalSeconds = source.IntervalSeconds,
+        TimeoutSeconds = source.TimeoutSeconds,
         Parameters = RuleParameterSerializer.Deserialize(source.ParametersJson),
         UpdatedAt = source.UpdatedAt,
     };

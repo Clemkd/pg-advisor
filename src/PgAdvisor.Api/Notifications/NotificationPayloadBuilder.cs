@@ -33,6 +33,24 @@ public static class NotificationPayloadBuilder
             _ => BuildGeneric(configuration, finding, instance, @event),
         };
 
+    /// <summary>
+    /// Charge annonçant qu'une règle coûte trop cher sur une instance. Elle nomme la nature de
+    /// l'incident : sans cela, l'exploitant ne sait pas s'il doit corriger sa règle ou
+    /// s'inquiéter de sa base.
+    /// </summary>
+    public static object BuildRuleAlert(
+        string format,
+        NotificationConfiguration configuration,
+        RuleHealth health,
+        string ruleName,
+        PostgresConnection instance,
+        string @event) => format.ToLowerInvariant() switch
+        {
+            NotificationFormats.Discord => BuildRuleDiscord(health, ruleName, instance, @event),
+            NotificationFormats.Slack => BuildRuleSlack(health, ruleName, instance, @event),
+            _ => BuildRuleGeneric(configuration, health, ruleName, instance, @event),
+        };
+
     /// <summary>Charge de test, dans la forme attendue par la destination.</summary>
     public static object BuildTest(string format, NotificationConfiguration configuration) =>
         format.ToLowerInvariant() switch
@@ -187,6 +205,153 @@ public static class NotificationPayloadBuilder
             },
         };
     }
+
+    private static object BuildRuleGeneric(
+        NotificationConfiguration configuration,
+        RuleHealth health,
+        string ruleName,
+        PostgresConnection instance,
+        string @event) => new
+        {
+            webhook = configuration.Key,
+            @event,
+            at = DateTimeOffset.UtcNow,
+            instance = new
+            {
+                id = instance.Id,
+                name = instance.Name,
+                host = instance.Host,
+                port = instance.Port,
+                database = instance.Database,
+                serverVersion = instance.ServerVersion,
+            },
+            rule = new
+            {
+                id = health.RuleId,
+                name = ruleName,
+                state = health.State,
+                strikes = health.Strikes,
+                consecutiveFailures = health.ConsecutiveFailures,
+                consecutiveSlowRuns = health.ConsecutiveSlowRuns,
+                failureKind = health.LastFailureKind,
+                message = health.LastFailureMessage,
+                lastFailureAt = health.LastFailureAt,
+                lastSuccessAt = health.LastSuccessAt,
+                lastDurationMs = health.LastDurationMs,
+                maxDurationMs = health.MaxDurationMs,
+                timeoutSeconds = health.LastTimeoutSeconds,
+                quarantinedUntil = health.QuarantinedUntil,
+                reason = health.QuarantineReason,
+            },
+        };
+
+    private static object BuildRuleDiscord(
+        RuleHealth health, string ruleName, PostgresConnection instance, string @event)
+    {
+        var quarantined = @event == NotificationEvents.RuleQuarantined;
+
+        var fields = new List<object>
+        {
+            new { name = "Instance", value = Truncate(instance.Name, DiscordFieldValueMax), inline = true },
+            new { name = "Rule", value = Truncate(health.RuleId, DiscordFieldValueMax), inline = true },
+            new { name = "Incidents", value = health.Strikes.ToString(), inline = true },
+            new { name = "Cause", value = DescribeKind(health.LastFailureKind), inline = true },
+        };
+
+        if (health.LastTimeoutSeconds is int timeout)
+        {
+            fields.Add(new { name = "Timeout", value = $"{timeout}s", inline = true });
+        }
+
+        if (health.LastDurationMs is double duration)
+        {
+            fields.Add(new { name = "Last run", value = $"{duration:F0} ms", inline = true });
+        }
+
+        if (quarantined && health.QuarantinedUntil is DateTimeOffset until)
+        {
+            fields.Add(new { name = "Retried after", value = until.ToString("u"), inline = false });
+        }
+
+        return new
+        {
+            username = "PostgreSQL Advisor",
+            embeds = new[]
+            {
+                new
+                {
+                    title = Truncate(RuleTitle(quarantined, ruleName, instance), DiscordTitleMax),
+                    description = Truncate(RuleMessage(health, quarantined), DiscordDescriptionMax),
+                    color = quarantined ? ColorCritical : ColorWarning,
+                    url = (string?)null,
+                    timestamp = DateTimeOffset.UtcNow.ToString("o"),
+                    footer = new { text = $"{instance.Host}:{instance.Port}/{instance.Database}" },
+                    fields = fields.ToArray(),
+                },
+            },
+        };
+    }
+
+    private static object BuildRuleSlack(
+        RuleHealth health, string ruleName, PostgresConnection instance, string @event)
+    {
+        var quarantined = @event == NotificationEvents.RuleQuarantined;
+
+        var fields = new List<object>
+        {
+            new { title = "Instance", value = instance.Name, @short = true },
+            new { title = "Rule", value = health.RuleId, @short = true },
+            new { title = "Incidents", value = health.Strikes.ToString(), @short = true },
+            new { title = "Cause", value = DescribeKind(health.LastFailureKind), @short = true },
+        };
+
+        if (quarantined && health.QuarantinedUntil is DateTimeOffset until)
+        {
+            fields.Add(new { title = "Retried after", value = until.ToString("u"), @short = false });
+        }
+
+        return new
+        {
+            text = RuleTitle(quarantined, ruleName, instance),
+            attachments = new[]
+            {
+                new
+                {
+                    color = quarantined ? "#dc2626" : "#d97706",
+                    title = ruleName,
+                    title_link = (string?)null,
+                    text = RuleMessage(health, quarantined),
+                    footer = $"{instance.Host}:{instance.Port}/{instance.Database}",
+                    ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    fields = fields.ToArray(),
+                },
+            },
+        };
+    }
+
+    private static string RuleTitle(bool quarantined, string ruleName, PostgresConnection instance) => quarantined
+        ? $"Rule quarantined · {ruleName} on {instance.Name}"
+        : $"Rule degraded · {ruleName} on {instance.Name}";
+
+    private static string RuleMessage(RuleHealth health, bool quarantined)
+    {
+        if (quarantined)
+        {
+            return health.QuarantineReason
+                ?? "The rule has been set aside on this instance; its diagnostic is no longer produced.";
+        }
+
+        return health.LastFailureMessage ?? "The rule keeps failing on this instance.";
+    }
+
+    /// <summary>Nature de l'incident en clair : c'est elle qui oriente vers la règle ou vers la base.</summary>
+    private static string DescribeKind(string? kind) => kind switch
+    {
+        RuleFailureKinds.Timeout => "statement timeout",
+        RuleFailureKinds.Slow => "slow but successful",
+        RuleFailureKinds.Error => "SQL error",
+        _ => "unknown",
+    };
 
     private static string Prefix(string severity) => severity switch
     {

@@ -19,34 +19,53 @@ import {
   Button,
   Card,
   Checkbox,
+  CopyButton,
   MultiSelect,
   CardBody,
   CardHeader,
   EmptyState,
   Field,
   Input,
+  LastUpdated,
   LoadingBlock,
   Modal,
   Notice,
+  RefreshBar,
   Select,
+  Toolbar,
 } from '@/components/ui/primitives'
 import { formatDateTime, formatRelative, formatSeconds } from '@/lib/format'
 import { currentLocale, hasTranslation, tr, useT, useTc } from '@/lib/i18n'
 import type { PluralTranslator, Translator } from '@/lib/i18n'
 import { SqlCode } from '@/lib/sqlHighlight'
+import { cn } from '@/lib/utils'
 
 const SORTS = ['total_time', 'mean_time', 'calls', 'rows', 'io', 'temp']
 
+/** Identité d'une requête dans le classement : l'identifiant seul se répète d'une base à l'autre. */
+function queryKey(query: TopQuery): string {
+  return `${query.connectionId}:${query.queryId}`
+}
+
 export function QueriesPage() {
   const t = useT()
+  const tc = useTc()
   const [params, setParams] = useSearchParams()
   const [connections, setConnections] = useState<Connection[]>([])
   const [queries, setQueries] = useState<TopQuery[]>([])
   const [statuses, setStatuses] = useState<InstanceQueryStatus[]>([])
   const [loading, setLoading] = useState(true)
+  // Vrai dès qu'un chargement s'est achevé, réussi ou non : au-delà, la liste déjà affichée
+  // reste en place pendant qu'une autre arrive (§ 5, cas 2), au lieu de céder la place à un
+  // sablier qui vide l'écran et déplace tout ce qui l'entoure.
+  const [settled, setSettled] = useState(false)
+  const [loadedAt, setLoadedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [target, setTarget] = useState<TopQuery | null>(null)
+  // Dernière requête ouverte, conservée après la fermeture de la modale : au retour, une liste
+  // de deux cents lignes ne dit plus d'où l'on vient.
+  const [opened, setOpened] = useState<string | null>(null)
 
   // Plusieurs instances peuvent être classées ensemble : la sélection vit dans l'URL, donc
   // une vue comparée se partage par simple lien. La chaîne sert de dépendance stable,
@@ -79,6 +98,7 @@ export function QueriesPage() {
       setQueries([])
       setStatuses([])
       setLoading(false)
+      setSettled(true)
       return
     }
 
@@ -92,6 +112,7 @@ export function QueriesPage() {
       })
       setQueries(result.items)
       setStatuses(result.instances)
+      setLoadedAt(new Date().toISOString())
       setError(null)
     } catch (cause) {
       // `tr` plutôt que `t` : le rappel est mémorisé, et dépendre du traducteur le recréerait
@@ -99,6 +120,7 @@ export function QueriesPage() {
       setError(cause instanceof Error ? cause.message : tr('queries.loadFailed'))
     } finally {
       setLoading(false)
+      setSettled(true)
     }
   }, [selection, sort, limit, includeAdvisor])
 
@@ -116,58 +138,74 @@ export function QueriesPage() {
   return (
     <Page title={t('nav.queries')} description={t('queries.subtitle')} wide>
       <div className="space-y-4">
-        <Card>
-          <CardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label={t('queries.filter.instances')} hint={t('queries.filter.instancesHint')}>
-              <MultiSelect
-                label={t('queries.filter.instancesLabel')}
-                unit={t('common.instance').toLowerCase()}
-                values={selected}
-                options={connections.map((connection) => ({
-                  value: String(connection.id),
-                  label: connection.name,
-                }))}
-                onChange={(values) => setFilter('connectionIds', values.join(','))}
-              />
-            </Field>
+        {/* Barre d'outils de la famille étude : une rangée, contrôles resserrés par `Toolbar`.
+            Chaque pixel repris ici revient au classement, dont la hauteur est mesurée sur la
+            place restante. Les indications détaillées passent en infobulle : cette vue se
+            fréquente, elle ne s'explique pas à chaque ouverture. */}
+        <Toolbar className="bg-surface border-border-subtle shadow-card rounded-[var(--radius-card)] border px-4 py-3">
+          {/* Les trois contrôles portent leur nom sur la même ligne qu'eux : une étiquette
+              posée au-dessus doublerait la hauteur de la barre, et une barre sans étiquette
+              oblige à deviner ce que classe « prod-eu-west ». */}
+          <span
+            className="text-ink-muted text-meta flex items-center gap-2"
+            title={t('queries.filter.instancesHint')}
+          >
+            {t('queries.filter.instances')}
+            <MultiSelect
+              label={t('queries.filter.instancesLabel')}
+              unit={t('common.instance').toLowerCase()}
+              className="w-52"
+              values={selected}
+              options={connections.map((connection) => ({
+                value: String(connection.id),
+                label: connection.name,
+              }))}
+              onChange={(values) => setFilter('connectionIds', values.join(','))}
+            />
+          </span>
 
-            <Field label={t('queries.filter.sort')} hint={t('queries.filter.sortHint')}>
-              <Select
-                value={sort}
-                aria-label={t('queries.filter.sort')}
-                onChange={(event) => setFilter('sort', event.target.value)}
-              >
-                {SORTS.map((item) => (
-                  <option key={item} value={item}>
-                    {t(`queries.sort.${item}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+          <label className="text-ink-muted text-meta flex items-center gap-2">
+            {t('queries.filter.sort')}
+            <Select
+              value={sort}
+              className="w-44"
+              title={t('queries.filter.sortHint')}
+              aria-label={t('queries.filter.sort')}
+              onChange={(event) => setFilter('sort', event.target.value)}
+            >
+              {SORTS.map((item) => (
+                <option key={item} value={item}>
+                  {t(`queries.sort.${item}`)}
+                </option>
+              ))}
+            </Select>
+          </label>
 
-            <Field label={t('queries.filter.limit')} hint={t('queries.filter.limitHint')}>
-              <Input
-                type="number"
-                min={1}
-                max={200}
-                value={limit}
-                onChange={(event) => setFilter('limit', event.target.value)}
-              />
-            </Field>
+          <label className="text-ink-muted text-meta flex items-center gap-2">
+            {t('queries.filter.limitShort')}
+            <Input
+              type="number"
+              min={1}
+              max={200}
+              value={limit}
+              className="w-20"
+              title={`${t('queries.filter.limit')} — ${t('queries.filter.limitHint')}`}
+              aria-label={t('queries.filter.limit')}
+              onChange={(event) => setFilter('limit', event.target.value)}
+            />
+          </label>
 
-            <div className="flex items-end gap-3">
-              <Checkbox
-                label={t('queries.filter.advisor')}
-                title={t('queries.filter.advisorTitle')}
-                checked={includeAdvisor}
-                onChange={(event) => setFilter('includeAdvisor', event.target.checked ? '1' : '')}
-              />
-              <Button variant="primary" size="md" onClick={() => void load()} className="ml-auto">
-                {t('queries.refresh')}
-              </Button>
-            </div>
-          </CardBody>
-        </Card>
+          <Checkbox
+            label={t('queries.filter.advisor')}
+            title={t('queries.filter.advisorTitle')}
+            checked={includeAdvisor}
+            onChange={(event) => setFilter('includeAdvisor', event.target.checked ? '1' : '')}
+          />
+
+          <Button variant="primary" onClick={() => void load()} className="ml-auto">
+            {t('queries.refresh')}
+          </Button>
+        </Toolbar>
 
         {error && (
           <Notice tone="danger" title={t('common.error')}>
@@ -188,12 +226,17 @@ export function QueriesPage() {
             title={t('queries.list.title')}
             description={
               selected.length > 1
-                ? t('queries.list.merged', { count: selected.length })
+                ? // Décompte injecté : `tc`, sinon « 1 instances » finit par s'écrire.
+                  tc('queries.list.merged', selected.length)
                 : t('queries.list.single')
             }
+            action={loadedAt && <LastUpdated at={loadedAt} />}
           />
 
-          {loading ? (
+          {/* Liseré de rechargement : le classement reste lisible pendant qu'un autre arrive. */}
+          <RefreshBar active={loading && settled} />
+
+          {!settled && loading ? (
             <LoadingBlock />
           ) : queries.length === 0 ? (
             <EmptyState
@@ -206,11 +249,18 @@ export function QueriesPage() {
               }
             />
           ) : (
-            <QueryTable
-              queries={queries}
-              showInstance={selected.length > 1}
-              onAnalyze={setTarget}
-            />
+            <div aria-busy={loading}>
+              <QueryTable
+                queries={queries}
+                showInstance={selected.length > 1}
+                rankedBy={sort}
+                selected={opened}
+                onAnalyze={(query) => {
+                  setOpened(queryKey(query))
+                  setTarget(query)
+                }}
+              />
+            </div>
           )}
         </Card>
       </div>
@@ -261,8 +311,8 @@ type Panel = 'sql' | 'params' | 'notes'
  * La provenance de la mesure et les compteurs d'ensemble tiennent dans l'en-tête, dont la
  * hauteur est déjà payée ; la requête analysée, les valeurs des paramètres et les remarques de
  * l'API s'ouvrent dans un panneau qui recouvre le canevas au lieu de le pousser ; les erreurs
- * flottent au-dessus du diagramme. Sans plan à afficher, la mise en page redevient une pile
- * ordinaire : un canevas vide n'aurait rien à occuper.
+ * flottent au-dessus du diagramme. Sans plan à afficher, la mise en page redevient une pile —
+ * et c'est alors le texte de la requête, seul objet à étudier, qui prend la hauteur libre.
  *
  * À l'ouverture, le plan déjà mesuré est relu depuis la base de l'Advisor : rien n'est exécuté
  * sur l'instance supervisée tant que l'opérateur ne demande pas explicitement une mesure.
@@ -435,37 +485,45 @@ function AnalysisModal({
     <Button
       key={item.key}
       variant={panel === item.key ? 'secondary' : 'ghost'}
+      size="sm"
       aria-pressed={panel === item.key}
       title={item.title}
       onClick={() => setPanel((current) => (current === item.key ? null : item.key))}
-      className="h-7 px-2 text-xs"
+      className="gap-1.5 px-2"
     >
-      <item.icon className="size-3.5" aria-hidden />
+      <item.icon className="size-4" aria-hidden />
       {item.label}
-      {item.count !== undefined && (
-        <span className="text-ink-faint tabular-nums">{item.count}</span>
-      )}
+      {item.count !== undefined && <span className="text-ink-muted tabular-nums">{item.count}</span>}
     </Button>
   ))
 
   return (
     <Modal
       title={t('queries.modal.title')}
-      description={`${query.connectionName} · ${queryId}`}
+      description={
+        <>
+          {query.connectionName} · <span className="font-mono">{queryId}</span>
+        </>
+      }
       // Provenance, compteurs d'ensemble et accès aux panneaux : l'en-tête paie déjà sa hauteur,
       // les y poser ne coûte rien au diagramme.
       actions={
         result && (
           <>
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+            {/* `min-w-0` : sans lui, cette rangée refuse de se réduire et c'est le titre de la
+                modale qui se tronque à sa place. Un en-tête doit céder ses compteurs avant de
+                céder le nom de ce qu'il coiffe. */}
+            <span className="text-meta flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
               <span
                 className="text-ink flex items-center gap-1.5 font-medium"
                 title={t('queries.plan.measuredOn', { date: formatDateTime(result.measuredAt) })}
               >
-                <Clock className="text-ink-faint size-3.5" aria-hidden />
+                <Clock className="text-ink-muted size-3.5" aria-hidden />
                 {t('queries.plan.measured', { when: formatRelative(result.measuredAt) })}
               </span>
-              <span className="text-ink-faint">
+              {/* Combien de temps la mesure a duré : utile, secondaire. S'efface quand la
+                  rangée ne tient plus, avant la date de mesure et avant le titre. */}
+              <span className="text-ink-muted hidden 2xl:inline">
                 {t('queries.plan.duration', {
                   duration: formatSeconds(result.durationMs / 1000),
                 })}
@@ -479,7 +537,7 @@ function AnalysisModal({
               <PlanTotals plan={result.plan} />
             </span>
 
-            <span className="flex items-center gap-1">{buttons}</span>
+            <span className="flex shrink-0 flex-wrap items-center gap-1">{buttons}</span>
           </>
         )
       }
@@ -491,7 +549,7 @@ function AnalysisModal({
             {t('common.close')}
           </Button>
           <Button variant="primary" onClick={() => void run()} loading={busy}>
-            <Play className="size-3.5" aria-hidden />
+            <Play className="size-4" aria-hidden />
             {result ? t('queries.modal.remeasure') : t('queries.modal.measure')}
           </Button>
         </>
@@ -510,17 +568,13 @@ function AnalysisModal({
               aria-label={panels.find((item) => item.key === panel)?.title}
               className="border-border-subtle bg-surface shadow-popover absolute inset-x-0 top-0 z-30 flex max-h-[80%] flex-col border-b"
             >
-              <div className="border-border-subtle flex shrink-0 flex-wrap items-center gap-1 border-b px-3 py-2">
+              <Toolbar className="border-border-subtle shrink-0 gap-1 border-b px-3 py-2">
                 {buttons}
-                <Button
-                  variant="ghost"
-                  onClick={() => setPanel(null)}
-                  className="ml-auto h-7 px-2 text-xs"
-                >
-                  <X className="size-3.5" aria-hidden />
+                <Button variant="ghost" size="sm" onClick={() => setPanel(null)} className="ml-auto gap-1.5 px-2">
+                  <X className="size-4" aria-hidden />
                   {t('common.close')}
                 </Button>
-              </div>
+              </Toolbar>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
                 {panel === 'sql' && <AnalysedSql sql={result.sql} />}
@@ -529,12 +583,12 @@ function AnalysisModal({
                   <div className="space-y-3">
                     {/* Avec quelles valeurs le plan affiché a été obtenu — ce n'est pas
                         forcément ce que portent les champs de saisie. */}
-                    <p className="flex flex-wrap items-center gap-1 text-xs">
-                      <span className="text-ink-faint">{t('queries.plan.parameters')}</span>
+                    <p className="text-meta flex flex-wrap items-center gap-1.5">
+                      <span className="text-ink-muted">{t('queries.plan.parameters')}</span>
                       {result.parameters.map((value, index) => (
                         <code
                           key={index}
-                          className="bg-surface-sunken text-ink border-border-subtle rounded border px-1 font-mono text-[11px]"
+                          className="bg-surface-sunken text-ink border-border-subtle rounded border px-1.5 font-mono"
                         >
                           ${index + 1} = {value === '' ? 'NULL' : value}
                         </code>
@@ -582,39 +636,45 @@ function AnalysisModal({
           </div>
         </div>
       ) : (
-        // Sans plan, le canevas n'a rien à montrer : la modale redevient une pile ordinaire, où
-        // les valeurs des paramètres et la requête sont le contenu utile.
-        <div className="space-y-3">
-          {/* Les valeurs sont ici la condition de la mesure : l'éditeur est ouvert d'office. */}
-          {requiredParameters > 0 && (
-            <Card>
-              <CardHeader title={t('queries.params.title')} />
-              <CardBody>{editor}</CardBody>
-            </Card>
-          )}
+        // Sans plan, le canevas n'a rien à montrer : la modale redevient une pile ordinaire.
+        // C'est alors le texte de la requête qui est l'objet étudié — celui qu'on lit avant de
+        // décider d'exécuter quoi que ce soit sur une base de production —, et c'est donc lui
+        // qui prend toute la hauteur libre.
+        <div className="flex h-full min-h-0 flex-col gap-3">
+          <div className="shrink-0 space-y-3">
+            {reading ? (
+              <LoadingBlock label={t('queries.modal.reading')} />
+            ) : busy ? (
+              <LoadingBlock label={t('queries.modal.loading')} />
+            ) : (
+              <Notice tone="info" title={t('queries.empty.plan.title')}>
+                {t('queries.empty.plan.body')}
+              </Notice>
+            )}
 
-          {error && (
-            <Notice
-              tone={requiredParameters > 0 ? 'warning' : 'danger'}
-              title={t('queries.error.title')}
-            >
-              {error}
-            </Notice>
-          )}
+            {error && (
+              <Notice
+                tone={requiredParameters > 0 ? 'warning' : 'danger'}
+                title={t('queries.error.title')}
+                onDismiss={() => setError(null)}
+              >
+                {error}
+              </Notice>
+            )}
 
-          {reading ? (
-            <LoadingBlock label={t('queries.modal.reading')} />
-          ) : busy ? (
-            <LoadingBlock label={t('queries.modal.loading')} />
-          ) : (
-            <EmptyState
-              icon={<Play className="size-6" />}
-              title={t('queries.empty.plan.title')}
-              description={t('queries.empty.plan.body')}
-            />
-          )}
+            {/* Les valeurs sont ici la condition de la mesure : l'éditeur est ouvert d'office. */}
+            {requiredParameters > 0 && (
+              <Card>
+                <CardHeader title={t('queries.params.title')} />
+                <CardBody>{editor}</CardBody>
+              </Card>
+            )}
+          </div>
 
-          <AnalysedSql sql={sql} />
+          {/* Le texte prend la hauteur dont il a besoin et cède devant ce qui manque : une
+              requête d'une ligne n'a pas à s'étirer en un pavé vide de six cents pixels, et
+              une requête de trois cents lignes défile dans ce qui reste. */}
+          <AnalysedSql sql={sql} className="min-h-0" />
         </div>
       )}
     </Modal>
@@ -625,15 +685,26 @@ function AnalysisModal({
  * Requête telle qu'elle est soumise à EXPLAIN : après analyse, préfixe retiré et paramètres
  * substitués ; avant, le texte normalisé par pg_stat_statements. Le rappel du mode d'exécution
  * la suit — il décrit ce que la mesure fera de ce texte, et n'a de sens qu'à côté de lui.
+ *
+ * Toujours copiable : l'Advisor n'agit pas sur l'instance, il livre un texte à porter ailleurs.
+ * Un diagnostic qu'il faut resaisir à la main n'est pas exploitable.
  */
-function AnalysedSql({ sql }: { sql: string }) {
+function AnalysedSql({ sql, className }: { sql: string; className?: string }) {
   const t = useT()
 
   return (
-    <div>
-      <p className="text-ink-muted mb-1.5 text-xs font-medium">{t('queries.modal.sqlTitle')}</p>
-      <SqlCode sql={sql} wrap />
-      <p className="text-ink-faint mt-1.5 text-xs leading-snug">{t('queries.modal.readOnly')}</p>
+    <div className={cn('flex min-w-0 flex-col', className)}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-ink-muted text-micro font-semibold tracking-wider uppercase">
+          {t('queries.modal.sqlTitle')}
+        </span>
+        <CopyButton value={sql} label={t('queries.modal.sqlTitle')} />
+      </div>
+      {/* La taille du code est celle du socle — `SqlCode` et `CodeBlock` la partagent — et elle
+          ne se force pas depuis ici : `cn` ne reconnaît pas les tailles nommées comme des
+          tailles de police, si bien qu'une classe passée en appel s'ajoute sans remplacer. */}
+      <SqlCode sql={sql} wrap className="min-h-0" />
+      <p className="text-ink-muted text-meta mt-1.5 leading-snug">{t('queries.modal.readOnly')}</p>
     </div>
   )
 }
@@ -662,9 +733,9 @@ function ParameterEditor({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p className="text-ink-muted min-w-0 flex-1 text-xs">{t('queries.params.description')}</p>
-        <Button onClick={onSuggest} loading={suggesting}>
-          <Wand2 className="size-3.5" aria-hidden />
+        <p className="text-ink-muted text-meta min-w-0 flex-1">{t('queries.params.description')}</p>
+        <Button size="sm" onClick={onSuggest} loading={suggesting}>
+          <Wand2 className="size-4" aria-hidden />
           {t('queries.params.suggest')}
         </Button>
       </div>

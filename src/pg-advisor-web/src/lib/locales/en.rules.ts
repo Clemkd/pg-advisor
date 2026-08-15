@@ -2,60 +2,87 @@
  * English catalogue — rules. Fichier dédié à cette zone de l'interface : plusieurs chantiers
  * peuvent avancer en parallèle sans se disputer un catalogue unique.
  *
- * Keys mirror locales/fr.rules.ts exactly: findings list and detail, rule editor and dry run.
+ * Keys mirror locales/fr.rules.ts exactly: diagnostics list and detail, rule editor and dry run.
+ *
+ * Wording: a diagnostic is a fact observed on an instance, not a task to tick off. It appears and
+ * disappears with the fact; the user never resolves it, they can only decide the observation is of
+ * no interest. No label may suggest otherwise.
  */
 export const enRules: Record<string, string> = {
-  // --- Findings: header and tabs --------------------------------------------
-  'findings.subtitle':
-    'Every diagnosis names the rule that produced it, its evidence and the corrective command — never run automatically.',
+  // --- Diagnostics: header and tabs -------------------------------------------
+  'findings.subtitle': 'Facts observed on your instances. The Advisor never runs a command.',
   'findings.statusTabs': 'Status',
-  'findings.tab.active': 'To handle',
+  'findings.tab.active': 'Active',
   'findings.tab.ignored': 'Ignored',
   'findings.tab.resolved': 'Resolved',
   'findings.tab.all': 'All',
-  'findings.count.one': '{count} recommendation',
-  'findings.count.other': '{count} recommendations',
-  'findings.virtualized': 'virtualised list',
-  'findings.limited': 'showing the first {count} only: narrow the filters',
+  'findings.count.one': '{count} diagnostic',
+  'findings.count.other': '{count} diagnostics',
+  'findings.limited': 'first {count} only',
 
-  // --- Findings: filters ------------------------------------------------------
+  // --- Diagnostics: entry point -----------------------------------------------
+  'findings.hero.pending.one': 'of {count} active diagnostic',
+  'findings.hero.pending.other': 'of {count} active diagnostics',
+  'findings.hero.warnings.one': '{count} warning',
+  'findings.hero.warnings.other': '{count} warnings',
+  'findings.hero.infos.one': '{count} info',
+  'findings.hero.infos.other': '{count} info',
+  'findings.hero.showCritical': 'Show critical',
+
+  // --- Diagnostics: columns and filters ----------------------------------------
+  'findings.column.diagnostic': 'Diagnostic',
+  'findings.column.detected': 'Detected',
+  'findings.rowTitle': 'Open the detail',
   'findings.searchPlaceholder': 'title, object, rule',
-  'findings.searchHint': 'Enter to apply',
+  'findings.unit.severity': 'severity',
+  'findings.unit.severities': 'severities',
+  'findings.unit.instance': 'instance',
+  'findings.unit.instances': 'instances',
+  'findings.unit.category': 'category',
+  'findings.unit.categories': 'categories',
 
-  // --- Findings: messages -----------------------------------------------------
+  // --- Diagnostics: real time -------------------------------------------------
+  'findings.live.new.one': '{count} new diagnostic',
+  'findings.live.new.other': '{count} new diagnostics',
+  'findings.live.newCritical.one': '{count} new critical diagnostic',
+  'findings.live.newCritical.other': '{count} new critical diagnostics',
+
+  // --- Diagnostics: messages --------------------------------------------------
   'findings.ignoredNotice':
-    'An ignored recommendation is no longer notified and no longer weighs on the health score. It keeps being refreshed: “Stop ignoring” puts it back in the list to handle.',
+    'An ignored diagnostic is no longer notified and no longer weighs on the health score. It keeps being refreshed: “Reconsider” puts it back among the active diagnostics.',
+  'findings.resolvedNotice':
+    'A diagnostic is resolved by the engine once the observed fact is gone from the instance, at the next run of the rule or on verification. Nobody ticks it off by hand.',
   'findings.statusFailed': 'Status change failed.',
   'findings.verifyFailed': 'Verification failed.',
-  'findings.notice.resolved': '“{title}” marked as resolved.',
   'findings.notice.ignored': '“{title}” is now ignored.',
-  'findings.notice.reactivated': '“{title}” is back in the list to handle.',
+  'findings.notice.reconsidered': '“{title}” is back among the active diagnostics.',
 
-  // --- Findings: empty list ---------------------------------------------------
-  'findings.empty.title': 'No recommendation for these filters',
-  'findings.empty.active': 'Nothing to handle on the selected scope.',
-  'findings.empty.ignored':
-    'No ignored recommendation. Use the menu on a row to move one here.',
-  'findings.empty.other': 'Try another status or widen the filters.',
+  // --- Diagnostics: empty list ------------------------------------------------
+  'findings.empty.title': 'No diagnostic',
+  'findings.empty.active': 'Nothing observed on the supervised instances.',
+  'findings.empty.ignored': 'No ignored diagnostic. Use the menu on an active row to move one here.',
+  'findings.empty.other': 'Try another status.',
+  'findings.empty.filtered': 'No diagnostic for these filters',
+  'findings.empty.filteredHint': 'The chosen scope returns nothing: widen it.',
 
-  // --- Findings: list row -----------------------------------------------------
-  'findings.detected': 'detected {when}',
+  // --- Diagnostics: list row --------------------------------------------------
   'findings.occurrences.one': '{count} occurrence',
   'findings.occurrences.other': '{count} occurrences',
   'findings.durationMs': '{ms} ms',
 
-  // --- Findings: actions ------------------------------------------------------
-  'findings.action.resolve': 'Mark as resolved',
+  // --- Diagnostics: actions ---------------------------------------------------
+  // Two gestures, and two only: deciding the observation is of no interest, and taking it back.
+  // Closing a diagnostic belongs to the engine alone.
   'findings.action.ignore': 'Ignore',
-  'findings.action.ignoreHint': 'Leaves the list to handle, with no notification and no score impact.',
-  'findings.action.unignore': 'Stop ignoring',
-  'findings.action.reactivate': 'Reactivate',
+  'findings.action.reconsider': 'Reconsider',
   'findings.action.verify': 'Verify',
-  'findings.action.verifyHint': 'Replays the rule on the instance and resolves if the problem is gone.',
+  'findings.action.verifyHint':
+    'Replays the rule on the instance: the engine closes the diagnostic if the fact is gone.',
 
-  // --- Findings: detail -------------------------------------------------------
-  'findings.detail.fallbackTitle': 'Recommendation',
-  'findings.detail.diagnosis': 'Diagnosis',
+  // --- Diagnostics: detail ----------------------------------------------------
+  'findings.detail.fallbackTitle': 'Diagnostic',
+  'findings.detail.resolutionHint':
+    'This observation goes away on its own once the fact behind it is gone: the engine closes it, at the next run of the rule or on verification.',
   'findings.detail.impact': 'Estimated impact',
   'findings.detail.confidence': 'Confidence',
   'findings.detail.occurrences': 'Occurrences',
@@ -64,7 +91,8 @@ export const enRules: Record<string, string> = {
   'findings.detail.resolvedAt': 'Resolved on',
   'findings.detail.rule': 'Triggering rule',
   'findings.detail.ruleVersion': 'version {version}',
-  'findings.detail.ruleMissing': 'This rule is no longer loaded: the finding will not be refreshed.',
+  'findings.detail.ruleMissing':
+    'This rule is no longer loaded: this diagnostic will not be refreshed.',
   'findings.detail.evidence': 'Collected evidence',
   'findings.detail.remediation': 'Suggested corrective command',
   'findings.detail.remediationHint':
@@ -76,6 +104,26 @@ export const enRules: Record<string, string> = {
   'findings.detail.failed': 'failed {status}',
   'findings.detail.actor': 'by {actor}',
 
+  // --- Rule catalogue -----------------------------------------------------------
+  'rules.new': 'New rule',
+  'rules.catalog': 'Catalogue',
+  'rules.failing.one': '{count} failing rule',
+  'rules.failing.other': '{count} failing rules',
+  // Units for the summary of a multiple selection: “2 categories”, not a list.
+  'rules.unit.category': 'category',
+  'rules.unit.categories': 'categories',
+  'rules.unit.severity': 'severity',
+  'rules.unit.severities': 'severities',
+  'rules.unit.origin': 'origin',
+  'rules.unit.origins': 'origins',
+  'rules.unit.state': 'state',
+  'rules.unit.states': 'states',
+  'rules.empty.title': 'No rule loaded',
+  'rules.empty.hint':
+    'Rules shipped with the application are read at startup. A rule written here adds to them and is reloaded on the fly.',
+  'rules.noMatchHint': 'No rule in the catalogue matches these criteria. Lift a filter to see more.',
+  'rules.live.reloaded': 'Rules reloaded',
+
   // --- Rule editor: header ----------------------------------------------------
   'ruleEditor.newTitle': 'New rule',
   'ruleEditor.group': 'group {group}',
@@ -86,6 +134,10 @@ export const enRules: Record<string, string> = {
   'ruleEditor.saved': 'Rule “{id}” saved and reloaded.',
   'ruleEditor.saveFailed': 'Save failed.',
   'ruleEditor.deleteFailed': 'Deletion failed.',
+  'ruleEditor.deleteTitle': 'Delete rule “{id}”?',
+  'ruleEditor.deleteBody':
+    'The definition written in the data volume is erased. If it superseded a bundled rule, that rule takes its place again at the next reload.',
+  'ruleEditor.deleteConfirm': 'Delete the rule',
 
   // --- Rule editor: YAML definition -------------------------------------------
   'ruleEditor.yamlTitle': 'YAML definition',
@@ -96,6 +148,10 @@ export const enRules: Record<string, string> = {
   'ruleEditor.unsavedTag': 'unsaved',
   'ruleEditor.unsavedTitle': 'Unsaved changes.',
   'ruleEditor.invalidTitle': 'The rule is not valid',
+  // A validation error is placed as close as possible to the offending line: it names it, tints
+  // it in the editor, and takes you there in one click.
+  'ruleEditor.line': 'line {line}',
+  'ruleEditor.goToLine': 'Go to line {line}',
 
   // --- Rule editor: dry run ---------------------------------------------------
   'ruleEditor.dryRunTitle': 'Preview on an instance',
@@ -122,6 +178,7 @@ export const enRules: Record<string, string> = {
 
   // --- Rule editor: applicability and cheat sheet -----------------------------
   'ruleEditor.applicability': 'Applicability',
+  'ruleEditor.applicabilityHint': 'where this rule will run, given the instances known today',
   'ruleEditor.applicableTag': 'applicable',
   'ruleEditor.skippedTag': 'skipped',
   'ruleEditor.help': 'Cheat sheet',
@@ -141,6 +198,7 @@ export const enRules: Record<string, string> = {
   'ruleEditor.overridesHint':
     'An override does not write to the file: it adjusts activation, severity, schedule or thresholds, globally or for a single instance.',
   'ruleEditor.scope': 'Scope',
+  'ruleEditor.scopeHint': 'one instance, or all of them',
   'ruleEditor.allInstances': 'All instances',
   'ruleEditor.activation': 'Activation',
   'ruleEditor.ruleValue': 'Rule value ({value})',

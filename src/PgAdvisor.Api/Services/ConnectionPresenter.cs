@@ -40,12 +40,22 @@ public sealed class ConnectionPresenter(InstanceStateStore states, ILogger<Conne
         }
     }
 
-    public ConnectionResponse ToResponse(PostgresConnection connection, HealthScore? health = null)
+    /// <param name="quarantinedRules">
+    /// Règles écartées de cette instance, lues en base. Elles priment sur l'état volatil, qui
+    /// est vide au redémarrage alors que la quarantaine, elle, a survécu.
+    /// </param>
+    public ConnectionResponse ToResponse(
+        PostgresConnection connection,
+        HealthScore? health = null,
+        IReadOnlyCollection<string>? quarantinedRules = null)
     {
         var state = states.Get(connection.Id);
 
         return new ConnectionResponse
         {
+            QuarantinedRules = (quarantinedRules ?? state.QuarantinedRuleIds)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList(),
             Id = connection.Id,
             Name = connection.Name,
             Host = connection.Host,

@@ -28,6 +28,13 @@ public sealed record InstanceState
 
     /// <summary>Progression de l'analyse en cours, 0 à 1, pour la barre de progression du dashboard.</summary>
     public double? AnalysisProgress { get; init; }
+
+    /// <summary>
+    /// Règles écartées de cette instance par le garde-fou. Leur catégorie cesse d'être notée :
+    /// sans cette liste, le score s'améliorerait sans raison et personne ne saurait pourquoi.
+    /// </summary>
+    public IReadOnlySet<string> QuarantinedRuleIds { get; init; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>

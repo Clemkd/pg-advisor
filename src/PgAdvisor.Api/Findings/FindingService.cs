@@ -119,15 +119,31 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
             .Where(f => !knownRuleIds.Contains(f.RuleId))
             .ToListAsync(cancellationToken);
 
-        if (orphans.Count == 0)
+        // La mémoire du garde-fou suit le même sort : une règle supprimée ne peut plus jamais
+        // sortir de quarantaine, et sa ligne resterait là sans que rien ne puisse l'effacer.
+        var staleHealth = await db.RuleHealth
+            .Where(h => !knownRuleIds.Contains(h.RuleId))
+            .ToListAsync(cancellationToken);
+
+        if (orphans.Count == 0 && staleHealth.Count == 0)
         {
             return 0;
         }
 
         db.Findings.RemoveRange(orphans);
+        db.RuleHealth.RemoveRange(staleHealth);
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("{Count} findings deleted: their rule no longer exists.", orphans.Count);
+        if (orphans.Count > 0)
+        {
+            logger.LogInformation("{Count} findings deleted: their rule no longer exists.", orphans.Count);
+        }
+
+        if (staleHealth.Count > 0)
+        {
+            logger.LogInformation("{Count} rule health records deleted: their rule no longer exists.", staleHealth.Count);
+        }
+
         return orphans.Count;
     }
 

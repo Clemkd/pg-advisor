@@ -1,29 +1,38 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Webhook as WebhookIcon } from 'lucide-react'
-import { api, ApiError } from '../api/client'
-import type { Connection, NotificationHistoryEntry, WebhookConfiguration } from '../api/types'
-import { useAuth } from '../app/AuthContext'
+import { api, ApiError } from '@/api/client'
+import type { Connection, NotificationHistoryEntry, WebhookConfiguration } from '@/api/types'
+import { useAuth } from '@/app/AuthContext'
+import { Page } from '@/components/layout/Page'
 import {
-  Alert,
+  Badge,
   Button,
   Card,
+  CardHeader,
   Checkbox,
+  ConfirmDialog,
   EmptyState,
   Field,
   Fieldset,
   FormSection,
   Input,
+  LoadingBlock,
   Modal,
-  PageHeader,
+  Notice,
   Select,
-  Spinner,
+  SeverityBadge,
+  TBody,
+  THead,
+  Table,
   TableScroll,
-  Tag,
+  Td,
   Textarea,
-} from '../components/ui'
-import { formatDateTime, formatRelative, severityLabel } from '../lib/format'
-import { tr, useT, useTc } from '../lib/i18n'
-import type { Translator } from '../lib/i18n'
+  Th,
+  Tr,
+} from '@/components/ui/primitives'
+import { formatDateTime, formatRelative, severityLabel } from '@/lib/format'
+import { tr, useT, useTc } from '@/lib/i18n'
+import type { Translator } from '@/lib/i18n'
 
 const EVENTS = [
   { value: 'new_finding', labelKey: 'webhooks.event.newFinding' },
@@ -47,6 +56,11 @@ function eventLabel(t: Translator, value: string): string {
 function serviceLabel(t: Translator, value: string): string {
   const known = FORMATS.find((item) => item.value === value)
   return known ? t(known.labelKey) : value
+}
+
+/** Le nom long explique le choix dans une liste ; une pastille n'a la place que du nom court. */
+function formatBadgeLabel(t: Translator, value: string): string {
+  return value === 'generic' ? t('webhooks.format.genericShort') : serviceLabel(t, value)
 }
 
 interface FormState {
@@ -85,19 +99,28 @@ function guessFormat(url: string): string | null {
   return null
 }
 
+/**
+ * Notifications — famille *installation*.
+ *
+ * On y branche une destination puis on n'y revient qu'en cas d'envoi en échec : l'historique doit
+ * donc dire lisiblement ce qui est parti et ce qui a été refusé.
+ */
 export function WebhooksPage() {
   const { isAdmin } = useAuth()
   const t = useT()
   const tc = useTc()
+
   const [webhooks, setWebhooks] = useState<WebhookConfiguration[]>([])
   const [connections, setConnections] = useState<Connection[]>([])
   const [history, setHistory] = useState<NotificationHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  // Une suppression au premier clic était la seule action destructrice sans filet de
-  // l'application : les instances en demandaient déjà confirmation.
+  // Le retour d'un test porte son issue : un envoi refusé ne se lit pas comme un envoi réussi.
+  const [notice, setNotice] = useState<{ tone: 'success' | 'danger' | 'info'; message: string } | null>(
+    null,
+  )
   const [confirmDelete, setConfirmDelete] = useState<WebhookConfiguration | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
 
   const load = useCallback(async () => {
@@ -127,8 +150,17 @@ export function WebhooksPage() {
     const result = await api.webhooks.test(webhook.id)
     setNotice(
       result.success
-        ? t('webhooks.testSent', { key: webhook.key, status: result.statusCode ?? '—' })
-        : t('webhooks.testFailed', { key: webhook.key, error: result.error ?? '' }),
+        ? {
+            tone: 'success',
+            message: t('webhooks.testSent', {
+              key: webhook.key,
+              status: result.statusCode ?? '—',
+            }),
+          }
+        : {
+            tone: 'danger',
+            message: t('webhooks.testFailed', { key: webhook.key, error: result.error ?? '' }),
+          },
     )
     void load()
   }
@@ -148,155 +180,175 @@ export function WebhooksPage() {
         connectionId: webhook.connectionId,
         headers: null,
       })
-      setNotice(t('webhooks.formatFixed', { key: webhook.key, format: serviceLabel(t, format) }))
+      setNotice({
+        tone: 'info',
+        message: t('webhooks.formatFixed', { key: webhook.key, format: serviceLabel(t, format) }),
+      })
       void load()
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : t('webhooks.fixFailed'))
     }
   }
 
-  const addButton = isAdmin && (
+  async function remove() {
+    if (!confirmDelete) return
+    setDeleting(true)
+    try {
+      await api.webhooks.remove(confirmDelete.id)
+      setConfirmDelete(null)
+      void load()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : tr('webhooks.deleteFailed'))
+      setConfirmDelete(null)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const addButton = isAdmin ? (
     <Button variant="primary" onClick={() => setForm(EMPTY_FORM)}>
       {t('webhooks.add')}
     </Button>
-  )
+  ) : null
 
   return (
-    <div className="space-y-5">
-      <PageHeader title={t('nav.webhooks')} subtitle={t('webhooks.subtitle')} actions={addButton} />
+    <Page title={t('nav.webhooks')} description={t('webhooks.subtitle')} actions={addButton}>
+      <div className="space-y-4">
+        {error && (
+          <Notice tone="danger" title={t('common.error')} onDismiss={() => setError(null)}>
+            {error}
+          </Notice>
+        )}
 
-      {error && <Alert title={t('common.error')}>{error}</Alert>}
-      {notice && (
-        <Alert tone="info" onDismiss={() => setNotice(null)}>
-          {notice}
-        </Alert>
-      )}
+        {notice && (
+          <Notice tone={notice.tone} onDismiss={() => setNotice(null)}>
+            {notice.message}
+          </Notice>
+        )}
 
-      <Card title={tc('webhooks.count', webhooks.length)} padded={false}>
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Spinner className="size-6" />
-          </div>
-        ) : webhooks.length === 0 ? (
-          <EmptyState
-            title={t('webhooks.empty.title')}
-            icon={<WebhookIcon className="size-6" aria-hidden />}
-            action={addButton}
-          >
-            {t('webhooks.empty.body')}
-          </EmptyState>
-        ) : (
-          <ul className="divide-y divide-border-subtle">
-            {webhooks.map((webhook) => {
-              // L'URL désigne sans ambiguïté le service attendu : un format générique sur une
-              // URL Discord ou Slack produit un « 400 Bad Request ».
-              const expected = guessFormat(webhook.url)
-              const mismatch = expected && expected !== webhook.format ? expected : null
+        {!isAdmin && <Notice tone="info">{t('webhooks.viewerNotice')}</Notice>}
 
-              return (
-                <li key={webhook.id} className="px-4 py-3">
-                  {/* Identité, adresse et réglages forment une colonne unique ; les actions
-                      restent à droite, à hauteur de la ligne d'identité. */}
-                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                    <div className="min-w-0 flex-1 basis-72 space-y-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium text-ink">{webhook.key}</span>
-                        {webhook.enabled ? (
-                          <Tag tone="good">{t('webhooks.tag.enabled')}</Tag>
-                        ) : (
-                          <Tag>{t('webhooks.tag.disabled')}</Tag>
-                        )}
-                        <Tag tone={webhook.format === 'generic' ? 'neutral' : 'accent'}>
-                          {webhook.format}
-                        </Tag>
-                        {webhook.hasHeaders && <Tag>{t('webhooks.tag.headers')}</Tag>}
+        <Card>
+          <CardHeader title={tc('webhooks.count', webhooks.length)} />
+
+          {loading ? (
+            <LoadingBlock />
+          ) : webhooks.length === 0 ? (
+            <EmptyState
+              icon={<WebhookIcon className="size-6" aria-hidden />}
+              title={t('webhooks.empty.title')}
+              description={t('webhooks.empty.body')}
+              action={addButton}
+            />
+          ) : (
+            <ul className="divide-border-subtle divide-y">
+              {webhooks.map((webhook) => {
+                // L'URL désigne sans ambiguïté le service attendu : un format générique sur une
+                // URL Discord ou Slack produit un « 400 Bad Request ».
+                const expected = guessFormat(webhook.url)
+                const mismatch = expected && expected !== webhook.format ? expected : null
+
+                return (
+                  <li key={webhook.id} className="px-4 py-3">
+                    {/* Identité, adresse et réglages forment une colonne unique ; les actions
+                        restent à droite, à hauteur de la ligne d'identité. */}
+                    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                      <div className="min-w-0 flex-1 basis-72 space-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-ink text-body font-medium">{webhook.key}</span>
+                          {webhook.enabled ? (
+                            <Badge tone="success">{t('webhooks.tag.enabled')}</Badge>
+                          ) : (
+                            <Badge>{t('webhooks.tag.disabled')}</Badge>
+                          )}
+                          <Badge tone={webhook.format === 'generic' ? 'neutral' : 'info'}>
+                            {formatBadgeLabel(t, webhook.format)}
+                          </Badge>
+                          {webhook.hasHeaders && <Badge>{t('webhooks.tag.headers')}</Badge>}
+                        </div>
+
+                        {/* L'adresse complète tient sur une ligne : elle reste lisible en entier
+                            au survol et dans le formulaire d'édition. */}
+                        <p className="text-ink-muted truncate font-mono text-meta" title={webhook.url}>
+                          {webhook.url}
+                        </p>
+
+                        <p className="text-ink-muted text-meta">
+                          {t('webhooks.fromSeverity', {
+                            severity: severityLabel(webhook.minimumSeverity),
+                          })}
+                          {' · '}
+                          {webhook.events.map((event) => eventLabel(t, event)).join(', ')}
+                          {' · '}
+                          {webhook.connectionName ?? t('webhooks.allInstances')}
+                          {webhook.lastAttemptAt && (
+                            <>
+                              {' · '}
+                              {webhook.lastAttemptSucceeded ? (
+                                <span className="text-success-strong">
+                                  {t('webhooks.lastSuccess', {
+                                    when: formatRelative(webhook.lastAttemptAt),
+                                  })}
+                                </span>
+                              ) : (
+                                <span className="text-danger-strong break-words">
+                                  {t('webhooks.lastFailure', {
+                                    when: formatRelative(webhook.lastAttemptAt),
+                                    error: webhook.lastError ?? '',
+                                  })}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </p>
                       </div>
 
-                      {/* L'adresse complète tient sur une ligne : elle reste lisible en entier
-                          au survol et dans le formulaire d'édition. */}
-                      <p
-                        className="truncate font-mono text-xs text-ink-muted"
-                        title={webhook.url}
-                      >
-                        {webhook.url}
-                      </p>
-
-                      <p className="text-xs text-ink-muted">
-                        {t('webhooks.fromSeverity', {
-                          severity: severityLabel(webhook.minimumSeverity),
-                        })}
-                        {' · '}
-                        {webhook.events.map((event) => eventLabel(t, event)).join(', ')}
-                        {' · '}
-                        {webhook.connectionName ?? t('webhooks.allInstances')}
-                        {webhook.lastAttemptAt && (
-                          <>
-                            {' · '}
-                            {webhook.lastAttemptSucceeded ? (
-                              <span className="text-success">
-                                {t('webhooks.lastSuccess', {
-                                  when: formatRelative(webhook.lastAttemptAt),
-                                })}
-                              </span>
-                            ) : (
-                              <span className="break-words text-danger">
-                                {t('webhooks.lastFailure', {
-                                  when: formatRelative(webhook.lastAttemptAt),
-                                  error: webhook.lastError ?? '',
-                                })}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </p>
+                      {isAdmin && (
+                        <div className="flex shrink-0 flex-wrap items-center gap-1">
+                          <Button variant="ghost" onClick={() => void test(webhook)}>
+                            {t('common.test')}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() =>
+                              setForm({
+                                id: webhook.id,
+                                key: webhook.key,
+                                url: webhook.url,
+                                enabled: webhook.enabled,
+                                minimumSeverity: webhook.minimumSeverity,
+                                format: webhook.format,
+                                events: webhook.events,
+                                connectionId: webhook.connectionId
+                                  ? String(webhook.connectionId)
+                                  : '',
+                                headers: '',
+                                replaceHeaders: false,
+                                formatTouched: true,
+                              })
+                            }
+                          >
+                            {t('common.edit')}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="text-danger-strong hover:text-danger-strong"
+                            onClick={() => setConfirmDelete(webhook)}
+                          >
+                            {t('common.delete')}
+                          </Button>
+                        </div>
+                      )}
                     </div>
 
-                    {isAdmin && (
-                      <div className="flex shrink-0 flex-wrap items-center gap-1">
-                        <Button variant="ghost" onClick={() => void test(webhook)}>
-                          {t('common.test')}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          onClick={() =>
-                            setForm({
-                              id: webhook.id,
-                              key: webhook.key,
-                              url: webhook.url,
-                              enabled: webhook.enabled,
-                              minimumSeverity: webhook.minimumSeverity,
-                              format: webhook.format,
-                              events: webhook.events,
-                              connectionId: webhook.connectionId
-                                ? String(webhook.connectionId)
-                                : '',
-                              headers: '',
-                              replaceHeaders: false,
-                              formatTouched: true,
-                            })
-                          }
-                        >
-                          {t('common.edit')}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="text-danger hover:text-danger"
-                          onClick={() => setConfirmDelete(webhook)}
-                        >
-                          {t('common.delete')}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  {mismatch && (
-                    <div className="mt-2">
-                      <Alert
+                    {mismatch && (
+                      <Notice
                         tone="warning"
+                        className="mt-2"
                         title={t('webhooks.mismatchTitle', { service: serviceLabel(t, mismatch) })}
                       >
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-                          <p className="min-w-0 flex-1 basis-72 text-xs">
+                          <p className="min-w-0 flex-1 basis-72">
                             {t('webhooks.mismatchBody', {
                               format: webhook.format,
                               service: serviceLabel(t, mismatch),
@@ -308,63 +360,63 @@ export function WebhooksPage() {
                             </Button>
                           )}
                         </div>
-                      </Alert>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
+                      </Notice>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </Card>
 
-      <Card title={t('webhooks.history.title', { count: history.length })} padded={false}>
-        {history.length === 0 ? (
-          <EmptyState title={t('webhooks.history.empty')} />
-        ) : (
-          <TableScroll minWidth={640}>
-            <table className="w-full text-sm">
-              <thead className="bg-surface-sunken text-left text-xs uppercase tracking-wide text-ink-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">{t('webhooks.history.date')}</th>
-                  <th className="px-4 py-2 font-medium">{t('webhooks.history.webhook')}</th>
-                  <th className="px-4 py-2 font-medium">{t('webhooks.history.event')}</th>
-                  <th className="px-4 py-2 font-medium">{t('common.severity')}</th>
-                  <th className="px-4 py-2 font-medium">{t('webhooks.history.result')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-subtle">
-                {history.map((entry, index) => (
-                  <tr key={index} className="align-top">
-                    <td className="whitespace-nowrap px-4 py-2 text-ink-muted">
-                      {formatDateTime(entry.at)}
-                    </td>
-                    <td className="px-4 py-2 font-mono text-xs text-ink">{entry.webhook}</td>
-                    <td className="whitespace-nowrap px-4 py-2 text-ink-muted">
-                      {eventLabel(t, entry.event)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-ink-muted">
-                      {severityLabel(entry.severity)}
-                    </td>
-                    <td className="px-4 py-2">
-                      {entry.success ? (
-                        <Tag tone="good">HTTP {entry.statusCode}</Tag>
-                      ) : (
-                        <span className="text-xs text-danger">
-                          {t('webhooks.history.failure', {
-                            attempts: tc('webhooks.history.attempts', entry.attempts),
-                            error: entry.error ?? '',
-                          })}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableScroll>
-        )}
-      </Card>
+        <Card>
+          <CardHeader title={t('webhooks.history.title', { count: history.length })} />
+
+          {history.length === 0 ? (
+            <EmptyState title={t('webhooks.history.empty')} />
+          ) : (
+            <TableScroll minWidth={720}>
+              <Table>
+                <THead>
+                  <Tr>
+                    <Th>{t('webhooks.history.date')}</Th>
+                    <Th>{t('webhooks.history.webhook')}</Th>
+                    <Th>{t('webhooks.history.event')}</Th>
+                    <Th>{t('common.severity')}</Th>
+                    <Th>{t('webhooks.history.result')}</Th>
+                  </Tr>
+                </THead>
+                <TBody>
+                  {history.map((entry, index) => (
+                    <Tr key={`${entry.at}-${entry.webhook}-${index}`}>
+                      <Td className="text-ink-muted whitespace-nowrap">
+                        {formatDateTime(entry.at)}
+                      </Td>
+                      <Td className="font-mono">{entry.webhook}</Td>
+                      <Td className="whitespace-nowrap">{eventLabel(t, entry.event)}</Td>
+                      <Td>
+                        <SeverityBadge severity={entry.severity} />
+                      </Td>
+                      <Td>
+                        {entry.success ? (
+                          <Badge tone="success">HTTP {entry.statusCode}</Badge>
+                        ) : (
+                          <span className="text-danger-strong">
+                            {t('webhooks.history.failure', {
+                              attempts: tc('webhooks.history.attempts', entry.attempts),
+                              error: entry.error ?? '',
+                            })}
+                          </span>
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </TBody>
+              </Table>
+            </TableScroll>
+          )}
+        </Card>
+      </div>
 
       {form && (
         <WebhookForm
@@ -379,38 +431,23 @@ export function WebhooksPage() {
       )}
 
       {confirmDelete && (
-        <Modal
+        <ConfirmDialog
           title={t('webhooks.delete.title', { name: confirmDelete.key })}
-          onClose={() => setConfirmDelete(null)}
-          size="sm"
-          footer={
-            <>
-              <Button onClick={() => setConfirmDelete(null)}>{t('common.cancel')}</Button>
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  try {
-                    await api.webhooks.remove(confirmDelete.id)
-                    setConfirmDelete(null)
-                    void load()
-                  } catch (cause) {
-                    setError(cause instanceof ApiError ? cause.message : tr('webhooks.deleteFailed'))
-                    setConfirmDelete(null)
-                  }
-                }}
-              >
-                {t('common.delete')}
-              </Button>
-            </>
-          }
-        >
-          <p className="text-ink text-sm">{t('webhooks.delete.body')}</p>
-        </Modal>
+          description={t('webhooks.delete.body')}
+          confirmLabel={t('webhooks.delete.confirm')}
+          busy={deleting}
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={() => void remove()}
+        />
       )}
-    </div>
+    </Page>
   )
 }
 
+/**
+ * Formulaire d'une destination. Une colonne, trois ensembles : où l'on écrit, ce qui déclenche
+ * l'envoi, comment la requête est signée.
+ */
 function WebhookForm({
   initial,
   connections,
@@ -475,64 +512,52 @@ function WebhookForm({
     <Modal
       title={editing ? t('webhooks.form.editTitle', { key: initial.key }) : t('webhooks.form.addTitle')}
       onClose={onClose}
-      size="lg"
+      size="md"
       footer={
         <>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
-          <Button form="webhook-form" type="submit" variant="primary" disabled={busy}>
-            {busy && <Spinner />} {t('common.save')}
+          <Button onClick={onClose} disabled={busy}>
+            {t('common.cancel')}
+          </Button>
+          <Button form="webhook-form" type="submit" variant="primary" size="lg" loading={busy}>
+            {editing ? t('webhooks.form.submit') : t('webhooks.form.create')}
           </Button>
         </>
       }
     >
-      {/* Trois ensembles : où l'on écrit, ce qui déclenche l'envoi, comment la requête est
-          signée. Deux colonnes dès qu'il y a la place, pour tenir sans défilement. */}
       <form id="webhook-form" onSubmit={submit} className="space-y-5">
-        <FormSection
-          title={t('webhooks.form.destination')}
-          action={
-            <Checkbox
-              label={t('webhooks.form.enabled')}
-              checked={form.enabled}
-              onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
+        {error && <Notice tone="danger">{error}</Notice>}
+
+        <FormSection title={t('webhooks.form.destination')}>
+          <Field label={t('webhooks.form.key')} hint={t('webhooks.form.keyHint')}>
+            <Input
+              value={form.key}
+              required
+              pattern="[a-z0-9][a-z0-9._-]*"
+              onChange={(event) => setForm({ ...form, key: event.target.value })}
             />
-          }
-        >
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label={t('webhooks.form.key')} hint={t('webhooks.form.keyHint')}>
-              <Input
-                value={form.key}
-                required
-                pattern="[a-z0-9][a-z0-9._-]*"
-                onChange={(event) => setForm({ ...form, key: event.target.value })}
-              />
-            </Field>
+          </Field>
 
-            <Field label={t('webhooks.form.url')} className="sm:col-span-2">
-              <Input
-                type="url"
-                value={form.url}
-                required
-                placeholder={t('webhooks.form.urlPlaceholder')}
-                onChange={(event) => {
-                  const url = event.target.value
-                  // Le format est déduit de l'URL à la saisie, tant que l'opérateur ne l'a pas
-                  // choisi lui-même : c'est la cause n°1 d'un HTTP 400 côté Discord ou Slack.
-                  const detected = guessFormat(url)
-                  setForm((current) => ({
-                    ...current,
-                    url,
-                    format: detected && !current.formatTouched ? detected : current.format,
-                  }))
-                }}
-              />
-            </Field>
-          </div>
+          <Field label={t('webhooks.form.url')} hint={t('webhooks.form.urlHint')}>
+            <Input
+              type="url"
+              value={form.url}
+              required
+              placeholder={t('webhooks.form.urlPlaceholder')}
+              onChange={(event) => {
+                const url = event.target.value
+                // Le format est déduit de l'URL à la saisie, tant que l'opérateur ne l'a pas
+                // choisi lui-même : c'est la cause n°1 d'un HTTP 400 côté Discord ou Slack.
+                const detected = guessFormat(url)
+                setForm((current) => ({
+                  ...current,
+                  url,
+                  format: detected && !current.formatTouched ? detected : current.format,
+                }))
+              }}
+            />
+          </Field>
 
-          <Field
-            label={t('webhooks.form.format')}
-            hint={formatHint ? t(formatHint) : undefined}
-          >
+          <Field label={t('webhooks.form.format')} hint={formatHint ? t(formatHint) : undefined}>
             <Select
               value={form.format}
               onChange={(event) =>
@@ -548,39 +573,49 @@ function WebhookForm({
           </Field>
 
           {form.format === 'generic' && guessed && (
-            <Alert tone="warning">{t('webhooks.form.mismatch', { service: serviceLabel(t, guessed) })}</Alert>
+            <Notice tone="warning">
+              {t('webhooks.form.mismatch', { service: serviceLabel(t, guessed) })}
+            </Notice>
           )}
+
+          <Checkbox
+            label={t('webhooks.form.enabled')}
+            hint={t('webhooks.form.enabledHint')}
+            checked={form.enabled}
+            onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
+          />
         </FormSection>
 
         <FormSection title={t('webhooks.form.trigger')}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={t('webhooks.form.minimumSeverity')}>
-              <Select
-                value={form.minimumSeverity}
-                onChange={(event) => setForm({ ...form, minimumSeverity: event.target.value })}
-              >
-                <option value="info">{t('severity.info')}</option>
-                <option value="warning">{t('severity.warning')}</option>
-                <option value="critical">{t('severity.critical')}</option>
-              </Select>
-            </Field>
+          <Field
+            label={t('webhooks.form.minimumSeverity')}
+            hint={t('webhooks.form.minimumSeverityHint')}
+          >
+            <Select
+              value={form.minimumSeverity}
+              onChange={(event) => setForm({ ...form, minimumSeverity: event.target.value })}
+            >
+              <option value="info">{t('severity.info')}</option>
+              <option value="warning">{t('severity.warning')}</option>
+              <option value="critical">{t('severity.critical')}</option>
+            </Select>
+          </Field>
 
-            <Field label={t('webhooks.form.connection')}>
-              <Select
-                value={form.connectionId}
-                onChange={(event) => setForm({ ...form, connectionId: event.target.value })}
-              >
-                <option value="">{t('webhooks.allInstances')}</option>
-                {connections.map((connection) => (
-                  <option key={connection.id} value={connection.id}>
-                    {connection.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
+          <Field label={t('webhooks.form.connection')} hint={t('webhooks.form.connectionHint')}>
+            <Select
+              value={form.connectionId}
+              onChange={(event) => setForm({ ...form, connectionId: event.target.value })}
+            >
+              <option value="">{t('webhooks.allInstances')}</option>
+              {connections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
 
-          <Fieldset legend={t('webhooks.form.events')}>
+          <Fieldset legend={t('webhooks.form.events')} hint={t('webhooks.form.eventsHint')}>
             {EVENTS.map((event) => (
               <Checkbox
                 key={event.value}
@@ -618,16 +653,14 @@ function WebhookForm({
                 rows={3}
                 spellCheck={false}
                 onChange={(event) => setForm({ ...form, headers: event.target.value })}
-                className="font-mono text-xs"
+                className="font-mono"
                 placeholder="Authorization: Bearer ..."
               />
             </Field>
           ) : (
-            <p className="text-xs text-ink-muted">{t('webhooks.form.headersKept')}</p>
+            <p className="text-ink-muted text-body">{t('webhooks.form.headersKept')}</p>
           )}
         </FormSection>
-
-        {error && <Alert>{error}</Alert>}
       </form>
     </Modal>
   )

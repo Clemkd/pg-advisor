@@ -13,6 +13,12 @@ public static class AdvisorEventTypes
     public const string AnalysisProgress = "analysis.progress";
     public const string RulesReloaded = "rules.reloaded";
     public const string InstanceChanged = "instance.changed";
+
+    /// <summary>Une règle a été signalée ou mise en quarantaine sur une instance.</summary>
+    public const string RuleGuardChanged = "rule.guard";
+
+    /// <summary>Une règle signalée s'est rétablie sur une instance.</summary>
+    public const string RuleRecovered = "rule.recovered";
 }
 
 public sealed record AdvisorEvent(string Type, object? Payload, int? ConnectionId = null)

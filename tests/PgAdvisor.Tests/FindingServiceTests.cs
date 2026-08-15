@@ -239,6 +239,44 @@ public sealed class FindingServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PurgeSupprimeAussiLaMemoireDuGardeFou()
+    {
+        // Une règle supprimée ne peut plus jamais sortir de quarantaine : sa mémoire n'a plus
+        // rien à surveiller et resterait là sans que rien ne puisse l'effacer.
+        _db.RuleHealth.Add(new RuleHealth
+        {
+            ConnectionId = _connectionId,
+            RuleId = "vacuum.test",
+            State = RuleHealthStates.Quarantined,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await _db.SaveChangesAsync();
+
+        await _service.PurgeOrphansAsync(["une.autre.regle"], default);
+
+        Assert.Equal(0, await _db.RuleHealth.CountAsync());
+    }
+
+    [Fact]
+    public async Task PurgeConserveLaMemoireDesReglesConnues()
+    {
+        _db.RuleHealth.Add(new RuleHealth
+        {
+            ConnectionId = _connectionId,
+            RuleId = "vacuum.test",
+            State = RuleHealthStates.Quarantined,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await _db.SaveChangesAsync();
+
+        await _service.PurgeOrphansAsync(["vacuum.test"], default);
+
+        Assert.Equal(1, await _db.RuleHealth.CountAsync());
+    }
+
+    [Fact]
     public async Task PurgeConserveLesFindingsDeReglesConnues()
     {
         await _service.ReconcileAsync(_connectionId, ["vacuum.test"], [Candidate()], default);

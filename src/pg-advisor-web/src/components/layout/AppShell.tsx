@@ -99,15 +99,28 @@ export function AppShell() {
           <Breadcrumbs />
 
           <div className="ml-auto flex items-center gap-2">
+            {/*
+              État du flux, annoncé et non seulement peint.
+              Un flux interrompu se signalait par une pastille grise sans libellé sous `sm` :
+              l'information tenait dans une couleur discrète, et rien ne la disait à un lecteur
+              d'écran. Or l'application vit ouverte sur un second écran — un flux mort qui ne se
+              voit pas fait lire des données périmées pendant des heures. D'où le ton
+              d'avertissement, le libellé toujours présent et la région live.
+            */}
             <span
-              className="text-ink-faint flex items-center gap-1.5 text-xs"
+              role="status"
+              aria-live="polite"
+              className={cn(
+                'text-meta flex items-center gap-1.5 rounded-full px-2 py-0.5',
+                connected ? 'text-ink-muted' : 'bg-warning-subtle text-warning-strong font-medium',
+              )}
               title={connected ? t('shell.connected') : t('shell.disconnected')}
             >
               <span
                 aria-hidden
-                className={cn('size-2 rounded-full', connected ? 'bg-success' : 'bg-ink-faint')}
+                className={cn('size-2 shrink-0 rounded-full', connected ? 'bg-success' : 'bg-warning')}
               />
-              <span className="hidden sm:inline">
+              <span className="sr-only sm:not-sr-only">
                 {connected ? t('shell.realtime.on') : t('shell.realtime.off')}
               </span>
             </span>
@@ -130,10 +143,10 @@ export function AppShell() {
               className="flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-1.5"
               title={user?.role === 'Admin' ? t('role.admin') : t('role.viewer')}
             >
-              <span className="bg-brand-subtle text-brand grid size-7 place-items-center rounded-full text-xs font-semibold">
+              <span className="bg-brand-subtle text-brand grid size-7 place-items-center rounded-full text-meta font-semibold">
                 {initials(user?.username)}
               </span>
-              <span className="text-ink hidden max-w-32 truncate text-sm sm:block">
+              <span className="text-ink hidden max-w-32 truncate text-body sm:block">
                 {user?.username}
               </span>
             </span>
@@ -208,7 +221,7 @@ function LanguageMenu() {
               setOpen(false)
             }}
           >
-            <span className="w-6 text-xs font-semibold uppercase">{option}</span>
+            <span className="w-6 text-meta font-semibold uppercase">{option}</span>
             <span className="truncate">{LOCALE_LABELS[option]}</span>
           </BubbleItem>
         ))}

@@ -42,6 +42,24 @@ public static class RuleGroups
         group is not null && All.Contains(group, StringComparer.OrdinalIgnoreCase);
 }
 
+/// <summary>Bornes des champs numériques d'une règle, partagées par la validation et l'API.</summary>
+public static class RuleLimits
+{
+    public const int MinIntervalSeconds = 5;
+    public const int MaxIntervalSeconds = 86_400;
+
+    public const int MinLimit = 1;
+    public const int MaxLimit = 1_000;
+
+    /// <summary>
+    /// Bornes du délai propre à une règle. Le plafond est volontairement bas : au-delà de cinq
+    /// minutes, une règle de supervision ne borne plus rien et redevient ce que le garde-fou
+    /// cherche à empêcher.
+    /// </summary>
+    public const int MinTimeoutSeconds = 1;
+    public const int MaxTimeoutSeconds = 300;
+}
+
 /// <summary>Règle telle qu'écrite dans le fichier YAML.</summary>
 public sealed class RuleDefinition
 {
@@ -58,6 +76,12 @@ public sealed class RuleDefinition
 
     /// <summary>Périodicité propre en secondes, prioritaire sur le groupe.</summary>
     public int? IntervalSeconds { get; set; }
+
+    /// <summary>
+    /// Délai maximal accordé à la règle, en secondes. Appliqué en statement_timeout sur la
+    /// session qui l'exécute. À défaut, le délai global (Scheduler:QueryTimeout) s'applique.
+    /// </summary>
+    public int? TimeoutSeconds { get; set; }
 
     public RuleRequirements? Requires { get; set; }
 

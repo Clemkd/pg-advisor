@@ -2,10 +2,14 @@ using System.Threading.Channels;
 
 namespace PgAdvisor.Api.Notifications;
 
-/// <summary>Demande de notification, résolue et envoyée hors du chemin d'analyse.</summary>
+/// <summary>
+/// Demande de notification, résolue et envoyée hors du chemin d'analyse. Le sujet dit ce que
+/// <paramref name="SubjectId"/> désigne : un finding, ou l'état d'une règle sur une instance.
+/// </summary>
 public sealed record NotificationRequest(
     int ConnectionId,
-    int FindingId,
+    string Subject,
+    int SubjectId,
     string Event,
     long Cycle,
     string Severity);
@@ -32,8 +36,8 @@ public sealed class NotificationQueue(ILogger<NotificationQueue> logger)
     {
         if (!_channel.Writer.TryWrite(request))
         {
-            logger.LogWarning("Notification queue is full: request {Event} for finding {FindingId} dropped.",
-                request.Event, request.FindingId);
+            logger.LogWarning("Notification queue is full: request {Event} for {Subject} {SubjectId} dropped.",
+                request.Event, request.Subject, request.SubjectId);
         }
     }
 }

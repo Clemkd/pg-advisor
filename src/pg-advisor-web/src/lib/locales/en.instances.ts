@@ -6,6 +6,43 @@
  * français, et l'écart se verrait à l'écran.
  */
 export const enInstances: Record<string, string> = {
+  // --- Overview -------------------------------------------------------------
+  'dashboard.scoredInstances.one': 'average over {count} scored instance',
+  'dashboard.scoredInstances.other': 'average over {count} scored instances',
+  'dashboard.activeDiagnostics': 'Active diagnostics',
+  'dashboard.diagnosticsByCategory': 'Active diagnostics by category',
+  'dashboard.noDiagnostic': 'No active diagnostic',
+  'dashboard.noDiagnosticBadge': 'no diagnostic',
+  'dashboard.handleDiagnostics': 'Work through the diagnostics',
+  'dashboard.resolvedCount.one': '{count} resolved',
+  'dashboard.resolvedCount.other': '{count} resolved',
+  'dashboard.ignoredCount.one': '{count} ignored',
+  'dashboard.ignoredCount.other': '{count} ignored',
+  'dashboard.noInstanceHint':
+    'The Advisor scores every instance from its first collection onwards, and never writes to it.',
+  'dashboard.rulesTitle': 'Rule engine',
+  'dashboard.awaitingCollection': 'awaiting collection',
+  'dashboard.live.newCritical.one': '{count} new critical diagnostic',
+  'dashboard.live.newCritical.other': '{count} new critical diagnostics',
+  'dashboard.live.scoreChanged': 'Global health: {score} out of 100',
+
+  // --- Instance detail ------------------------------------------------------
+  'instanceDetail.readableViews.one': 'Readable view ({count})',
+  'instanceDetail.readableViews.other': 'Readable views ({count})',
+  'instanceDetail.extensionsPresent': 'Extensions present ({count})',
+  'instanceDetail.extensionsMissing': 'Extensions missing ({count})',
+  'instanceDetail.noExtension': 'No extension detected',
+  'instanceDetail.noView': 'No readable view',
+  'instanceDetail.readOnlyTitle': 'Read-only monitoring',
+  'instanceDetail.readOnlyIntro':
+    'The Advisor never writes to this instance. Every session is opened with:',
+  'instanceDetail.readOnlyItem': 'the session refuses any write',
+  'instanceDetail.readOnlyTimeoutItem': 'an over-long statement is cancelled',
+  'instanceDetail.readOnlyZeroTouch':
+    'The corrective statements offered are yours to run, elsewhere.',
+  'instanceDetail.seeDiagnostics': 'View the diagnostics',
+  'instanceDetail.live.scoreChanged': 'Health of {name}: {score} out of 100',
+
   // --- Instances: list ------------------------------------------------------
   'instances.subtitle': 'Every instance is monitored read-only and scored on its own.',
   'instances.add': 'Add an instance',
@@ -19,7 +56,11 @@ export const enInstances: Record<string, string> = {
   'instances.collectedAt': 'Collected {when}',
   'instances.delete.title': 'Delete “{name}”?',
   'instances.delete.body':
-    'The PostgreSQL instance is left untouched: only the stored connection, its findings and its history are removed from the Advisor.',
+    'The PostgreSQL instance is left untouched: only the stored connection, its diagnostics and its history are removed from the Advisor.',
+  'instances.delete.confirm': 'Delete the instance',
+  'instances.column.score': 'Health',
+  'instances.viewerNotice':
+    'Your account reads the monitoring without configuring it: managing instances is reserved for administrators.',
 
   // --- Instances: connection form -------------------------------------------
   'instances.form.addTitle': 'Add a PostgreSQL instance',
@@ -37,11 +78,19 @@ export const enInstances: Record<string, string> = {
   'instances.form.usernameHint': 'A read-only role, member of pg_monitor if possible',
   'instances.form.password': 'Password',
   'instances.form.passwordHint': 'Leave empty to keep the stored password',
+  'instances.form.passwordNewHint': 'Stored encrypted, never shown again once saved',
   'instances.form.interval': 'Collection interval (s)',
   'instances.form.intervalHint': '0 to follow the global scheduler period',
   'instances.form.test': 'Test connection',
   'instances.form.testFailed': 'Unable to run the test.',
   'instances.form.saveFailed': 'Unable to save.',
+  'instances.form.hostHint': 'Address reachable from the Advisor container',
+  'instances.form.portHint': '5432 unless a custom port is used',
+  'instances.form.databaseHint': 'Only this database is analysed on the server',
+  'instances.form.sslModeHint': 'Prefer encrypts the session as soon as the server accepts it',
+  'instances.form.enabledHint': 'unchecked, it stays stored but is no longer collected',
+  'instances.form.create': 'Add the instance',
+  'instances.form.submit': 'Save the instance',
 
   // --- Instances: connection test result ------------------------------------
   'instances.test.failedTitle': 'Connection failed',
@@ -54,18 +103,19 @@ export const enInstances: Record<string, string> = {
   'instances.test.missing': 'Missing ({count})',
 
   // --- Notifications: list --------------------------------------------------
-  'webhooks.subtitle': 'Each finding episode is notified only once per destination.',
+  'webhooks.subtitle': 'Each diagnostic episode is notified only once per destination.',
   'webhooks.add': 'Add a webhook',
   'webhooks.count.one': '{count} webhook',
   'webhooks.count.other': '{count} webhooks',
   'webhooks.empty.title': 'No webhook configured',
   'webhooks.empty.body':
-    'A webhook receives new findings and their resolutions. Each episode is notified only once per destination.',
-  'webhooks.event.newFinding': 'New finding',
-  'webhooks.event.findingResolved': 'Finding resolved',
+    'A webhook receives new diagnostics and their resolutions. Each episode is notified only once per destination.',
+  'webhooks.event.newFinding': 'New diagnostic',
+  'webhooks.event.findingResolved': 'Diagnostic resolved',
   'webhooks.format.generic': 'Generic (full JSON)',
+  'webhooks.format.genericShort': 'Generic',
   'webhooks.format.genericHint':
-    'Full payload: instance, finding, evidence. For a custom webhook or an alert router.',
+    'Full payload: instance, diagnostic, evidence. For a custom webhook or an alert router.',
   'webhooks.format.discord': 'Discord',
   'webhooks.format.discordHint':
     'Discord embed coloured by severity. Required for a discord.com/api/webhooks/… URL.',
@@ -122,15 +172,27 @@ export const enInstances: Record<string, string> = {
   'webhooks.form.replaceHeaders': 'Replace the stored headers',
   'webhooks.form.headersKept': 'The stored HTTP headers are kept as they are.',
   'webhooks.form.saveFailed': 'Unable to save.',
+  'webhooks.form.enabledHint': 'unchecked, it stays stored but sends nothing',
+  'webhooks.form.urlHint': 'Address called with POST on every delivery',
+  'webhooks.form.minimumSeverityHint': 'Less severe diagnostics trigger no delivery at all',
+  'webhooks.form.connectionHint': 'Restricts deliveries to a single monitored instance',
+  'webhooks.form.eventsHint': 'At least one event, otherwise nothing is ever sent',
+  'webhooks.form.create': 'Add the webhook',
+  'webhooks.form.submit': 'Save the webhook',
+  'webhooks.delete.confirm': 'Delete the webhook',
+  'webhooks.viewerNotice':
+    'Your account reads the notifications without configuring them: managing them is reserved for administrators.',
 
   // --- Accounts -------------------------------------------------------------
   'users.subtitle':
-    'A viewer reads the dashboard and the recommendations; an administrator manages instances, rules and notifications.',
+    'A viewer reads the overview and the diagnostics; an administrator manages instances, rules and notifications.',
   'users.adminOnly': 'This page is reserved for administrators.',
   'users.add': 'Add an account',
   'users.count.one': '{count} account',
   'users.count.other': '{count} accounts',
-  'users.empty': 'No account',
+  'users.empty': 'Add a first account',
+  'users.emptyHint':
+    'An account grants access to the Advisor: a viewer reads the monitoring, an administrator configures it.',
   'users.column.username': 'Username',
   'users.column.role': 'Role',
   'users.column.createdAt': 'Created on',
@@ -138,7 +200,7 @@ export const enInstances: Record<string, string> = {
   'users.you': 'you',
   'users.mustChangePassword': 'password to change',
   'users.roleFor': 'Role of {name}',
-  'users.resetPassword': 'Password',
+  'users.resetPassword': 'New password',
   'users.createFailed': 'Unable to create the account.',
   'users.updateFailed': 'Unable to save the change.',
   'users.deleteFailed': 'Unable to delete the account.',
@@ -147,17 +209,24 @@ export const enInstances: Record<string, string> = {
   'users.form.passwordHint': '10 characters minimum',
   'users.form.role': 'Role',
   'users.form.roleHint': 'A viewer reads the dashboard but changes nothing',
+  'users.form.create': 'Create the account',
+  'users.form.usernameHint': 'Used to sign in; it can no longer be changed afterwards',
   'users.reset.title': 'New password for “{name}”',
+  'users.reset.body':
+    'The account will have to use this password on its next sign-in. It is shown nowhere once saved: pass it on yourself.',
+  'users.reset.submit': 'Save the password',
+  'users.delete.confirm': 'Delete the account',
   'users.changeOwn.title': 'Change my password',
+  'users.changeOwn.hint': 'The current session stays open after the change.',
   'users.changeOwn.current': 'Current password',
   'users.changeOwn.new': 'New password',
   'users.changeOwn.submit': 'Change',
   'users.changeOwn.done': 'Password changed.',
   'webhooks.delete.title': 'Delete "{name}"?',
   'webhooks.delete.body':
-    'The configuration and its delivery history are removed. Findings already notified are not sent again.',
+    'The configuration and its delivery history are removed. Diagnostics already notified are not sent again.',
   'webhooks.deleteFailed': 'Unable to delete.',
   'users.delete.title': 'Delete "{name}"?',
   'users.delete.body':
-    'The account loses access immediately. Findings it resolved or ignored keep its name in their history.',
+    'The account loses access immediately. Diagnostics it ignored keep its name in their history.',
 }

@@ -14,7 +14,10 @@
 
   --color-ink: oklch(21% 0.015 265);
   --color-ink-muted: oklch(50% 0.012 265);
-  --color-ink-faint: oklch(64% 0.01 265);
+  /* 58 % et non 64 % : cette encre porte les étiquettes en `text-micro`, soit 11 px. À 64 % elle
+     plafonnait à 3,4:1 sur la surface — assez pour un gros titre, pas pour ce qui nomme les
+     valeurs d'un tableau de bord lu tous les jours. */
+  --color-ink-faint: oklch(58% 0.011 265);
 
   --color-brand: oklch(56% 0.19 292);
   --color-brand-hover: oklch(50% 0.2 292);
@@ -29,11 +32,32 @@
   --color-danger: oklch(58% 0.21 25);
   --color-danger-subtle: oklch(95% 0.03 25);
 
+  /* Bleu d'information, distinct du violet de marque. Ce dernier ne signale que ce avec quoi on
+     interagit ; peint en violet, une recommandation d'information se lisait comme un bouton. */
+  --color-info: oklch(52% 0.15 250);
+  --color-info-subtle: oklch(95% 0.03 250);
+
+  /* Déclinaisons « strong » : la teinte assombrie jusqu'à porter du texte sur le fond `-subtle`
+     correspondant. Les jetons d'état sont calibrés pour remplir une pastille ou tracer une jauge ;
+     employés comme encre sur leur propre fond clair, ils tombaient sous 3,5:1 — insuffisant pour
+     un badge de 12 px, qui est pourtant le signal le plus lu de l'application. */
+  --color-success-strong: oklch(42% 0.13 150);
+  --color-warning-strong: oklch(45% 0.12 75);
+  --color-danger-strong: oklch(45% 0.19 25);
+  --color-info-strong: oklch(45% 0.15 250);
+
   /* Sévérités des recommandations : reprises des couleurs sémantiques pour que
      la lecture d'un finding reste cohérente avec le reste de l'interface. */
   --color-severity-critical: oklch(58% 0.21 25);
   --color-severity-warning: oklch(70% 0.16 70);
-  --color-severity-info: oklch(60% 0.14 250);
+  --color-severity-info: oklch(52% 0.15 250);
+
+  /* Fraîcheur : marque ce qui vient de changer sous l'effet du flux temps réel. Ni une sévérité
+     ni une interaction — d'où une teinte à elle, qu'aucun autre rôle ne revendique. */
+  /* Le liseré est un signal graphique, tenu à 3:1 sur la surface : plus clair, il disparaissait
+     du coin de l'œil — ce qui lui ôtait sa seule raison d'être. */
+  --color-fresh: oklch(58% 0.15 210);
+  --color-fresh-subtle: oklch(95% 0.035 210);
 
   /* Coloration syntaxique. Jetons distincts des couleurs sémantiques : celles-ci sont
      calibrées pour remplir une pastille ou un badge, pas pour porter du texte sur le fond
@@ -45,8 +69,39 @@
   --color-code-type: oklch(48% 0.14 45);
   --color-code-param: oklch(47% 0.19 20);
 
+  /* Échelle typographique. Six tailles nommées par leur rôle, parce qu'un nom de rôle se choisit
+     sans hésiter là où « xs ou sm ? » se tranche au jugé — d'où les 120 emplois de `text-xs`
+     contre 47 de `text-sm` relevés avant refonte, et des vues où rien ne ressortait.
+     Règle qui commande le reste : une valeur ne descend jamais sous `text-body`. */
+  --text-display: 2rem;
+  --text-display--line-height: 1.1;
+  --text-metric: 1.5rem;
+  --text-metric--line-height: 1.15;
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.4;
+  --text-section: 0.9375rem;
+  --text-section--line-height: 1.4;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.4;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1;
+
   --radius-card: 0.875rem;
   --radius-control: 0.625rem;
+
+  /* Hauteurs de contrôle. Trois, et trois seulement : un bouton de 32 px posé à côté d'un champ
+     de 36 désalignait toute barre d'outils qui associait les deux. */
+  --control-sm: 2rem;
+  --control-md: 2.25rem;
+  --control-lg: 2.75rem;
+
+  /* Durées. `fresh` est longue à dessein : sur un second écran, on regarde après le changement,
+     et un éclair qu'il faut avoir vu ne signale rien. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-fresh: 6s;
 
   --shadow-card: 0 1px 2px 0 oklch(21% 0.015 265 / 0.05), 0 1px 3px 0 oklch(21% 0.015 265 / 0.06);
   --shadow-popover: 0 10px 30px -12px oklch(21% 0.015 265 / 0.25);
@@ -67,7 +122,7 @@
 
     --color-ink: oklch(96% 0.004 265);
     --color-ink-muted: oklch(72% 0.012 265);
-    --color-ink-faint: oklch(58% 0.012 265);
+    --color-ink-faint: oklch(63% 0.012 265);
 
     --color-brand: oklch(68% 0.17 292);
     --color-brand-hover: oklch(74% 0.16 292);
@@ -78,8 +133,20 @@
     --color-warning-subtle: oklch(28% 0.05 80);
     --color-danger-subtle: oklch(27% 0.06 25);
 
+    --color-info: oklch(72% 0.13 250);
+    --color-info-subtle: oklch(27% 0.06 250);
+
+    /* Le fond `-subtle` passe sous 30 % de clarté : l'encre remonte d'autant. */
+    --color-success-strong: oklch(84% 0.13 150);
+    --color-warning-strong: oklch(86% 0.12 80);
+    --color-danger-strong: oklch(82% 0.12 25);
+    --color-info-strong: oklch(84% 0.1 250);
+
     --color-severity-warning: oklch(78% 0.15 75);
-    --color-severity-info: oklch(70% 0.13 250);
+    --color-severity-info: oklch(72% 0.13 250);
+
+    --color-fresh: oklch(76% 0.12 210);
+    --color-fresh-subtle: oklch(28% 0.05 210);
 
     /* Le fond creusé descend à 14 % de clarté : les teintes de code remontent d'autant. */
     --color-code-key: oklch(78% 0.12 255);
@@ -99,8 +166,10 @@
     color-scheme: dark;
   }
 
+  /* La taille de lecture de l'application est celle du corps de texte : posée ici, elle vaut par
+     défaut partout et dispense d'habiller chaque élément d'une classe de taille. */
   body {
-    @apply bg-canvas text-ink font-sans antialiased;
+    @apply bg-canvas text-ink text-body font-sans antialiased;
   }
 
   /* Anneau de focus homogène et visible dans les deux thèmes. */
@@ -111,6 +180,24 @@
   ::selection {
     @apply bg-brand-subtle text-ink;
   }
+
+  /* Mouvement neutralisé une fois pour toutes. Le sablier fait exception : il ne décore pas, il
+     dit qu'un travail est en cours — le supprimer retirerait une information. Il tourne
+     simplement plus lentement. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
+    .animate-spin {
+      animation: spin 1.6s linear infinite !important;
+    }
+  }
 }
 
 @layer utilities {
@@ -120,5 +207,27 @@
   }
   .scrollbar-none::-webkit-scrollbar {
     display: none;
+  }
+
+  /*
+   * Marque de fraîcheur : ce qui vient de changer sous l'effet du flux temps réel.
+   *
+   * Deux signaux superposés. Le liseré est peint en fond plutôt qu'en bordure ou en ombre
+   * interne, seule forme qui tienne aussi bien sur une ligne de tableau que sur une carte. Le
+   * lavis, lui, décroît sur la durée du signal.
+   *
+   * La classe est retirée par `useFresh` à la fin de la durée : le liseré n'a donc pas à
+   * s'effacer de lui-même, et le signal survit intact quand l'animation est refusée — seul le
+   * mouvement s'en va, jamais l'information.
+   */
+  /* Va-et-vient du liseré de rechargement : dit qu'un travail est en cours sans prétendre en
+     connaître l'avancement, ce qu'une requête sur une instance distante ne permet pas. */
+  @keyframes pg-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(400%);
+    }
   }
 }
