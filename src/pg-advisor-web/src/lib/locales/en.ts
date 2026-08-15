@@ -141,7 +141,7 @@ export const en: Record<string, string> = {
   'shell.theme.dark': 'Switch to the dark theme',
   'shell.language': 'Language',
   'shell.account': 'Account',
-  'shell.changePassword': 'Change password',
+  'shell.profile': 'My profile',
   'shell.logout': 'Sign out',
   'shell.closeMenu': 'Close the menu',
   'shell.connected': 'Live stream connected',

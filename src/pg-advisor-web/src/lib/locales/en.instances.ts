@@ -235,6 +235,11 @@ export const enInstances: Record<string, string> = {
     'The account will have to use this password on its next sign-in. It is shown nowhere once saved: pass it on yourself.',
   'users.reset.submit': 'Save the password',
   'users.delete.confirm': 'Delete the account',
+  'profile.subtitle': 'This account, and what it can change about itself.',
+  'profile.identity': 'Identity',
+  'profile.mustChange': 'Password needs changing',
+  'profile.mustChangeHint':
+    'This account still uses the password it was handed. Change it below.',
   'users.changeOwn.title': 'Change my password',
   'users.changeOwn.hint': 'The current session stays open after the change.',
   'users.changeOwn.current': 'Current password',

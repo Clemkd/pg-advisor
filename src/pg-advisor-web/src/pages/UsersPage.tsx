@@ -8,7 +8,6 @@ import {
   Badge,
   Button,
   Card,
-  CardBody,
   CardHeader,
   ConfirmDialog,
   EmptyState,
@@ -199,8 +198,6 @@ export function UsersPage() {
             </TableScroll>
           )}
         </Card>
-
-        <ChangeOwnPassword />
       </div>
 
       {creating && (
@@ -375,78 +372,5 @@ function ResetPassword({
         {error && <Notice tone="danger">{error}</Notice>}
       </form>
     </Modal>
-  )
-}
-
-function ChangeOwnPassword() {
-  const t = useT()
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [notice, setNotice] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
-    setNotice(null)
-
-    try {
-      await api.auth.changePassword(currentPassword, newPassword)
-      setNotice(t('users.changeOwn.done'))
-      setCurrentPassword('')
-      setNewPassword('')
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : t('users.updateFailed'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader title={t('users.changeOwn.title')} description={t('users.changeOwn.hint')} />
-      <CardBody className="space-y-3">
-        {/* Les deux champs et le bouton partagent une ligne, à une largeur de saisie raisonnable :
-            un mot de passe n'a pas besoin de toute la largeur de la page pour être lisible. */}
-        <form
-          onSubmit={submit}
-          className="grid gap-3 sm:grid-cols-[minmax(0,18rem)_minmax(0,18rem)_auto] sm:items-end sm:justify-start"
-        >
-          <Field label={t('users.changeOwn.current')}>
-            <Input
-              type="password"
-              value={currentPassword}
-              required
-              autoComplete="current-password"
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
-          </Field>
-
-          <Field label={t('users.changeOwn.new')} hint={t('users.form.passwordHint')}>
-            <Input
-              type="password"
-              value={newPassword}
-              required
-              minLength={10}
-              autoComplete="new-password"
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </Field>
-
-          <Button type="submit" variant="primary" size="lg" loading={busy}>
-            {t('users.changeOwn.submit')}
-          </Button>
-        </form>
-
-        {notice && (
-          <Notice tone="success" onDismiss={() => setNotice(null)}>
-            {notice}
-          </Notice>
-        )}
-        {error && <Notice tone="danger">{error}</Notice>}
-      </CardBody>
-    </Card>
   )
 }

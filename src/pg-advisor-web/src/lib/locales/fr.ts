@@ -141,7 +141,7 @@ export const fr: Record<string, string> = {
   'shell.theme.dark': 'Passer en thème sombre',
   'shell.language': 'Langue',
   'shell.account': 'Compte',
-  'shell.changePassword': 'Changer de mot de passe',
+  'shell.profile': 'Mon profil',
   'shell.logout': 'Se déconnecter',
   'shell.closeMenu': 'Fermer le menu',
   'shell.connected': 'Flux temps réel connecté',

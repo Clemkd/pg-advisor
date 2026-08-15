@@ -11,6 +11,7 @@ import { FindingsPage } from '@/pages/FindingsPage'
 import { InstanceDetailPage } from '@/pages/InstanceDetailPage'
 import { InstancesPage } from '@/pages/InstancesPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { ProfilePage } from '@/pages/ProfilePage'
 import { QueriesPage } from '@/pages/QueriesPage'
 import { RuleEditorPage } from '@/pages/RuleEditorPage'
 import { RulesPage } from '@/pages/RulesPage'
@@ -56,6 +57,7 @@ export default function App() {
                 <Route path="/rules/:id" element={<RuleEditorPage />} />
                 <Route path="/webhooks" element={<WebhooksPage />} />
                 <Route path="/users" element={<UsersPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

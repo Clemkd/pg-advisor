@@ -257,6 +257,11 @@ export const frInstances: Record<string, string> = {
     'Le compte devra utiliser ce mot de passe à sa prochaine connexion. Il n’est affiché nulle part après enregistrement : transmettez-le vous-même.',
   'users.reset.submit': 'Enregistrer le mot de passe',
   'users.delete.confirm': 'Supprimer le compte',
+  'profile.subtitle': 'Ce compte et ce qu’il peut changer sur lui-même.',
+  'profile.identity': 'Identité',
+  'profile.mustChange': 'Mot de passe à changer',
+  'profile.mustChangeHint':
+    'Ce compte utilise encore le mot de passe qui lui a été remis. Changez-le ci-dessous.',
   'users.changeOwn.title': 'Changer mon mot de passe',
   'users.changeOwn.hint': 'La session en cours reste ouverte après le changement.',
   'users.changeOwn.current': 'Mot de passe actuel',

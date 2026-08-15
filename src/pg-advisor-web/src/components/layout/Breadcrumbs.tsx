@@ -9,6 +9,7 @@ const SEGMENT_KEYS: Record<string, string> = {
   rules: 'nav.rules',
   webhooks: 'nav.webhooks',
   users: 'nav.users',
+  profile: 'shell.profile',
   new: 'breadcrumbs.newRule',
 }
 

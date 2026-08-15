@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Languages, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, X } from 'lucide-react'
+import {
+  ChevronDown,
+  Languages,
+  LogOut,
+  Menu,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Sun,
+  UserRound,
+  X,
+} from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Breadcrumbs } from './Breadcrumbs'
 import { useActiveFindings } from './useActiveFindings'
@@ -16,12 +27,10 @@ const COLLAPSE_KEY = 'pg-advisor.sidebar.collapsed'
 
 /** Coquille applicative : colonne rétractable, barre supérieure et zone de contenu. */
 export function AppShell() {
-  const { user, logout } = useAuth()
   const { connected } = useEvents()
   const { resolved, toggle } = useTheme()
   const t = useT()
   const location = useLocation()
-  const navigate = useNavigate()
   const findings = useActiveFindings()
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === 'true')
@@ -143,32 +152,7 @@ export function AppShell() {
               {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
 
-            {/* Bloc informatif, pas un bouton : aucun effet de survol, qui laisserait croire
-                à un menu de compte inexistant. */}
-            <span
-              className="flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-1.5"
-              title={user?.role === 'Admin' ? t('role.admin') : t('role.viewer')}
-            >
-              <span className="bg-brand-subtle text-brand grid size-7 place-items-center rounded-full text-meta font-semibold">
-                {initials(user?.username)}
-              </span>
-              <span className="text-ink hidden max-w-32 truncate text-body sm:block">
-                {user?.username}
-              </span>
-            </span>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={async () => {
-                await logout()
-                navigate('/login')
-              }}
-              aria-label={t('shell.logout')}
-              title={t('shell.logout')}
-            >
-              <LogOut className="size-4" />
-            </Button>
+            <AccountMenu />
           </div>
         </header>
 
@@ -183,6 +167,68 @@ export function AppShell() {
         </main>
       </div>
     </div>
+  )
+}
+
+/**
+ * Menu du compte. Le nom affiché ouvre les gestes qui portent sur le compte lui-même — le
+ * consulter, en sortir — plutôt que de les laisser en icônes sans étiquette dans la barre : une
+ * déconnexion posée à côté du choix de thème s'atteint par erreur.
+ */
+function AccountMenu() {
+  const { user, logout } = useAuth()
+  const t = useT()
+  const navigate = useNavigate()
+  const anchor = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={user?.role === 'Admin' ? t('role.admin') : t('role.viewer')}
+        className="text-ink hover:bg-surface-sunken flex h-9 items-center gap-2 rounded-[var(--radius-control)] px-1.5 transition-colors"
+      >
+        <span className="bg-brand-subtle text-brand grid size-7 shrink-0 place-items-center rounded-full text-meta font-semibold">
+          {initials(user?.username)}
+        </span>
+        <span className="hidden max-w-32 truncate text-body sm:block">{user?.username}</span>
+        <ChevronDown className="text-ink-muted size-3.5 shrink-0" aria-hidden />
+      </button>
+
+      <Bubble
+        anchor={anchor}
+        open={open}
+        onClose={() => setOpen(false)}
+        align="end"
+        label={t('shell.account')}
+      >
+        <BubbleItem
+          onSelect={() => {
+            setOpen(false)
+            navigate('/profile')
+          }}
+        >
+          <UserRound className="text-ink-muted size-4 shrink-0" aria-hidden />
+          <span className="truncate">{t('shell.profile')}</span>
+        </BubbleItem>
+
+        <BubbleItem
+          onSelect={async () => {
+            setOpen(false)
+            await logout()
+            navigate('/login')
+          }}
+        >
+          <LogOut className="text-ink-muted size-4 shrink-0" aria-hidden />
+          <span className="truncate">{t('shell.logout')}</span>
+        </BubbleItem>
+      </Bubble>
+    </>
   )
 }
 
