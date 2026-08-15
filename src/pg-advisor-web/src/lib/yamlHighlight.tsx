@@ -222,11 +222,20 @@ export function YamlEditor({
           element.scrollLeft = event.currentTarget.scrollLeft
         }}
         spellCheck={false}
+        // Correction et majuscule automatiques désarmées : elles réécrivent du code.
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
         readOnly={readOnly}
         wrap="off"
         rows={rows}
         aria-label={label}
-        className="caret-ink selection:bg-brand/30 relative w-full resize-y overflow-auto bg-transparent px-3 py-2.5 font-mono text-xs leading-relaxed text-transparent [tab-size:2] focus:outline-none"
+        className={cn(
+          'selection:bg-brand/30 relative w-full overflow-auto bg-transparent px-3 py-2.5 font-mono text-xs leading-relaxed text-transparent [tab-size:2] focus:outline-none',
+          // En lecture seule — un compte lecteur —, ni curseur de saisie ni poignée de
+          // redimensionnement : le cadre annonce ce qu'il est avant qu'on essaie d'y écrire.
+          readOnly ? 'caret-transparent cursor-default resize-none' : 'caret-ink resize-y',
+        )}
       />
     </div>
   )

@@ -1,36 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, ApiError } from '../api/client'
-import type {
-  Connection,
-  DryRunResult,
-  RuleDetail,
-  RuleSchema,
-  Severity,
-} from '../api/types'
-import { useAuth } from '../app/AuthContext'
+import { FlaskConical, ServerOff } from 'lucide-react'
+import { api, ApiError } from '@/api/client'
+import type { Connection, DryRunResult, RuleDetail, RuleSchema, Severity } from '@/api/types'
+import { useAuth } from '@/app/AuthContext'
+import { Page } from '@/components/layout/Page'
 import {
-  Alert,
+  Badge,
   Button,
   Card,
-  CodeBlock,
+  CardBody,
+  CardHeader,
   EmptyState,
   Field,
+  FormSection,
   Input,
-  PageHeader,
+  LoadingBlock,
+  Notice,
   Select,
   SeverityBadge,
-  Spinner,
-  Tag,
-} from '../components/ui'
-import { categoryLabel } from '../lib/format'
-import { YamlEditor } from '../lib/yamlHighlight'
+} from '@/components/ui/primitives'
+import { categoryLabel, severityLabel } from '@/lib/format'
+import { tr, useT, useTc } from '@/lib/i18n'
+import type { PluralTranslator, Translator } from '@/lib/i18n'
+import { SqlCode } from '@/lib/sqlHighlight'
+import { YamlEditor } from '@/lib/yamlHighlight'
+import { cn } from '@/lib/utils'
 
 export function RuleEditorPage() {
   const { id } = useParams<{ id: string }>()
   const creating = id === undefined
   const navigate = useNavigate()
   const { isAdmin } = useAuth()
+  const t = useT()
+  const tc = useTc()
 
   const [schema, setSchema] = useState<RuleSchema | null>(null)
   const [detail, setDetail] = useState<RuleDetail | null>(null)
@@ -65,7 +68,7 @@ export function RuleEditorPage() {
 
       setFailure(null)
     } catch (cause) {
-      setFailure(cause instanceof Error ? cause.message : 'Chargement impossible.')
+      setFailure(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -107,7 +110,7 @@ export function RuleEditorPage() {
       const saved = creating ? await api.rules.create(yaml) : await api.rules.update(id!, yaml)
       setDetail(saved)
       setYaml(saved.yaml)
-      setNotice(`Règle « ${saved.rule.id} » enregistrée et rechargée.`)
+      setNotice(t('ruleEditor.saved', { id: saved.rule.id }))
 
       if (creating) {
         navigate(`/rules/${encodeURIComponent(saved.rule.id)}`, { replace: true })
@@ -117,7 +120,7 @@ export function RuleEditorPage() {
         setFailure(cause.message)
         setErrors(cause.details ?? [])
       } else {
-        setFailure('Enregistrement impossible.')
+        setFailure(t('ruleEditor.saveFailed'))
       }
     } finally {
       setBusy(false)
@@ -132,7 +135,7 @@ export function RuleEditorPage() {
       await api.rules.remove(detail.rule.id)
       navigate('/rules')
     } catch (cause) {
-      setFailure(cause instanceof ApiError ? cause.message : 'Suppression impossible.')
+      setFailure(cause instanceof ApiError ? cause.message : t('ruleEditor.deleteFailed'))
     } finally {
       setBusy(false)
     }
@@ -151,7 +154,7 @@ export function RuleEditorPage() {
         setFailure(cause.message)
         setErrors(cause.details ?? [])
       } else {
-        setFailure('Aperçu impossible.')
+        setFailure(t('ruleEditor.dryRunFailed'))
       }
     } finally {
       setDryRunBusy(false)
@@ -159,165 +162,210 @@ export function RuleEditorPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner className="size-6" />
-      </div>
-    )
+    return <LoadingBlock />
   }
 
   const rule = detail?.rule
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        breadcrumb={
+    <Page
+      title={creating ? t('ruleEditor.newTitle') : (rule?.name ?? rule?.id ?? '')}
+      // Le fil d'Ariane de la coquille annonce déjà « Règles / identifiant » : la page n'en
+      // repose pas un second. La signalétique de la règle tient sur la ligne du titre.
+      meta={
+        rule && (
           <>
-            <Link to="/rules" className="hover:underline">
-              Règles
-            </Link>{' '}
-            / {creating ? 'nouvelle règle' : rule?.id}
-          </>
-        }
-        title={creating ? 'Nouvelle règle' : (rule?.name ?? rule?.id ?? '')}
-        meta={
-          rule && (
-            <>
-              <SeverityBadge severity={rule.severity} />
-              <Tag tone="accent">{categoryLabel(rule.category)}</Tag>
-              <Tag>groupe {rule.group}</Tag>
-              <Tag>version {rule.version}</Tag>
-              {rule.origin === 'user' ? <Tag tone="accent">personnalisée</Tag> : <Tag>intégrée</Tag>}
-              <span className="truncate font-mono text-xs text-ink-muted">{rule.file}</span>
-            </>
-          )
-        }
-        actions={
-          isAdmin && (
-            <>
-              {!creating && rule?.origin === 'user' && (
-                <Button variant="danger" onClick={remove} disabled={busy}>
-                  Supprimer
-                </Button>
-              )}
-              <Button variant="primary" onClick={save} disabled={busy || validated === false}>
-                {busy && <Spinner />} Enregistrer
-              </Button>
-            </>
-          )
-        }
-      />
-
-      {failure && <Alert title={failure}>{errors.length > 0 && <ErrorList errors={errors} />}</Alert>}
-      {notice && (
-        <Alert tone="success" onDismiss={() => setNotice(null)}>
-          {notice}
-        </Alert>
-      )}
-
-      {!creating && rule && rule.origin === 'provided' && (
-        <Alert tone="info" title="Règle intégrée à l'application">
-          L'enregistrement ne modifie pas le fichier livré : il crée une version personnalisée dans le
-          volume de données qui la remplace. Supprimer cette version rétablira la règle d'origine.
-        </Alert>
-      )}
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card
-          title="Définition YAML"
-          className="xl:col-span-2"
-          actions={
-            validated === null ? null : validated ? (
-              <Tag tone="good">valide</Tag>
+            <SeverityBadge severity={rule.severity} />
+            <Badge tone="brand">{categoryLabel(rule.category)}</Badge>
+            <Badge>{t('ruleEditor.group', { group: rule.group })}</Badge>
+            <Badge>{t('ruleEditor.version', { version: rule.version })}</Badge>
+            {rule.origin === 'user' ? (
+              <Badge tone="brand">{t('rules.customTag')}</Badge>
             ) : (
-              <Tag tone="bad">{errors.length} erreur(s)</Tag>
-            )
-          }
-        >
-          <YamlEditor
-            value={yaml}
-            onChange={setYaml}
-            readOnly={!isAdmin}
-            rows={28}
-            label="Définition YAML de la règle"
-          />
-
-          {dirty && <p className="mt-2 text-xs text-warning">Modifications non enregistrées.</p>}
-
-          {errors.length > 0 && (
-            <div className="mt-3">
-              <Alert title="La règle n'est pas valide">
-                <ErrorList errors={errors} />
-              </Alert>
-            </div>
-          )}
-        </Card>
-
-        <div className="space-y-4">
-          <Card title="Aperçu sur une instance">
-            {connections.length === 0 ? (
-              <EmptyState title="Aucune instance">
-                Ajoutez une connexion pour tester une règle.
-              </EmptyState>
-            ) : (
-              <>
-                <Field label="Instance cible">
-                  <Select
-                    value={dryRunInstance ?? ''}
-                    onChange={(event) => setDryRunInstance(Number(event.target.value))}
-                  >
-                    {connections.map((connection) => (
-                      <option key={connection.id} value={connection.id}>
-                        {connection.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-
-                <Button
-                  className="mt-3 w-full"
-                  onClick={runDryRun}
-                  disabled={dryRunBusy || validated === false}
-                >
-                  {dryRunBusy && <Spinner />} Exécuter sans enregistrer
-                </Button>
-
-                <p className="mt-2 text-xs text-ink-muted">
-                  La requête est exécutée en lecture seule sur l'instance choisie. Aucun finding n'est
-                  créé.
-                </p>
-
-                {dryRun && <DryRunPanel result={dryRun} />}
-              </>
+              <Badge>{t('rules.bundledTag')}</Badge>
             )}
+          </>
+        )
+      }
+      actions={
+        isAdmin && (
+          <>
+            {!creating && rule?.origin === 'user' && (
+              <Button variant="danger" onClick={remove} disabled={busy}>
+                {t('common.delete')}
+              </Button>
+            )}
+            <Button variant="primary" onClick={save} loading={busy} disabled={validated === false}>
+              {t('common.save')}
+            </Button>
+          </>
+        )
+      }
+      wide
+    >
+      <div className="space-y-4">
+        {failure && (
+          <Notice tone="danger" title={failure}>
+            {errors.length > 0 && <ErrorList errors={errors} />}
+          </Notice>
+        )}
+        {notice && (
+          <Notice tone="success" onDismiss={() => setNotice(null)}>
+            {notice}
+          </Notice>
+        )}
+
+        {!creating && rule && rule.origin === 'provided' && (
+          <Notice tone="info" title={t('ruleEditor.providedTitle')}>
+            {t('ruleEditor.providedBody')}
+          </Notice>
+        )}
+
+        {/* Deux colonnes de même largeur : la définition et ce qu'elle produit se lisent
+            ensemble. Dans une colonne au tiers, le résultat SQL défilait dans un couloir.
+            `grid-cols-1` explicite en dessous de xl : sans lui, la colonne implicite se
+            dimensionne sur le contenu le plus large — l'éditeur, un tableau de résultat — et
+            débordait la fenêtre en largeur réduite. */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader
+              title={t('ruleEditor.yamlTitle')}
+              description={
+                rule && (
+                  <span className="font-mono" title={rule.file}>
+                    {rule.file}
+                  </span>
+                )
+              }
+              // Validité et état d'enregistrement sur la ligne du titre : deux étiquettes
+              // plutôt qu'une phrase de plus sous l'éditeur.
+              action={
+                <>
+                  {dirty && (
+                    <Badge tone="warning" title={t('ruleEditor.unsavedTitle')}>
+                      {t('ruleEditor.unsavedTag')}
+                    </Badge>
+                  )}
+                  {validated !== null &&
+                    (validated ? (
+                      <Badge tone="success">{t('ruleEditor.validTag')}</Badge>
+                    ) : (
+                      <Badge tone="danger">{tc('ruleEditor.errorCount', errors.length)}</Badge>
+                    ))}
+                </>
+              }
+            />
+            <CardBody className="space-y-3">
+              <YamlEditor
+                value={yaml}
+                onChange={setYaml}
+                readOnly={!isAdmin}
+                rows={26}
+                label={t('ruleEditor.yamlLabel')}
+              />
+
+              {errors.length > 0 && (
+                <Notice tone="danger" title={t('ruleEditor.invalidTitle')}>
+                  <ErrorList errors={errors} />
+                </Notice>
+              )}
+            </CardBody>
           </Card>
 
-          {detail && detail.applicability.length > 0 && (
-            <Card title="Applicabilité">
-              <ul className="space-y-1.5 text-sm">
-                {detail.applicability.map((entry) => (
-                  <li key={entry.connectionId} className="flex flex-wrap items-center gap-2">
-                    {entry.applicable ? <Tag tone="good">applicable</Tag> : <Tag tone="warn">ignorée</Tag>}
-                    <span className="text-ink">{entry.connectionName}</span>
-                    {entry.reason && <span className="text-xs text-ink-muted">{entry.reason}</span>}
-                  </li>
-                ))}
-              </ul>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader title={t('ruleEditor.dryRunTitle')} description={t('ruleEditor.dryRunHint')} />
+              <CardBody className="space-y-3">
+                {connections.length === 0 ? (
+                  <EmptyState
+                    icon={<ServerOff className="size-6" aria-hidden />}
+                    title={t('ruleEditor.noInstance')}
+                    description={t('ruleEditor.noInstanceBody')}
+                    action={
+                      isAdmin && (
+                        <Link
+                          to="/instances"
+                          className="bg-brand text-brand-ink hover:bg-brand-hover inline-flex h-8 items-center rounded-[var(--radius-control)] px-3 text-sm font-medium"
+                        >
+                          {t('ruleEditor.addInstance')}
+                        </Link>
+                      )
+                    }
+                  />
+                ) : (
+                  <>
+                    {/* Cible et déclencheur sur une même ligne : le geste « choisir puis
+                        exécuter » se lit de gauche à droite, et le bouton s'aligne sur le bas
+                        de la liste déroulante. */}
+                    <div className="flex flex-wrap items-end gap-3">
+                      <Field label={t('ruleEditor.dryRunTarget')} className="min-w-48 flex-1">
+                        <Select
+                          value={dryRunInstance ?? ''}
+                          onChange={(event) => setDryRunInstance(Number(event.target.value))}
+                        >
+                          {connections.map((connection) => (
+                            <option key={connection.id} value={connection.id}>
+                              {connection.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+
+                      <Button
+                        variant="primary"
+                        className="h-9 shrink-0"
+                        onClick={runDryRun}
+                        loading={dryRunBusy}
+                        disabled={validated === false}
+                      >
+                        {t('ruleEditor.dryRunRun')}
+                      </Button>
+                    </div>
+
+                    {dryRun ? (
+                      <DryRunPanel result={dryRun} t={t} tc={tc} />
+                    ) : (
+                      <EmptyState
+                        icon={<FlaskConical className="size-6" aria-hidden />}
+                        title={t('ruleEditor.dryRunPending')}
+                        description={t('ruleEditor.dryRunPendingHint')}
+                      />
+                    )}
+                  </>
+                )}
+              </CardBody>
             </Card>
-          )}
 
-          {schema && <SchemaHelp schema={schema} />}
+            {detail && detail.applicability.length > 0 && (
+              <Card>
+                <CardHeader title={t('ruleEditor.applicability')} />
+                <CardBody>
+                  <ul className="space-y-1.5 text-sm">
+                    {detail.applicability.map((entry) => (
+                      <li key={entry.connectionId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {entry.applicable ? (
+                          <Badge tone="success">{t('ruleEditor.applicableTag')}</Badge>
+                        ) : (
+                          <Badge tone="warning">{t('ruleEditor.skippedTag')}</Badge>
+                        )}
+                        <span className="text-ink">{entry.connectionName}</span>
+                        {entry.reason && <span className="text-ink-muted text-xs">{entry.reason}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </CardBody>
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
 
-      {detail && isAdmin && (
-        <OverridesCard
-          detail={detail}
-          connections={connections}
-          onChanged={() => void load()}
-        />
-      )}
-    </div>
+        {schema && <SchemaHelp schema={schema} />}
+
+        {detail && isAdmin && (
+          <OverridesCard detail={detail} connections={connections} onChanged={() => void load()} />
+        )}
+      </div>
+    </Page>
   )
 }
 
@@ -331,79 +379,93 @@ function ErrorList({ errors }: { errors: string[] }) {
   )
 }
 
-function DryRunPanel({ result }: { result: DryRunResult }) {
+function DryRunPanel({
+  result,
+  t,
+  tc,
+}: {
+  result: DryRunResult
+  t: Translator
+  tc: PluralTranslator
+}) {
   if (result.error) {
     return (
-      <div className="mt-3">
-        <Alert title="Exécution en échec">{result.error}</Alert>
-      </div>
+      <Notice tone="danger" title={t('ruleEditor.dryRunErrorTitle')}>
+        {result.error}
+      </Notice>
     )
   }
 
   if (result.skipReason) {
     return (
-      <div className="mt-3">
-        <Alert tone="warning" title="Règle non applicable">
-          {result.skipReason}
-        </Alert>
-      </div>
+      <Notice tone="warning" title={t('ruleEditor.dryRunSkippedTitle')}>
+        {result.skipReason}
+      </Notice>
     )
   }
 
   const columns = result.rows[0] ? Object.keys(result.rows[0]) : []
 
   return (
-    <div className="mt-3 space-y-3">
-      <Alert tone="success">
-        {result.rowCount} ligne(s) retournée(s) en {Math.round(result.durationMs)} ms —{' '}
-        {result.findings.length} finding(s) produit(s).
-      </Alert>
+    <div className="space-y-3">
+      <Notice tone="success">
+        {t('ruleEditor.dryRunSummary', {
+          rows: tc('ruleEditor.dryRunRows', result.rowCount),
+          ms: Math.round(result.durationMs),
+          findings: tc('ruleEditor.dryRunFindings', result.findings.length),
+        })}
+      </Notice>
 
       {result.findings.length > 0 && (
-        <div>
-          <p className="mb-1 text-xs font-semibold text-ink-muted">Findings</p>
+        <FormSection title={t('ruleEditor.dryRunFindingsTitle')}>
           <ul className="space-y-2">
             {result.findings.map((finding, index) => (
-              <li key={index} className="rounded-md border border-border-subtle p-2">
-                <div className="flex items-center gap-2">
+              <li
+                key={index}
+                className="border-border-subtle rounded-[var(--radius-control)] border px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <SeverityBadge severity={finding.severity} />
-                  <span className="text-sm font-medium text-ink">{finding.title}</span>
+                  <span className="text-ink text-sm font-medium">{finding.title}</span>
+                  {finding.target && (
+                    <code className="bg-surface-sunken text-ink-muted rounded px-1 font-mono text-xs">
+                      {finding.target}
+                    </code>
+                  )}
                 </div>
-                <p className="mt-0.5 text-xs text-ink-muted">{finding.message}</p>
-                {finding.target && (
-                  <p className="mt-0.5 font-mono text-xs text-ink-muted">{finding.target}</p>
-                )}
+                <p className="text-ink-muted mt-1 text-xs">{finding.message}</p>
                 {finding.remediationSql && (
-                  <CodeBlock className="mt-1.5">{finding.remediationSql}</CodeBlock>
+                  <SqlCode sql={finding.remediationSql} wrap className="mt-1.5" />
                 )}
               </li>
             ))}
           </ul>
-        </div>
+        </FormSection>
       )}
 
       {columns.length > 0 && (
-        <div>
-          <p className="mb-1 text-xs font-semibold text-ink-muted">Résultat SQL</p>
-          <div className="max-h-64 overflow-auto rounded-md border border-border-subtle">
+        <FormSection title={t('ruleEditor.dryRunSqlTitle')}>
+          <div className="border-border-subtle max-h-72 overflow-auto rounded-[var(--radius-control)] border">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-surface-sunken text-left">
+              <thead className="bg-surface-sunken sticky top-0 text-left">
                 <tr>
                   {columns.map((column) => (
-                    <th key={column} className="whitespace-nowrap px-2 py-1 font-medium text-ink-muted">
+                    <th key={column} className="text-ink-muted px-2 py-1.5 font-medium whitespace-nowrap">
                       {column}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border-subtle">
+              <tbody className="divide-border-subtle divide-y">
                 {result.rows.map((row, index) => (
                   <tr key={index}>
                     {columns.map((column) => (
-                      <td key={column} className="max-w-64 truncate px-2 py-1 font-mono text-ink">
-                        {row[column] === null || row[column] === undefined
-                          ? '—'
-                          : String(row[column])}
+                      <td
+                        key={column}
+                        className="text-ink max-w-64 truncate px-2 py-1.5 font-mono"
+                        title={row[column] === null || row[column] === undefined ? '' : String(row[column])}
+                      >
+                        {row[column] === null || row[column] === undefined ? '—' : String(row[column])}
                       </td>
                     ))}
                   </tr>
@@ -411,48 +473,57 @@ function DryRunPanel({ result }: { result: DryRunResult }) {
               </tbody>
             </table>
           </div>
-        </div>
+        </FormSection>
       )}
     </div>
   )
 }
 
+/**
+ * Aide-mémoire de la grammaire des règles. Déployé, il s'étale sur toute la largeur : les
+ * listes de mots-clés se rangent alors en trois colonnes au lieu de s'empiler dans une
+ * gouttière.
+ */
 function SchemaHelp({ schema }: { schema: RuleSchema }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
 
   return (
-    <Card
-      title="Aide-mémoire"
-      actions={
-        <Button variant="ghost" onClick={() => setOpen((current) => !current)}>
-          {open ? 'Réduire' : 'Afficher'}
-        </Button>
-      }
-    >
-      {open ? (
-        <dl className="space-y-3 text-xs">
-          <Help label="Catégories" items={schema.categories.map(categoryLabel)} />
-          <Help label="Groupes de périodicité" items={schema.groups} />
-          <Help label="Filtres de message" items={schema.filters} />
-          <Help label="Fonctions de condition" items={schema.functions} />
-          <Help label="Extensions reconnues" items={schema.notableExtensions} />
-          <div>
-            <dt className="mb-1 font-semibold text-ink-muted">Handlers internes</dt>
-            <dd className="space-y-1">
-              {schema.handlers.map((handler) => (
-                <p key={handler.name} className="text-ink-muted">
-                  <code className="rounded bg-surface-sunken px-1">{handler.name}</code> —{' '}
-                  {handler.description}
-                </p>
-              ))}
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <p className="text-xs text-ink-muted">
-          Catégories, groupes, filtres de message, fonctions disponibles dans les conditions et
-          handlers internes.
-        </p>
+    <Card>
+      <CardHeader
+        title={t('ruleEditor.help')}
+        description={!open ? t('ruleEditor.helpSummary') : undefined}
+        action={
+          <Button variant="ghost" onClick={() => setOpen((current) => !current)}>
+            {open ? t('ruleEditor.helpHide') : t('ruleEditor.helpShow')}
+          </Button>
+        }
+      />
+      {open && (
+        <CardBody>
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-xs md:grid-cols-2 xl:grid-cols-3">
+            <Help label={t('ruleEditor.helpCategories')} items={schema.categories.map(categoryLabel)} />
+            <Help label={t('ruleEditor.helpGroups')} items={schema.groups} />
+            <Help label={t('ruleEditor.helpFilters')} items={schema.filters} />
+            <Help label={t('ruleEditor.helpFunctions')} items={schema.functions} />
+            <Help label={t('ruleEditor.helpExtensions')} items={schema.notableExtensions} />
+            <div className="min-w-0">
+              <dt className="text-ink-faint mb-1 text-[11px] font-semibold tracking-wider uppercase">
+                {t('ruleEditor.helpHandlers')}
+              </dt>
+              <dd className="space-y-1">
+                {schema.handlers.map((handler) => (
+                  <p key={handler.name} className="text-ink-muted">
+                    <code className="bg-surface-sunken text-ink rounded px-1 font-mono">
+                      {handler.name}
+                    </code>{' '}
+                    — {handler.description}
+                  </p>
+                ))}
+              </dd>
+            </div>
+          </dl>
+        </CardBody>
       )}
     </Card>
   )
@@ -460,11 +531,11 @@ function SchemaHelp({ schema }: { schema: RuleSchema }) {
 
 function Help({ label, items }: { label: string; items: string[] }) {
   return (
-    <div>
-      <dt className="mb-1 font-semibold text-ink-muted">{label}</dt>
+    <div className="min-w-0">
+      <dt className="text-ink-faint mb-1 text-[11px] font-semibold tracking-wider uppercase">{label}</dt>
       <dd className="flex flex-wrap gap-1">
         {items.map((item) => (
-          <code key={item} className="rounded bg-surface-sunken px-1 text-ink">
+          <code key={item} className="bg-surface-sunken text-ink rounded px-1 font-mono">
             {item}
           </code>
         ))}
@@ -482,6 +553,7 @@ function OverridesCard({
   connections: Connection[]
   onChanged: () => void
 }) {
+  const t = useT()
   const [target, setTarget] = useState<string>('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -532,7 +604,7 @@ function OverridesCard({
       })
       onChanged()
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Enregistrement impossible.')
+      setError(cause instanceof ApiError ? cause.message : t('ruleEditor.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -544,117 +616,152 @@ function OverridesCard({
       await api.rules.deleteOverride(detail.rule.id, connectionId)
       onChanged()
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Suppression impossible.')
+      setError(cause instanceof ApiError ? cause.message : t('ruleEditor.deleteFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Card title="Surcharges">
-      <p className="mb-3 text-xs text-ink-muted">
-        Une surcharge n'écrit pas dans le fichier : elle ajuste l'activation, la sévérité, la
-        périodicité ou les seuils, globalement ou pour une seule instance.
-      </p>
+    <Card>
+      {/* L'explication tient sur la ligne du titre : elle situe la carte sans ouvrir le
+          formulaire par un paragraphe. */}
+      <CardHeader title={t('ruleEditor.overrides')} description={t('ruleEditor.overridesHint')} />
+      <CardBody className="space-y-5">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <Field label={t('ruleEditor.scope')}>
+            <Select value={target} onChange={(event) => setTarget(event.target.value)}>
+              <option value="">{t('ruleEditor.allInstances')}</option>
+              {connections.map((connection) => (
+                <option key={connection.id} value={connection.id}>
+                  {connection.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Field label="Portée">
-          <Select value={target} onChange={(event) => setTarget(event.target.value)}>
-            <option value="">Toutes les instances</option>
-            {connections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.name}
+          <Field label={t('ruleEditor.activation')}>
+            <Select value={enabled} onChange={(event) => setEnabled(event.target.value)}>
+              <option value="">
+                {t('ruleEditor.ruleValue', {
+                  value: detail.rule.enabled ? t('rules.enabledTag') : t('rules.disabledTag'),
+                })}
               </option>
-            ))}
-          </Select>
-        </Field>
+              <option value="true">{t('ruleEditor.enabledOption')}</option>
+              <option value="false">{t('ruleEditor.disabledOption')}</option>
+            </Select>
+          </Field>
 
-        <Field label="Activation">
-          <Select value={enabled} onChange={(event) => setEnabled(event.target.value)}>
-            <option value="">Valeur de la règle ({detail.rule.enabled ? 'activée' : 'désactivée'})</option>
-            <option value="true">Activée</option>
-            <option value="false">Désactivée</option>
-          </Select>
-        </Field>
+          <Field label={t('common.severity')}>
+            <Select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+              <option value="">
+                {t('ruleEditor.ruleValue', { value: severityLabel(detail.rule.severity) })}
+              </option>
+              <option value="info">{t('severity.info')}</option>
+              <option value="warning">{t('severity.warning')}</option>
+              <option value="critical">{t('severity.critical')}</option>
+            </Select>
+          </Field>
 
-        <Field label="Sévérité">
-          <Select value={severity} onChange={(event) => setSeverity(event.target.value)}>
-            <option value="">Valeur de la règle ({detail.rule.severity})</option>
-            <option value="info">Information</option>
-            <option value="warning">Avertissement</option>
-            <option value="critical">Critique</option>
-          </Select>
-        </Field>
-
-        <Field label="Périodicité (s)" hint="Vide = périodicité du groupe">
-          <Input
-            type="number"
-            min={5}
-            max={86400}
-            value={interval}
-            onChange={(event) => setInterval(event.target.value)}
-          />
-        </Field>
-      </div>
-
-      {ruleParameters.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-1.5 text-xs font-semibold text-ink-muted">Seuils</p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {ruleParameters.map(([key, value]) => (
-              <Field key={key} label={key} hint={`défaut : ${String(value)}`}>
-                <Input
-                  value={parameters[key] ?? ''}
-                  placeholder={String(value)}
-                  onChange={(event) =>
-                    setParameters((current) => ({ ...current, [key]: event.target.value }))
-                  }
-                />
-              </Field>
-            ))}
-          </div>
+          <Field label={t('ruleEditor.interval')} hint={t('ruleEditor.intervalHint')}>
+            <Input
+              type="number"
+              min={5}
+              max={86400}
+              value={interval}
+              onChange={(event) => setInterval(event.target.value)}
+            />
+          </Field>
         </div>
-      )}
 
-      {error && (
-        <div className="mt-3">
-          <Alert>{error}</Alert>
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="primary" onClick={save} disabled={busy}>
-          {busy && <Spinner />} Enregistrer la surcharge
-        </Button>
-        {existing && (
-          <Button onClick={remove} disabled={busy}>
-            Supprimer cette surcharge
-          </Button>
+        {ruleParameters.length > 0 && (
+          <FormSection title={t('ruleEditor.thresholds')}>
+            <div className="grid grid-cols-1 gap-x-3 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              {ruleParameters.map(([key, value]) => (
+                <Field
+                  key={key}
+                  label={key}
+                  hint={t('ruleEditor.thresholdDefault', { value: String(value) })}
+                >
+                  <Input
+                    value={parameters[key] ?? ''}
+                    placeholder={String(value)}
+                    onChange={(event) =>
+                      setParameters((current) => ({ ...current, [key]: event.target.value }))
+                    }
+                  />
+                </Field>
+              ))}
+            </div>
+          </FormSection>
         )}
-      </div>
 
-      {detail.rule.overrides.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-1.5 text-xs font-semibold text-ink-muted">Surcharges enregistrées</p>
-          <ul className="space-y-1 text-xs text-ink-muted">
-            {detail.rule.overrides.map((item) => (
-              <li key={item.connectionId ?? 'global'} className="flex flex-wrap gap-2">
-                <Tag tone="accent">{item.connectionName ?? 'toutes les instances'}</Tag>
-                {item.enabled !== null && <span>{item.enabled ? 'activée' : 'désactivée'}</span>}
-                {item.severity && <span>sévérité {item.severity}</span>}
-                {item.intervalSeconds && <span>toutes les {item.intervalSeconds} s</span>}
-                {Object.keys(item.parameters).length > 0 && (
-                  <span className="font-mono">
-                    {Object.entries(item.parameters)
-                      .map(([key, value]) => `${key}=${String(value)}`)
-                      .join(', ')}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
+        {error && <Notice tone="danger">{error}</Notice>}
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={save} loading={busy}>
+            {t('ruleEditor.saveOverride')}
+          </Button>
+          {existing && (
+            <Button onClick={remove} disabled={busy}>
+              {t('ruleEditor.deleteOverride')}
+            </Button>
+          )}
         </div>
-      )}
+
+        {detail.rule.overrides.length > 0 && (
+          <FormSection title={t('ruleEditor.savedOverrides')}>
+            {/* Chaque surcharge enregistrée ramène le formulaire sur sa portée : la liste
+                cesse d'être un simple relevé qu'il fallait recopier dans le sélecteur. */}
+            <ul className="space-y-1">
+              {detail.rule.overrides.map((item) => {
+                const scope = item.connectionName ?? t('ruleEditor.allInstances')
+                const value = item.connectionId === null ? '' : String(item.connectionId)
+                const active = value === target
+
+                return (
+                  <li key={item.connectionId ?? 'global'}>
+                    <button
+                      type="button"
+                      onClick={() => setTarget(value)}
+                      aria-pressed={active}
+                      title={t('ruleEditor.editOverride', { scope })}
+                      className={cn(
+                        'flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--radius-control)] px-2 py-1.5 text-left text-xs transition-colors',
+                        active ? 'bg-brand-subtle' : 'hover:bg-surface-sunken',
+                      )}
+                    >
+                      <Badge tone="brand">{scope}</Badge>
+                      {item.enabled !== null && (
+                        <span className="text-ink-muted">
+                          {item.enabled ? t('rules.enabledTag') : t('rules.disabledTag')}
+                        </span>
+                      )}
+                      {item.severity && (
+                        <span className="text-ink-muted">
+                          {t('ruleEditor.overrideSeverity', { severity: severityLabel(item.severity) })}
+                        </span>
+                      )}
+                      {item.intervalSeconds && (
+                        <span className="text-ink-muted">
+                          {t('ruleEditor.overrideInterval', { seconds: item.intervalSeconds })}
+                        </span>
+                      )}
+                      {Object.keys(item.parameters).length > 0 && (
+                        <span className="text-ink-muted font-mono">
+                          {Object.entries(item.parameters)
+                            .map(([key, parameter]) => `${key}=${String(parameter)}`)
+                            .join(', ')}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </FormSection>
+        )}
+      </CardBody>
     </Card>
   )
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 
 /**
  * Coloration syntaxique SQL minimale. Écrite ici plutôt qu'importée : une bibliothèque
@@ -159,11 +160,14 @@ export function SqlCode({
 }): ReactNode {
   return (
     <pre
-      className={[
+      // `cn` plutôt qu'une concaténation : une classe passée par l'appelant — une hauteur
+      // maximale, un fond différent — remplace alors celle du composant au lieu de s'y ajouter
+      // et de dépendre de l'ordre de la feuille de style.
+      className={cn(
         'bg-surface-sunken border-border-subtle text-ink overflow-auto rounded-[var(--radius-control)] border px-3 py-2 font-mono text-xs leading-relaxed',
         wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre',
-        className ?? '',
-      ].join(' ')}
+        className,
+      )}
     >
       <code>
         {tokenizeSql(sql).map((token, index) => (
