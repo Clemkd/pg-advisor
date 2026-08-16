@@ -110,7 +110,7 @@ public sealed class ConnectionsController(
         connection.CollectionIntervalSeconds = request.CollectionIntervalSeconds;
         connection.Enabled = request.Enabled;
 
-        // Mot de passe absent de la requête : on conserve le secret enregistré.
+        // Password absent from the request: keep the stored secret.
         if (!string.IsNullOrEmpty(request.Password))
         {
             connection.EncryptedPassword = protector.Protect(request.Password);
@@ -118,7 +118,7 @@ public sealed class ConnectionsController(
 
         if (targetChanged)
         {
-            // La cible a changé : les capabilities détectées ne sont plus fiables.
+            // The target changed: previously detected capabilities are no longer reliable.
             connection.CapabilitiesJson = null;
             connection.ServerVersion = null;
             connection.ServerVersionNum = 0;
@@ -161,7 +161,7 @@ public sealed class ConnectionsController(
         return Ok(capabilities?.Describe(CapabilityDetector.NotableExtensions).ToList() ?? []);
     }
 
-    /// <summary>Teste une cible avant enregistrement, ou reteste une connexion existante.</summary>
+    /// <summary>Tests a target before saving it, or retests an existing connection.</summary>
     [HttpPost("test")]
     [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<TestConnectionResponse>> Test(TestConnectionRequest request, CancellationToken ct)
@@ -188,7 +188,7 @@ public sealed class ConnectionsController(
             }
 
             probe.EncryptedPassword = existing.EncryptedPassword;
-            password = null; // la fabrique déchiffrera le secret enregistré
+            password = null; // the factory will decrypt the stored secret
         }
         else if (string.IsNullOrEmpty(password))
         {
@@ -216,7 +216,7 @@ public sealed class ConnectionsController(
         }
         catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
         {
-            // Le message d'erreur PostgreSQL ne contient pas le secret ; il est utile à l'opérateur.
+            // The PostgreSQL error message does not contain the secret; it is useful to the operator.
             logger.LogWarning("Connection test to {Host}:{Port}/{Database} failed: {Reason}",
                 probe.Host, probe.Port, probe.Database, ex.Message);
 
