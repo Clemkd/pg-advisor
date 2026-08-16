@@ -20,7 +20,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Username == request.Username, ct);
 
-        // Message identique quel que soit le motif : pas d'énumération des comptes.
+        // Same message regardless of the reason: no account enumeration.
         if (user is null || !PasswordHasher.Verify(request.Password, user.PasswordHash, out var needsRehash))
         {
             logger.LogWarning("Authentication failed for {Username}", request.Username);
@@ -55,7 +55,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
         var user = await CurrentUserAsync(ct);
         if (user is null)
         {
-            // Le cookie référence un compte supprimé : on l'invalide.
+            // The cookie references a deleted account: invalidate it.
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Unauthorized();
         }
@@ -143,7 +143,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
                 return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Unknown role.");
             }
 
-            // Ne pas se retrouver sans administrateur.
+            // Never end up with no administrator left.
             if (user.Role == Roles.Admin && request.Role != Roles.Admin &&
                 await db.Users.CountAsync(u => u.Role == Roles.Admin, ct) == 1)
             {

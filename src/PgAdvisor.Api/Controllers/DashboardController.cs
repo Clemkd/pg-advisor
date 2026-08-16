@@ -34,8 +34,8 @@ public sealed class DashboardController(
             .GroupBy(w => w.ConnectionId)
             .ToDictionary(g => g.Key, g => g.Select(w => new FindingWeight(w.Category, w.Severity)).ToList());
 
-        // Les quarantaines viennent de la base : elles ont survécu au dernier redémarrage,
-        // contrairement à l'état volatil des instances.
+        // Quarantines come from the database: they survived the last restart, unlike the
+        // instances' volatile state.
         var now = DateTimeOffset.UtcNow;
         var quarantined = (await db.RuleHealth
                 .AsNoTracking()

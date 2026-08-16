@@ -1,22 +1,22 @@
 namespace PgAdvisor.Api;
 
 /// <summary>
-/// Options racine liées au déploiement (chemins du volume, périodicités).
-/// Liées depuis la configuration, préfixe d'environnement PGADVISOR_.
+/// Root options tied to deployment (volume paths, periodicities).
+/// Bound from configuration, environment prefix PGADVISOR_.
 /// </summary>
 public sealed class AdvisorOptions
 {
     /// <summary>
-    /// Volume inscriptible : base SQLite, clé de chiffrement, règles créées depuis l'IHM.
-    /// Le nom par défaut évite délibérément « data », qui entrerait en collision avec le
-    /// répertoire de sources Data/ sur un système de fichiers insensible à la casse.
+    /// Writable volume: SQLite database, encryption key, rules created from the UI.
+    /// The default name deliberately avoids "data", which would collide with the
+    /// Data/ source directory on a case-insensitive filesystem.
     /// </summary>
     public string DataDirectory { get; set; } = "advisor-data";
 
-    /// <summary>Répertoire des règles fournies par l'opérateur, potentiellement en lecture seule.</summary>
+    /// <summary>Directory of operator-provided rules, potentially read-only.</summary>
     public string RulesDirectory { get; set; } = "rules";
 
-    /// <summary>Sous-répertoire du volume accueillant les règles créées ou modifiées depuis l'IHM.</summary>
+    /// <summary>Volume subdirectory holding rules created or modified from the UI.</summary>
     public string UserRulesDirectoryName { get; set; } = "rules";
 
     public AuthOptions Auth { get; set; } = new();
@@ -34,14 +34,14 @@ public sealed class AuthOptions
     public int SlidingExpirationHours { get; set; } = 12;
 
     /// <summary>
-    /// Force l'attribut Secure sur le cookie. À activer dès que l'Advisor est exposé en HTTPS ;
-    /// laissé à false par défaut pour ne pas casser un accès HTTP local ou derrière un proxy.
+    /// Forces the Secure attribute on the cookie. Enable it as soon as the Advisor is exposed
+    /// over HTTPS; left false by default so local HTTP access or a proxy setup isn't broken.
     /// </summary>
     public bool RequireHttps { get; set; }
 
     /// <summary>
-    /// Mot de passe du compte admin créé au premier démarrage. Si vide, un mot de passe
-    /// aléatoire est généré et journalisé une seule fois.
+    /// Admin account password created on first startup. If empty, a random password is
+    /// generated and logged once.
     /// </summary>
     public string? BootstrapPassword { get; set; }
 
@@ -53,58 +53,57 @@ public sealed class SchedulerOptions
     public bool Enabled { get; set; } = true;
     public SchedulerIntervals Intervals { get; set; } = new();
 
-    /// <summary>Nombre d'instances analysées simultanément : une analyse lourde n'en bloque pas les autres.</summary>
+    /// <summary>Number of instances analyzed concurrently: one heavy analysis doesn't block the others.</summary>
     public int MaxConcurrentInstances { get; set; } = 4;
 
     public TimeSpan PerInstanceTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>
-    /// Délai maximal d'exécution d'une requête de règle sur l'instance supervisée, appliqué à
-    /// défaut de délai propre à la règle (<c>timeoutSeconds</c>).
+    /// Maximum execution time for a rule query on the monitored instance, applied when the
+    /// rule has no timeout of its own (<c>timeoutSeconds</c>).
     /// </summary>
     public TimeSpan QueryTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>Garde-fou de coût : comptage des exécutions coûteuses et mise en quarantaine.</summary>
+    /// <summary>Cost guard: counts costly executions and quarantines offending rules.</summary>
     public RuleGuardOptions RuleGuard { get; set; } = new();
 }
 
 /// <summary>
-/// Garde-fou de coût des règles. Il compte, par couple (règle, instance), les exécutions qui
-/// pèsent sur la base supervisée — dépassement de délai, erreur SQL, ou succès trop lent — puis
-/// avertit, et finit par écarter la règle de cette instance plutôt que de la laisser coûter
-/// indéfiniment. Rien de tout cela n'est écrit sur l'instance supervisée : c'est de l'état de
-/// l'Advisor.
+/// Rule cost guard. For each (rule, instance) pair, it counts executions that burden the
+/// monitored database — timeout, SQL error, or a success that's too slow — then warns, and
+/// eventually drops the rule from that instance rather than letting it cost indefinitely.
+/// None of this is written to the monitored instance: it is Advisor-side state.
 /// </summary>
 public sealed class RuleGuardOptions
 {
-    /// <summary>Désactive tout le mécanisme : les règles s'exécutent alors sans plafond d'incidents.</summary>
+    /// <summary>Disables the whole mechanism: rules then run with no incident cap.</summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Incidents consécutifs à partir desquels la règle est signalée et notifiée, sans cesser
-    /// de s'exécuter. Trois passages écartent l'accident isolé (bascule, verrou, redémarrage)
-    /// sans laisser traîner un vrai problème.
+    /// Consecutive incidents after which the rule is flagged and a notification is sent,
+    /// without stopping execution. Three occurrences rule out an isolated accident (failover,
+    /// lock, restart) without letting a real problem linger.
     /// </summary>
     public int WarningThreshold { get; set; } = 3;
 
     /// <summary>
-    /// Incidents consécutifs à partir desquels la règle est mise en quarantaine sur cette
-    /// instance. Deux passages de plus que l'avertissement : l'exploitant a le temps de voir
-    /// l'alerte avant que le diagnostic ne cesse d'être produit.
+    /// Consecutive incidents after which the rule is quarantined on this instance. Two more
+    /// than the warning threshold: the operator has time to see the alert before the
+    /// diagnostic stops being produced.
     /// </summary>
     public int QuarantineThreshold { get; set; } = 5;
 
     /// <summary>
-    /// Durée d'une quarantaine, au terme de laquelle la règle est réessayée d'elle-même. Six
-    /// heures : assez long pour que la règle cesse de peser sur une base en souffrance, assez
-    /// court pour qu'un correctif appliqué dans la journée soit constaté sans intervention.
+    /// Duration of a quarantine, after which the rule is retried on its own. Six hours: long
+    /// enough for the rule to stop weighing on a struggling database, short enough that a fix
+    /// applied the same day is picked up without manual intervention.
     /// </summary>
     public TimeSpan QuarantineDuration { get; set; } = TimeSpan.FromHours(6);
 
     /// <summary>
-    /// Fraction du délai maximal au-delà de laquelle une exécution réussie compte quand même
-    /// comme un incident. À 80 % du budget, la règle n'est qu'à une croissance de tables du
-    /// dépassement : elle coûte déjà, et n'échouerait jamais d'elle-même.
+    /// Fraction of the maximum delay beyond which a successful execution still counts as an
+    /// incident. At 80% of the budget, the rule is only one table-growth away from timing
+    /// out: it already costs, and would never fail on its own.
     /// </summary>
     public double SlowRunRatio { get; set; } = 0.8;
 }
