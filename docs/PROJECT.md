@@ -1,27 +1,25 @@
-**Français** · [English](PROJECT.en.md)
+# PostgreSQL Advisor — project description
 
-# PostgreSQL Advisor — descriptif projet
+## Purpose
 
-## Objet
+Build a self-hosted PostgreSQL Advisor, deployable as a single Docker container, able to supervise
+**one or several separate PostgreSQL instances** without altering their container, their volumes or
+their configuration.
 
-Développer un PostgreSQL Advisor self-hosted, déployable sous forme d'un unique conteneur
-Docker, capable de superviser **une ou plusieurs instances PostgreSQL distinctes** sans
-modifier leur conteneur, leurs volumes ou leur configuration.
-
-Une seule instance de l'Advisor supervise N bases PostgreSQL indépendantes : chaque
-connexion est isolée (capabilities, findings, health score, planification propres).
+A single Advisor instance supervises N independent PostgreSQL databases: each connection is isolated
+(its own capabilities, findings, health score and scheduling).
 
 ## Stack
 
-- Backend : ASP.NET Core 10
-- Frontend : React + TypeScript + Vite
-- Frontend compilé puis servi directement par ASP.NET Core (`wwwroot`)
-- Npgsql pour les connexions PostgreSQL
-- SQLite pour les données propres à l'Advisor
+- Backend: ASP.NET Core 10
+- Frontend: React + TypeScript + Vite
+- Frontend built and then served directly by ASP.NET Core (`wwwroot`)
+- Npgsql for PostgreSQL connections
+- SQLite for the Advisor's own data
 - Docker / Docker Compose
-- API REST + SSE pour les mises à jour temps réel
-- Authentification locale simple par compte utilisateur
-- UI responsive avec Tailwind CSS
+- REST API + SSE for real-time updates
+- Simple local authentication by user account
+- Responsive UI with Tailwind CSS
 
 ## Architecture
 
@@ -50,12 +48,12 @@ pg-advisor
     PostgreSQL instances (1..N)
 ```
 
-## PostgreSQL : principe zero-touch
+## PostgreSQL: the zero-touch principle
 
-L'Advisor ne doit rien installer ni modifier automatiquement sur PostgreSQL. Il se connecte
-uniquement via SQL avec un utilisateur disposant des permissions nécessaires.
+The Advisor must never install or change anything on PostgreSQL automatically. It connects purely
+over SQL, as a user holding the necessary permissions.
 
-Sources exploitées :
+Sources it draws on:
 
 - `pg_stat_activity`
 - `pg_stat_database`
@@ -69,11 +67,11 @@ Sources exploitées :
 - `pg_constraint`
 - `information_schema`
 - `EXPLAIN`
-- statistiques TimescaleDB lorsqu'elles sont disponibles
+- TimescaleDB statistics when they are available
 
-## Extensions optionnelles
+## Optional extensions
 
-Le système détecte automatiquement les extensions et capacités disponibles, par instance :
+The system automatically detects the available extensions and capabilities, per instance:
 
 ```
 ✓ pg_stat_activity
@@ -83,17 +81,17 @@ Le système détecte automatiquement les extensions et capacités disponibles, p
 ✗ HypoPG
 ```
 
-Les fonctionnalités dépendant d'une extension ne sont activées que si celle-ci est
-disponible. Si une extension importante est absente, l'Advisor crée un diagnostic qui invite
-à l'installer, sans jamais tenter de le faire :
+Features that depend on an extension are only enabled when it is available. If an important
+extension is missing, the Advisor raises a diagnostic asking for it, without ever attempting the
+installation itself:
 
-> `pg_stat_statements` n'est pas disponible. Son installation permettrait d'obtenir
-> l'historique et le classement des requêtes par temps d'exécution.
+> `pg_stat_statements` is not available. Installing it would provide query history and a ranking of
+> queries by execution time.
 
-## Rule Engine
+## Rule engine
 
-Le point central du projet est un moteur de règles extensible sans recompilation. Les
-règles sont définies en YAML et chargées dynamiquement depuis `/app/rules`.
+The centrepiece of the project is a rule engine extensible without recompilation. Rules are defined
+in YAML and loaded dynamically from `/app/rules`.
 
 ```yaml
 id: vacuum.dead-tuples
@@ -124,7 +122,7 @@ recommendation:
   message: "{{ relname }} has {{ ratio | percent }} dead tuples."
 ```
 
-Pipeline du moteur :
+Engine pipeline:
 
 ```
 YAML
@@ -144,42 +142,38 @@ Recommendation
 Severity / score
 ```
 
-### Types de règles
+### Rule types
 
 1. SQL + condition
 2. SQL + expressions
-3. règles dépendantes d'une extension
-4. règles spécifiques PostgreSQL
-5. règles spécifiques TimescaleDB
+3. extension-dependent rules
+4. PostgreSQL-specific rules
+5. TimescaleDB-specific rules
 
-Les règles complexes nécessitant du code peuvent être implémentées comme des handlers
-internes, mais le maximum doit rester déclaratif.
+Complex rules that need code can be implemented as built-in handlers, but as much as possible must
+stay declarative.
 
-### Édition des règles depuis l'IHM
+### Editing rules from the UI
 
-Les règles doivent être manipulables depuis l'interface, pas seulement via le système de
-fichiers :
+Rules must be manageable from the interface, not only through the file system:
 
-- liste des règles avec état (active, désactivée, en erreur), catégorie, sévérité,
-  capabilities requises ;
-- éditeur YAML avec validation avant enregistrement (une règle invalide n'est jamais
-  activée) ;
-- création, duplication, modification, suppression ;
-- activation/désactivation et surcharge de sévérité ou de seuils par instance
-  (`RuleOverrides`) ;
-- exécution à la demande sur une instance choisie, avec aperçu du résultat SQL et des
-  findings produits, sans persistance (mode « dry run ») ;
-- distinction entre règles intégrées (packagées, en lecture seule, surchargeable) et règles
-  utilisateur (éditables, stockées dans le volume) ;
-- les écritures depuis l'IHM produisent des fichiers YAML dans le répertoire des règles :
-  le format fichier reste la source de vérité et le hot reload s'applique aussi aux
-  modifications faites via l'IHM.
+- a list of rules with their state (enabled, disabled, failing), category, severity and required
+  capabilities;
+- a YAML editor with validation before saving (an invalid rule is never activated);
+- creation, duplication, modification, deletion;
+- enable/disable and per-instance override of severity or thresholds (`RuleOverrides`);
+- on-demand execution against a chosen instance, with a preview of the SQL result and of the findings
+  produced, without persistence ("dry run" mode);
+- a distinction between bundled rules (packaged, read-only, overridable) and user rules (editable,
+  stored in the volume);
+- writes from the UI produce YAML files in the rules directory: the file format remains the source of
+  truth, and hot reload applies to changes made through the UI as well.
 
-### Catégories initiales
+### Initial categories
 
-performance ; requêtes ; index ; vacuum/autovacuum ; bloat ; connexions ; locks/blocking ;
-transactions longues ; checkpoints ; configuration PostgreSQL ; stockage ; statistiques ;
-sécurité de configuration ; extensions disponibles.
+performance; queries; indexes; vacuum/autovacuum; bloat; connections; locks/blocking; long
+transactions; checkpoints; PostgreSQL configuration; storage; statistics; configuration security;
+available extensions.
 
 ## Dashboard
 
@@ -200,17 +194,17 @@ Configuration  89
 Connections    96
 ```
 
-Chaque diagnostic affiche : sévérité ; titre ; description ; preuves/métriques ;
-impact estimé ; confiance ; règle l'ayant déclenché ; éventuelle commande SQL
-corrective ; documentation ; date de détection ; statut `active` / `resolved` / `ignored`.
+Every diagnostic shows: severity; title; description; evidence/metrics; estimated impact;
+confidence; the rule that raised it; a corrective SQL statement when there is one;
+documentation; detection date; and status `active` / `resolved` / `ignored`.
 
-Un diagnostic ne se coche pas : il décrit un fait constaté sur l'instance. Seul le moteur le
-passe à `resolved`, lorsque la règle cesse de le remonter. Un opérateur l'ignore ou le
-reconsidère — `resolved` est refusé par l'API si elle le reçoit d'une IHM.
+A diagnostic is not a box to tick: it describes a fact observed on the instance. Only the engine
+moves it to `resolved`, once the rule stops reporting it. An operator ignores or reconsiders it —
+`resolved` is refused by the API if a UI sends it.
 
-## Gestion des instances PostgreSQL
+## Managing PostgreSQL instances
 
-L'Advisor supervise plusieurs instances, chacune avec son propre health score :
+The Advisor supervises several instances, each with its own health score:
 
 ```
 Production
@@ -222,12 +216,12 @@ PostgreSQL 18
 Health: 97/100
 ```
 
-Chaque connexion possède : nom ; host ; port ; database ; utilisateur ; secret/mot de
-passe ; intervalle de collecte ; activation/désactivation.
+Every connection holds: name; host; port; database; user; secret/password; collection interval;
+enable/disable.
 
-Les credentials ne doivent jamais apparaître dans les logs ou l'interface après sauvegarde.
+Credentials must never appear in the logs or the interface once saved.
 
-## Notifications Webhook
+## Webhook notifications
 
 ```yaml
 webhooks:
@@ -242,41 +236,41 @@ webhooks:
       - rule_quarantined
 ```
 
-`rule_degraded` et `rule_quarantined` viennent du garde-fou de coût : une règle qui accumule
-les incidents sur une instance, puis une règle qui en est écartée. Sans eux, une base cesse
-d'être analysée sur un point sans que personne en soit averti.
+`rule_degraded` and `rule_quarantined` come from the cost guard: a rule piling up incidents on an
+instance, then a rule set aside from it. Without them, a database stops being analysed on one
+point and nobody is told.
 
-Déduplication obligatoire :
+Deduplication is mandatory:
 
 ```
-Finding détecté
+Finding detected
      ↓
-déjà notifié ?
+already notified?
  ┌───┴────┐
-non      oui
+no       yes
  ↓        ↓
 Webhook  ignore
 ```
 
-Conserver l'historique des notifications et gérer les erreurs/retry raisonnables.
+Keep a notification history, and handle errors with reasonable retries.
 
-## Authentification
+## Authentication
 
 - login/password
-- ASP.NET Core Cookie Authentication
-- cookie HttpOnly, Secure
-- hash de mot de passe robuste
-- `[Authorize]` sur l'API
+- ASP.NET Core cookie authentication
+- HttpOnly, Secure cookie
+- robust password hashing
+- `[Authorize]` on the API
 - logout
-- vue « Mon profil » : tout compte y voit son identifiant et son rôle, et y change son mot de
-  passe — l'ancien est exigé, et la gestion des autres comptes reste réservée aux administrateurs
-- éventuellement rôles Admin / Viewer
+- a **My profile** view: every account sees its username and role there, and changes its own
+  password — the old one is required, and managing other accounts stays with administrators
+- possibly Admin / Viewer roles
 
-Pas d'IdentityServer/OIDC pour le MVP.
+No IdentityServer/OIDC for the MVP.
 
 ## SQLite
 
-SQLite contient uniquement l'état de l'Advisor :
+SQLite holds the Advisor's state only:
 
 ```
 Users
@@ -291,55 +285,51 @@ QueryPlanSnapshots
 Settings
 ```
 
-Les règles restent dans des fichiers YAML afin de pouvoir être ajoutées/modifiées sans
-recompilation.
+Rules stay in YAML files so that they can be added or modified without recompilation.
 
-## Hot reload des règles
+## Rule hot reload
 
-Surveillance de `/app/rules` :
+Watching `/app/rules`:
 
 ```
 File change
     ↓
 Validation
     ↓
-Compilation/interprétation
+Compilation/interpretation
     ↓
 Activation
 ```
 
-Une règle invalide ne doit jamais faire tomber l'application ; son erreur est affichée dans
-le dashboard.
+An invalid rule must never bring the application down; its error is shown on the dashboard.
 
 ## Scheduler
 
-Un `BackgroundService` exécute périodiquement les collectes et règles, par instance :
+A `BackgroundService` runs the collectors and rules periodically, per instance:
 
 ```
-Toutes les 10 s  → health / activity
-Toutes les 1 min → statistics
-Toutes les 5 min → recommendations
-Toutes les 1 h   → configuration / storage analysis
+Every 10 s  → health / activity
+Every 1 min → statistics
+Every 5 min → recommendations
+Every 1 h   → configuration / storage analysis
 ```
 
-Les fréquences sont configurables. Une analyse lourde sur une instance ne doit jamais
-bloquer les autres.
+The frequencies are configurable. A heavy analysis on one instance must never block the others.
 
-Un garde-fou de coût protège l'instance observée : chaque règle a un délai maximal, propre ou
-hérité de `Scheduler:QueryTimeout`, et les incidents se comptent par couple (règle, instance).
-Au seuil d'avertissement la règle est signalée, au seuil de quarantaine elle est écartée de
-cette instance pour quelques heures, puis réessayée. Le détail est dans
-[le format des règles](RULES.md#garde-fou-de-coût).
+A cost guard protects the instance being observed: every rule has a time limit, its own or
+inherited from `Scheduler:QueryTimeout`, and incidents are counted per (rule, instance) pair. At
+the warning threshold the rule is flagged; at the quarantine threshold it is set aside from that
+instance for a few hours, then retried. The detail is in [the rule format](RULES.md#cost-guard).
 
 ## SSE
 
-Server-Sent Events pour pousser au frontend : nouveau finding ; finding résolu ; changement
-du health score ; état de collecte ; progression d'une analyse ; règle signalée ou écartée
-par le garde-fou, et son rétablissement. Pas de WebSocket pour le MVP.
+Server-Sent Events to push to the frontend: new finding; resolved finding; health score change;
+collection state; analysis progress; a rule flagged or set aside by the cost guard, and its
+recovery. No WebSocket for the MVP.
 
 ## Docker
 
-Un seul conteneur :
+A single container:
 
 ```
 pg-advisor
@@ -366,56 +356,54 @@ volumes:
   advisor-data:
 ```
 
-Aucune modification du conteneur PostgreSQL.
+No modification to the PostgreSQL container.
 
-> Note : l'édition des règles depuis l'IHM impose que le répertoire des règles
-> utilisateur soit accessible en écriture. Les règles packagées peuvent rester en lecture
-> seule ; les règles utilisateur sont écrites dans le volume de données
-> (`/app/data/rules`), le montage `./rules:/app/rules:ro` restant valable pour les règles
-> fournies par l'opérateur.
+> Note: editing rules from the UI requires the user-rules directory to be writable. Packaged rules
+> can stay read-only; user rules are written to the data volume (`/app/data/rules`), and the
+> `./rules:/app/rules:ro` mount remains valid for operator-supplied rules.
 
-## MVP — priorité de développement
+## MVP — development priority
 
-1. ASP.NET Core 10 + React/Vite dans un conteneur unique
-2. Authentification locale
-3. Ajout/suppression de connexions PostgreSQL
-4. Collector PostgreSQL read-only
-5. Détection automatique des capabilities/extensions
-6. Rule engine YAML
-7. Hot reload des règles
-8. Dashboard health score
-9. Premières règles PostgreSQL
-10. Gestion des findings
-11. Webhooks + déduplication
+1. ASP.NET Core 10 + React/Vite in a single container
+2. Local authentication
+3. Adding and removing PostgreSQL connections
+4. Read-only PostgreSQL collector
+5. Automatic capability/extension detection
+6. YAML rule engine
+7. Rule hot reload
+8. Health score dashboard
+9. First PostgreSQL rules
+10. Finding management
+11. Webhooks + deduplication
 12. SSE
-13. Support TimescaleDB
-14. Édition des règles depuis l'IHM
-15. Documentation et exemples de règles
+13. TimescaleDB support
+14. Editing rules from the UI
+15. Documentation and rule examples
 
-## Objectif final
+## Final goal
 
 ```
 docker compose up -d
 ```
 
-puis :
+then:
 
 ```
 Login
  ↓
-Ajouter PostgreSQL
+Add PostgreSQL
  ↓
-Connexion read-only
+Read-only connection
  ↓
-Analyse automatique
+Automatic analysis
  ↓
 Health Score
  ↓
 Diagnostics
  ↓
-Notifications webhook
+Webhook notifications
 ```
 
-**Principe fondamental** : l'Advisor doit être utile sans aucune extension PostgreSQL, mais
-devenir progressivement plus puissant lorsque `pg_stat_statements`, HypoPG, `pgstattuple` ou
-d'autres capacités sont disponibles.
+**Fundamental principle**: the Advisor must be useful with no PostgreSQL extension at all, yet grow
+progressively more powerful as `pg_stat_statements`, HypoPG, `pgstattuple` or other capabilities
+become available.

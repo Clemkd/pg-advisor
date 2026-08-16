@@ -1,5 +1,3 @@
-[Français](APERCU.md) · **English**
-
 # Interface overview
 
 Screenshots taken against the repository's test stack: two supervised instances — one PostgreSQL 17

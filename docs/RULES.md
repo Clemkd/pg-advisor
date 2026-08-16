@@ -1,68 +1,62 @@
-**Français** · [English](RULES.en.md)
+# Rule format
 
-# Format des règles
+A rule is a single YAML file. Bundled rules are loaded from `PGADVISOR_RulesDirectory`
+(`/app/rules`, mountable read-only); rules created or modified from the UI are written to
+`<DataDirectory>/rules` (`/app/data/rules`). Both directories are watched: any addition or change
+triggers validation and then activation, without a restart.
 
-Une règle est un fichier YAML unique. Les règles intégrées sont chargées depuis
-`PGADVISOR_RulesDirectory` (`/app/rules`, montable en lecture seule) ; les règles créées ou
-modifiées depuis l'IHM sont écrites dans `<DataDirectory>/rules` (`/app/data/rules`). Les deux
-répertoires sont surveillés : tout ajout ou modification déclenche validation puis activation,
-sans redémarrage.
+An invalid rule is never activated and never brings the application down: it is listed as failing on
+the dashboard and on the Rules page, together with its validation message.
 
-Une règle invalide n'est jamais activée et ne fait jamais tomber l'application : elle est
-listée en erreur dans le dashboard et sur la page Règles, avec le message de validation.
+When a user rule carries the same `id` as a bundled one, it replaces it. That is the mechanism for
+editing a packaged rule from the UI; deleting the user version restores the original.
 
-Lorsqu'une règle utilisateur porte le même `id` qu'une règle intégrée, elle la remplace. C'est
-le mécanisme d'édition d'une règle packagée depuis l'IHM ; supprimer la version utilisateur
-rétablit la règle d'origine.
+## Fields
 
-## Champs
-
-| Champ | Requis | Description |
+| Field | Required | Description |
 | --- | --- | --- |
-| `id` | oui | Identifiant stable et unique, en minuscules. Convention `categorie.sujet`. |
-| `version` | oui | Entier positif, incrémenté à chaque changement de sémantique. |
-| `name` | oui | Libellé court affiché dans l'IHM. |
-| `description` | non | Explication du diagnostic, affichée dans l'éditeur. |
-| `category` | oui | Une des catégories ci-dessous. |
-| `severity` | oui | `info`, `warning` ou `critical`. Surchargeable par instance. |
-| `group` | non | Groupe de périodicité : `health`, `statistics`, `recommendations` (défaut) ou `configuration`. |
-| `intervalSeconds` | non | Périodicité propre, de 5 à 86400. Sert de limitation à l'intérieur du groupe. |
-| `timeoutSeconds` | non | Timeout d'exécution, de 1 à 300. Défaut : `Scheduler:QueryTimeout`. Surchargeable par instance. |
-| `enabled` | non | `false` livre la règle désactivée par défaut. |
-| `requires` | non | Prérequis de capacités ; la règle est ignorée si non satisfaits. |
-| `parameters` | non | Seuils scalaires, surchargeables depuis l'IHM. |
-| `query` | oui sauf si `handler` | SQL **lecture seule** exécuté sur l'instance supervisée. |
-| `handler` | non | Handler interne, exclusif de `query`. |
-| `condition` | non | Expression évaluée par ligne ; la ligne devient un finding si elle est vraie. |
-| `key` | non | Colonnes formant l'identité du finding. Vide = un finding unique par instance. |
-| `limit` | non | Nombre maximal de findings par exécution, de 1 à 1000 (défaut 100). |
-| `recommendation` | oui | Contenu du finding produit. |
+| `id` | yes | Stable, unique, lowercase identifier. Convention: `category.subject`. |
+| `version` | yes | Positive integer, bumped whenever the semantics change. |
+| `name` | yes | Short label shown in the UI. |
+| `description` | no | Explanation of the diagnostic, shown in the editor. |
+| `category` | yes | One of the categories listed below. |
+| `severity` | yes | `info`, `warning` or `critical`. Overridable per instance. |
+| `group` | no | Scheduling group: `health`, `statistics`, `recommendations` (default) or `configuration`. |
+| `intervalSeconds` | no | Own period, from 5 to 86400. Acts as a throttle inside the group. |
+| `timeoutSeconds` | no | Own execution deadline, from 1 to 300. Defaults to `Scheduler:QueryTimeout`. Overridable per instance. |
+| `enabled` | no | `false` ships the rule disabled by default. |
+| `requires` | no | Capability prerequisites; the rule is skipped when they are not met. |
+| `parameters` | no | Scalar thresholds, overridable from the UI. |
+| `query` | yes unless `handler` | **Read-only** SQL executed against the supervised instance. |
+| `handler` | no | Built-in handler, mutually exclusive with `query`. |
+| `condition` | no | Expression evaluated per row; a row becomes a finding when it is true. |
+| `key` | no | Columns forming the finding's identity. Empty = a single finding per instance. |
+| `limit` | no | Maximum findings per run, from 1 to 1000 (default 100). |
+| `recommendation` | yes | Content of the finding produced. |
 
-Un champ inconnu fait échouer le chargement : une faute de frappe dans un nom de champ est
-signalée plutôt que silencieusement ignorée.
+An unknown field fails the load: a typo in a field name is reported rather than silently ignored.
 
 ### `requires`
 
 ```yaml
 requires:
-  views:              # relations ou vues système devant être lisibles
+  views:              # relations or system views that must be readable
     - pg_stat_user_tables
-  extensions:         # extensions devant être installées
+  extensions:         # extensions that must be installed
     - pg_stat_statements
-  missingExtensions:  # inverse : la règle ne se déclenche que si elles sont absentes
+  missingExtensions:  # the reverse: the rule only fires when they are absent
     - hypopg
-  minVersion: 14      # version majeure PostgreSQL minimale
-  maxVersion: 16      # version majeure maximale
-  monitorRole: true   # exige pg_monitor ou le rôle superutilisateur
-  primary: true       # ignore les instances en recovery
+  minVersion: 14      # minimum PostgreSQL major version
+  maxVersion: 16      # maximum major version
+  monitorRole: true   # requires pg_monitor or the superuser role
+  primary: true       # skips instances in recovery
 ```
 
-Les capacités sont détectées par instance : version, extensions installées, et vues réellement
-lisibles par l'utilisateur de supervision (`has_table_privilege`). Une règle dont les prérequis
-ne sont pas satisfaits est ignorée pour cette instance — pas d'erreur, pas de finding, et sa
-catégorie n'est pas notée dans le score.
+Capabilities are detected per instance: version, installed extensions, and the views actually
+readable by the monitoring user (`has_table_privilege`). A rule whose prerequisites are not met is
+skipped for that instance — no error, no finding, and its category is not counted in the score.
 
-Une vue peut être citée par son nom court ou qualifié : `chunks` comme
+A view can be named in its short or qualified form: `chunks` as well as
 `timescaledb_information.chunks`.
 
 ### `parameters`
@@ -73,19 +67,19 @@ parameters:
   minimum_rows: 10000
 ```
 
-Chaque seuil est disponible de deux façons :
+Every threshold is available in two ways:
 
-- comme **paramètre SQL** dans `query`, sous la forme `@minimum_ratio` ;
-- comme **variable de la condition**, sous son nom nu.
+- as a **SQL parameter** inside `query`, written `@minimum_ratio`;
+- as a **condition variable**, under its bare name.
 
-Les seuils sont surchargeables par instance depuis l'IHM sans toucher au fichier.
+Thresholds are overridable per instance from the UI without touching the file.
 
 ### `query`
 
-Requête en lecture seule, une seule instruction. Elle doit commencer par `SELECT`, `WITH`,
-`TABLE` ou `EXPLAIN` ; un `;` ailleurs qu'en fin de requête est refusé au chargement. La
-session PostgreSQL est en outre forcée en lecture seule avec un `statement_timeout` borné,
-si bien qu'une règle ne peut ni écrire ni monopoliser l'instance supervisée.
+A read-only query, a single statement. It must start with `SELECT`, `WITH`, `TABLE` or `EXPLAIN`; a
+`;` anywhere other than at the very end is rejected at load time. The PostgreSQL session is also
+forced read-only with a bounded `statement_timeout`, so a rule can neither write to nor monopolise
+the supervised instance.
 
 ### `timeoutSeconds`
 
@@ -93,36 +87,35 @@ si bien qu'une règle ne peut ni écrire ni monopoliser l'instance supervisée.
 timeoutSeconds: 120
 ```
 
-Timeout accordé à cette règle, de 1 à 300 secondes. À défaut, le timeout global
-`Scheduler:QueryTimeout` s'applique. Il est posé en `statement_timeout` sur la session qui
-exécute la règle, puis rendu à sa valeur globale : c'est un réglage de session, jamais une
-écriture sur l'instance supervisée.
+The deadline granted to this rule, from 1 to 300 seconds. Without it, the global
+`Scheduler:QueryTimeout` applies. It is set as the `statement_timeout` of the session running the
+rule, then handed back to its global value: a session setting, never a write to the supervised
+instance.
 
-Une règle légitimement coûteuse sur une grosse base — un calcul de bloat, un parcours d'index —
-se voit ainsi accorder son propre budget sans allonger celui de toutes les autres. Le timeout est
-surchargeable par instance comme les seuils : la même règle peut disposer de 180 s sur une base
-de 2 To et de 30 s ailleurs.
+A rule that is legitimately expensive on a large database — a bloat computation, an index scan —
+gets its own budget without stretching everyone else's. The deadline is overridable per instance
+just like thresholds: the same rule may be granted 180 s on a 2 TB database and 30 s elsewhere.
 
-Le plafond de 300 s est volontairement bas. Au-delà, une règle de supervision ne borne plus rien
-et redevient exactement ce que ce mécanisme cherche à empêcher.
+The 300 s ceiling is deliberately low. Beyond that, a supervision rule no longer bounds anything
+and becomes exactly what this mechanism exists to prevent.
 
 ### `condition`
 
-Expression booléenne évaluée sur chaque ligne du résultat. Les variables disponibles sont les
-colonnes du `SELECT`, puis les seuils ; une colonne masque un seuil homonyme.
+A boolean expression evaluated against each row of the result. The available variables are the
+columns of the `SELECT`, then the thresholds; a column shadows a threshold of the same name.
 
-- comparaisons : `>` `>=` `<` `<=` `==` (ou `=`) `!=` (ou `<>`)
-- arithmétique : `+` `-` `*` `/` `%`
-- logique : `and` `or` `not`
-- test de nullité : `x is null`, `x is not null`
-- cast de style PostgreSQL : `used::float`, `value::int`, `value::text`, `value::bool`
-- fonctions : `coalesce`, `abs`, `round`, `greatest`, `least`, `length`, `lower`, `upper`,
+- comparisons: `>` `>=` `<` `<=` `==` (or `=`) `!=` (or `<>`)
+- arithmetic: `+` `-` `*` `/` `%`
+- logic: `and` `or` `not`
+- null tests: `x is null`, `x is not null`
+- PostgreSQL-style casts: `used::float`, `value::int`, `value::text`, `value::bool`
+- functions: `coalesce`, `abs`, `round`, `greatest`, `least`, `length`, `lower`, `upper`,
   `contains`
 
-Une valeur `NULL` rend la comparaison fausse au lieu d'échouer, et une division par zéro donne
-`NULL` : une statistique manquante ne produit jamais de finding et ne casse jamais la règle.
+A `NULL` value makes the comparison false instead of failing, and a division by zero yields `NULL`:
+a missing statistic never produces a finding and never breaks the rule.
 
-Sans `condition`, chaque ligne retournée produit un finding.
+Without a `condition`, every returned row produces a finding.
 
 ### `key`
 
@@ -132,193 +125,186 @@ key:
   - relname
 ```
 
-La clé identifie l'objet concerné à l'intérieur de la règle. C'est elle qui permet de
-reconnaître le même diagnostic d'une exécution à l'autre : sans clé, la règle produit un
-finding unique par instance, avec clé elle en produit un par cible.
+The key identifies the object concerned within the rule. It is what allows the same diagnostic to be
+recognised from one run to the next: without a key, the rule produces a single finding per instance;
+with one, it produces a finding per target.
 
 ### `recommendation`
 
 ```yaml
 recommendation:
-  title: "Autovacuum en retard sur {{ schemaname }}.{{ relname }}"
-  message: "{{ relname }} présente {{ ratio | percent }} de lignes mortes."
+  title: "Autovacuum behind on {{ schemaname }}.{{ relname }}"
+  message: "{{ relname }} holds {{ ratio | percent }} dead rows."
   impact: low | medium | high
   confidence: low | medium | high
-  evidence:            # colonnes attachées au finding ; vide = toutes
+  evidence:            # columns attached to the finding; empty = all of them
     - n_dead_tup
     - ratio
   sql: "VACUUM (ANALYZE) {{ schemaname }}.{{ relname }};"
   documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html
 ```
 
-`message` est facultatif : à défaut, le titre fait office de message. `documentation` doit être
-une URL absolue en http ou https.
+`message` is optional: failing that, the title doubles as the message. `documentation` must be an
+absolute http or https URL.
 
-Le champ `sql` est une **suggestion affichée à l'utilisateur**. L'Advisor ne l'exécute jamais :
-le principe zero-touch interdit toute écriture sur l'instance supervisée.
+The `sql` field is a **suggestion shown to the user**. The Advisor never runs it: the zero-touch
+principle forbids any write to the supervised instance.
 
-### Interpolation et filtres
+### Interpolation and filters
 
-`{{ expression | filtre }}` accepte n'importe quelle expression du langage de conditions, et
-les filtres se chaînent.
+`{{ expression | filter }}` accepts any expression of the condition language, and filters chain.
 
-| Filtre | Entrée | Sortie |
+| Filter | Input | Output |
 | --- | --- | --- |
-| `percent` (`percent:0`) | ratio 0 à 1 | `20.3 %` |
-| `bytes` | octets | `1.5 KiB` |
-| `duration` | millisecondes | `1.5 s` |
-| `seconds` | secondes | `2 min` |
-| `round` (`round:2`) | nombre | `3.14` |
-| `integer` | nombre | `4` |
-| `number` | nombre | `1,234,567` |
-| `upper`, `lower`, `trim` | texte | texte |
+| `percent` (`percent:0`) | ratio from 0 to 1 | `20.3 %` |
+| `bytes` | bytes | `1.5 KiB` |
+| `duration` | milliseconds | `1.5 s` |
+| `seconds` | seconds | `2 min` |
+| `round` (`round:2`) | number | `3.14` |
+| `integer` | number | `4` |
+| `number` | number | `1,234,567` |
+| `upper`, `lower`, `trim` | text | text |
 
-Une valeur nulle est rendue `n/a` : un message n'affiche jamais un trou.
+A null value renders as `n/a`: a message never shows a hole.
 
-## Handlers internes
+## Built-in handlers
 
-Une règle dont la logique dépasse « SQL + condition » — plusieurs requêtes, corrélation entre
-lignes — désigne un handler par son nom. Le YAML reste la porte d'entrée : il fournit les
-prérequis, la sévérité et la recommandation.
+A rule whose logic goes beyond "SQL + condition" — several queries, correlation across rows — names
+a handler instead. YAML stays the way in: it supplies the prerequisites, the severity and the
+recommendation.
 
-| Handler | Colonnes produites |
+| Handler | Columns produced |
 | --- | --- |
 | `capabilities.missing-extension` | `extension`, `installable`, `server_version` |
 | `indexes.redundant` | `schemaname`, `tablename`, `indexname`, `covering_index`, `index_bytes`, `idx_scan`, `columns`, `access_method`, `is_partial` |
 
-La liste à jour, avec la description de chaque handler, est exposée par
-`GET /api/rules/schema` et affichée dans l'aide-mémoire de l'éditeur.
+The up-to-date list, with a description of each handler, is exposed by `GET /api/rules/schema` and
+shown in the editor's cheat sheet.
 
-## Catégories
+## Categories
 
-`performance`, `queries`, `indexes`, `vacuum`, `bloat`, `connections`, `locks`,
-`transactions`, `checkpoints`, `configuration`, `storage`, `statistics`, `security`,
-`extensions`.
+`performance`, `queries`, `indexes`, `vacuum`, `bloat`, `connections`, `locks`, `transactions`,
+`checkpoints`, `configuration`, `storage`, `statistics`, `security`, `extensions`.
 
-## Groupes de périodicité
+## Scheduling groups
 
-| Groupe | Périodicité par défaut | Usage |
+| Group | Default period | Used for |
 | --- | --- | --- |
-| `health` | 10 s | activité, connexions, verrous, transactions longues |
-| `statistics` | 1 min | compteurs cumulés de `pg_stat_*` |
-| `recommendations` | 5 min | analyses de tables, index, requêtes |
-| `configuration` | 1 h | paramètres, stockage, sécurité |
+| `health` | 10 s | activity, connections, locks, long transactions |
+| `statistics` | 1 min | cumulative `pg_stat_*` counters |
+| `recommendations` | 5 min | table, index and query analysis |
+| `configuration` | 1 h | settings, storage, security |
 
-Les périodicités sont configurables (`Scheduler:Intervals`). L'intervalle propre d'une
-instance remplace celui du groupe `health`.
+The periods are configurable (`Scheduler:Intervals`). An instance's own interval replaces the one of
+the `health` group.
 
-## Garde-fou de coût
+## Cost guard
 
-Un timeout borne chaque exécution, mais rien n'empêche une règle de le consommer indéfiniment. Le
-garde-fou tient donc, **par couple (règle, instance)**, le compte des exécutions qui pèsent sur
-la base observée. Cet état est persisté en SQLite : il survit à un redémarrage de l'Advisor,
-sans quoi le compteur repartirait de zéro à chaque relance et le garde-fou ne se déclencherait
-jamais.
+A deadline bounds every run, but nothing stops a rule from spending it forever. The guard therefore
+keeps, **per (rule, instance) pair**, a count of the runs that weigh on the observed database. That
+state is persisted in SQLite: it survives an Advisor restart, without which the counter would reset
+on every relaunch and the guard would never fire.
 
-Compte comme incident :
+What counts as an incident:
 
-| Nature | Motif consigné | Ce que cela dit |
+| Kind | Recorded reason | What it tells you |
 | --- | --- | --- |
-| `timeout` | Le `statement_timeout` a coupé la requête | L'instance souffre, ou la règle a besoin de plus de temps **ici** |
-| `error` | Erreur SQL ordinaire (vue absente, colonne inconnue, droits) | La règle est fautive |
-| `slow` | Exécution réussie mais au-delà de `SlowRunRatio` du timeout | La règle coûte déjà, et n'échouerait jamais d'elle-même |
+| `timeout` | The `statement_timeout` cancelled the query | The instance is struggling, or the rule needs more time **here** |
+| `error` | Plain SQL error (missing view, unknown column, privileges) | The rule itself is at fault |
+| `slow` | Successful run past `SlowRunRatio` of its deadline | The rule already costs, and would never fail on its own |
 
-Une règle qui réussit en 25 s sous un timeout de 30 est déjà un problème : elle n'échoue jamais,
-et rien ne la signalerait sans ce troisième cas.
+A rule succeeding in 25 s under a 30 s deadline is already a problem: it never fails, and nothing
+would report it without this third case.
 
-Deux seuils, deux réactions :
+Two thresholds, two reactions:
 
-1. **`WarningThreshold` (3 par défaut)** — la règle est marquée `degraded`, affichée comme telle
-   dans l'IHM et notifiée (`rule_degraded`). **Elle continue de s'exécuter.**
-2. **`QuarantineThreshold` (5 par défaut)** — la règle est mise en quarantaine **sur cette
-   instance seulement**, pour `QuarantineDuration` (6 h par défaut), et notifiée
-   (`rule_quarantined`). Passée l'échéance, elle est réessayée automatiquement : un succès rapide
-   efface l'ardoise, un nouvel incident reconduit la quarantaine sans attendre à nouveau cinq
-   passages.
+1. **`WarningThreshold` (3 by default)** — the rule is marked `degraded`, shown as such in the UI
+   and notified (`rule_degraded`). **It keeps running.**
+2. **`QuarantineThreshold` (5 by default)** — the rule is quarantined **on that instance only**,
+   for `QuarantineDuration` (6 h by default), and notified (`rule_quarantined`). Past the deadline
+   it is retried automatically: a fast success wipes the slate, a fresh incident renews the
+   quarantine without waiting for five more runs.
 
-Une règle qui suffoque sur une base de 2 To n'est jamais coupée sur les autres.
+A rule suffocating on a 2 TB database is never cut off on the others.
 
-**Le succès efface l'ardoise.** Une exécution réussie et rapide remet tous les compteurs à zéro :
-un incident ancien ne finit pas par condamner une règle redevenue saine.
+**Success wipes the slate.** A successful, fast run resets every counter: an old incident does not
+end up condemning a rule that has become healthy again.
 
-Une quarantaine ne fait jamais disparaître un diagnostic en silence :
+A quarantine never makes a diagnostic vanish silently:
 
-- les findings déjà produits par la règle **ne sont pas résolus** — ils continuent de peser sur
-  le score tant que la règle n'a pas pu constater leur disparition ;
-- la catégorie de la règle **cesse d'être déclarée évaluée** sur cette instance, au lieu d'être
-  notée à 100 comme si tout allait bien ;
-- l'état est exposé par l'API (`GET /api/rules/{id}`, `GET /api/rules/health`, et la liste des
-  règles écartées dans la réponse de chaque instance).
+- findings already produced by the rule **are not resolved** — they keep weighing on the score
+  until the rule can observe that they are gone;
+- the rule's category **stops being declared as evaluated** on that instance, instead of scoring
+  100 as if all were well;
+- the state is exposed by the API (`GET /api/rules/{id}`, `GET /api/rules/health`, and the list of
+  quarantined rules in each instance's payload).
 
-Une réactivation manuelle immédiate est possible : `POST /api/rules/{id}/reactivate`. Elle repart
-d'une ardoise vierge, l'exploitant affirmant que la cause est traitée.
+An immediate manual reactivation is available: `POST /api/rules/{id}/reactivate`. It starts from a
+clean slate, the operator asserting that the cause is dealt with.
 
-Les réglages vivent dans la section `Scheduler` (voir le tableau de configuration du
-[README](../README.md)) : `Scheduler__RuleGuard__Enabled`, `WarningThreshold`,
+The settings live in the `Scheduler` section (see the configuration table in the
+[README](../README.md)): `Scheduler__RuleGuard__Enabled`, `WarningThreshold`,
 `QuarantineThreshold`, `QuarantineDuration`, `SlowRunRatio`.
 
-Rien de tout cela n'est écrit sur l'instance supervisée : c'est de l'état de l'Advisor.
+None of this is written to the supervised instance: it is Advisor state.
 
-## Types de règles et exemples fournis
+## Rule types and bundled examples
 
-| Type | Exemple |
+| Type | Example |
 | --- | --- |
 | SQL + condition | [vacuum.dead-tuples](../rules/vacuum.dead-tuples.yaml) |
-| SQL + expressions entre colonnes | [connections.saturation](../rules/connections.saturation.yaml) |
-| Dépendante d'une extension | [queries.slowest-mean-time](../rules/queries.slowest-mean-time.yaml) |
-| Spécifique à une version PostgreSQL | [checkpoints.forced-too-often-pg17](../rules/checkpoints.forced-too-often-pg17.yaml) |
-| Spécifique TimescaleDB | [timescaledb.uncompressed-chunks](../rules/timescaledb.uncompressed-chunks.yaml) |
-| Handler interne | [indexes.redundant](../rules/indexes.redundant.yaml) |
-| Capacité absente | [extensions.pg-stat-statements-missing](../rules/extensions.pg-stat-statements-missing.yaml) |
+| SQL + expressions across columns | [connections.saturation](../rules/connections.saturation.yaml) |
+| Extension-dependent | [queries.slowest-mean-time](../rules/queries.slowest-mean-time.yaml) |
+| Specific to a PostgreSQL version | [checkpoints.forced-too-often-pg17](../rules/checkpoints.forced-too-often-pg17.yaml) |
+| TimescaleDB-specific | [timescaledb.uncompressed-chunks](../rules/timescaledb.uncompressed-chunks.yaml) |
+| Built-in handler | [indexes.redundant](../rules/indexes.redundant.yaml) |
+| Missing capability | [extensions.pg-stat-statements-missing](../rules/extensions.pg-stat-statements-missing.yaml) |
 
-## Manipuler les règles depuis l'IHM
+## Working with rules from the UI
 
-La page **Règles** liste les règles chargées avec leur origine, leur état et leurs prérequis,
-et affiche les règles en erreur. L'éditeur d'une règle permet de :
+The **Rules** page lists the loaded rules with their origin, their state and their prerequisites, and
+shows the rules that failed to load. A rule's editor lets you:
 
-- modifier le YAML, avec validation à la frappe (aucune écriture tant que la règle est
-  invalide) ;
-- exécuter la règle sur une instance choisie sans rien persister, et voir le résultat SQL brut
-  comme les findings qui en découleraient ;
-- consulter son applicabilité instance par instance, avec le motif du refus, le timeout en vigueur
-  et l'état du garde-fou ;
-- créer, dupliquer ou supprimer une règle utilisateur ;
-- poser une surcharge globale ou par instance : activation, sévérité, périodicité, timeout, seuils ;
-- lever immédiatement une quarantaine.
+- edit the YAML, with validation as you type (nothing is written while the rule is invalid);
+- run the rule against a chosen instance without persisting anything, and see both the raw SQL result
+  and the findings it would produce;
+- review its applicability instance by instance, with the reason for each refusal, the deadline in
+  force and the guard state;
+- create, duplicate or delete a user rule;
+- set a global or per-instance override: enablement, severity, period, deadline, thresholds;
+- lift a quarantine immediately.
 
-Toute écriture depuis l'IHM produit un fichier YAML dans `<DataDirectory>/rules` et déclenche
-le même rechargement qu'une modification faite à la main : le format fichier reste la source
-de vérité.
+Every write from the UI produces a YAML file in `<DataDirectory>/rules` and triggers the same reload
+as a hand-made change: the file format remains the source of truth.
 
-## Surcharges
+## Overrides
 
-`RuleOverrides` (SQLite) applique un delta à une règle, globalement (`connectionId` nul) ou
-pour une instance : activation, sévérité, périodicité, **timeout** et seuils. L'ordre de
-précédence est : valeur du fichier, puis surcharge globale, puis surcharge d'instance. Une
-surcharge de seuils ne remplace que les seuils cités ; les autres gardent la valeur du fichier.
+`RuleOverrides` (SQLite) applies a delta to a rule, either globally (`connectionId` null) or for one
+instance: enablement, severity, period, **execution deadline** and thresholds. Precedence runs: file
+value, then global override, then instance override. A threshold override only replaces the
+thresholds it names; the others keep their file value.
 
 ## API
 
-| Route | Rôle |
+| Route | Role |
 | --- | --- |
-| `GET /api/rules` | Liste, filtrable par catégorie, origine et recherche |
-| `GET /api/rules/{id}` | Règle, YAML et applicabilité par instance, avec timeout et état du garde-fou |
-| `GET /api/rules/health` | État du garde-fou pour toutes les règles suivies, filtrable par instance et par état |
-| `GET /api/rules/schema` | Catégories, groupes, filtres, fonctions, handlers, gabarit |
-| `GET /api/rules/errors` | Règles refusées au chargement |
-| `POST /api/rules/validate` | Valide un YAML sans rien écrire |
-| `POST /api/rules` | Crée une règle utilisateur |
-| `PUT /api/rules/{id}` | Remplace une règle |
-| `DELETE /api/rules/{id}` | Supprime la règle utilisateur |
-| `POST /api/rules/reload` | Force un rechargement |
-| `POST /api/rules/{id}/dry-run` | Exécute sur une instance sans persister |
-| `POST /api/rules/{id}/reactivate` | Lève la quarantaine, sur une instance ou sur toutes |
-| `PUT /api/rules/{id}/override` | Pose une surcharge |
-| `DELETE /api/rules/{id}/override` | Retire une surcharge |
+| `GET /api/rules` | List, filterable by category, origin and free-text search |
+| `GET /api/rules/{id}` | Rule, YAML and per-instance applicability, with deadline and guard state |
+| `GET /api/rules/health` | Guard state for every tracked rule, filterable by instance and state |
+| `GET /api/rules/schema` | Categories, groups, filters, functions, handlers, template |
+| `GET /api/rules/errors` | Rules rejected at load time |
+| `POST /api/rules/validate` | Validates a YAML without writing anything |
+| `POST /api/rules` | Creates a user rule |
+| `PUT /api/rules/{id}` | Replaces a rule |
+| `DELETE /api/rules/{id}` | Deletes the user rule |
+| `POST /api/rules/reload` | Forces a reload |
+| `POST /api/rules/{id}/dry-run` | Runs against an instance without persisting |
+| `POST /api/rules/{id}/reactivate` | Lifts the quarantine, on one instance or on all of them |
+| `PUT /api/rules/{id}/override` | Sets an override |
+| `DELETE /api/rules/{id}/override` | Removes an override |
 
-Les écritures exigent le rôle `Admin`.
+Writes require the `Admin` role.
 
-Deux événements de notification s'ajoutent aux deux existants : `rule_degraded` (avertissement,
-sévérité `warning`) et `rule_quarantined` (règle écartée, sévérité `critical`). Ils empruntent
-la même déduplication : un épisode n'est notifié qu'une fois par webhook, une rechute après
-rétablissement l'est à nouveau.
+Two notification events join the two existing ones: `rule_degraded` (warning, `warning` severity)
+and `rule_quarantined` (rule set aside, `critical` severity). They borrow the same deduplication: an
+episode is notified once per webhook, and a relapse after recovery is notified again.
