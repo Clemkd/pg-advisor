@@ -48,8 +48,8 @@ an actionable diagnosis directly — no write access, no agent to deploy, no ext
 
 <table>
 <tr>
-<td width="50%"><a href="docs/OVERVIEW.md#overview"><img src="docs/images/01-tableau-de-bord.png" alt="Dashboard"></a></td>
-<td width="50%"><a href="docs/OVERVIEW.md#diagnostics"><img src="docs/images/02-recommandations.png" alt="Diagnostics"></a></td>
+<td width="50%"><img src="docs/images/01-tableau-de-bord.png" alt="Dashboard"></td>
+<td width="50%"><img src="docs/images/02-recommandations.png" alt="Diagnostics"></td>
 </tr>
 <tr>
 <td align="center"><sub>Dashboard</sub></td>
@@ -61,10 +61,10 @@ A query plan reads as an activity diagram: rows flow from the leaves up to the r
 of a link gives the rows returned, and every counter is coloured according to its weight. Each
 step expands in place.
 
-<a href="docs/OVERVIEW.md#execution-plan"><img src="docs/images/06-plan-execution.png" alt="Execution plan"></a>
+<img src="docs/images/06-plan-execution.png" alt="Execution plan">
 
-→ [All the screenshots](docs/OVERVIEW.md): multi-instance query ranking, parameter values
-suggested from the database, rule editor, light theme.
+More screenshots — the rule editor, the query parameter suggestion panel, the light theme — are in
+[`docs/images`](docs/images).
 
 ## Getting started
 
@@ -73,10 +73,10 @@ docker compose up -d
 ```
 
 The interface is on http://localhost:8080. The `admin` account password is written **exactly
-once** to the container logs — the log line itself is in French:
+once** to the container logs:
 
 ```bash
-docker compose logs pg-advisor | grep "mot de passe"
+docker compose logs pg-advisor | grep password
 ```
 
 To set it up front:
@@ -220,7 +220,7 @@ pg-advisor
 ├── tests/PgAdvisor.Tests    rule engine and finding lifecycle tests
 ├── rules                    bundled YAML rules
 ├── scripts                  test dataset and end-to-end validation
-├── docs                     project description and rule format
+├── docs/images              interface screenshots
 ├── Dockerfile               multi-stage SPA + API build, single image
 ├── docker-compose.yml       minimal deployment
 └── docker-compose.test.yml  two test PostgreSQL instances + webhook receiver
@@ -228,11 +228,5 @@ pg-advisor
 
 ## Documentation
 
-Every document exists in both languages.
-
-- [Interface overview](docs/OVERVIEW.md) — commented screenshots of every view
-  ([Français](docs/APERCU.md))
-- [Project description](docs/PROJECT.en.md) — scope, architecture, MVP priorities
-  ([Français](docs/PROJECT.md))
-- [Rule format](docs/RULES.en.md) — fields, prerequisites, expressions, filters, handlers, cost
-  guard, API ([Français](docs/RULES.md))
+[`DESIGN.md`](./DESIGN.md) — system architecture, the rule engine and its YAML format, the cost
+guard, and the interface's design system.
