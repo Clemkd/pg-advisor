@@ -191,17 +191,16 @@ Turn `Auth__RequireHttps` on as soon as the Advisor sits behind an HTTPS reverse
 
 ### Behind a proxy
 
-Traefik reaches the container over the Docker network, on its internal port: nothing needs to be
+The proxy reaches the container over the Docker network, on its internal port: nothing needs to be
 published on the host. Publishing anyway would open a second path to the application, outside the
 proxy — with no TLS and no middleware.
 
 ```bash
-ADVISOR_HOST=advisor.example.org   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
 ```
 
-The overlay resets the published port, attaches the service to the `traefik` network and sets
-`Auth__RequireHttps`: TLS terminates at the proxy, so the session cookie must not travel in the
-clear. `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT` and `TRAEFIK_CERTRESOLVER` can be overridden.
+The overlay does only that. Routing comes from elsewhere depending on the platform: labels added
+automatically by Coolify, the proxy's own configuration, or hand-written labels.
 
 Without a proxy, to expose the interface only to the machine itself, prefix the published port:
 `PGADVISOR_PORT=127.0.0.1:8080`.

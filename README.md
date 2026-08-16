@@ -194,18 +194,16 @@ Activer `Auth__RequireHttps` dès que l'Advisor est exposé derrière un reverse
 
 ### Derrière un proxy
 
-Traefik joint le conteneur par le réseau Docker, sur son port interne : rien n'a besoin d'être
+Le proxy joint le conteneur par le réseau Docker, sur son port interne : rien n'a besoin d'être
 publié sur l'hôte. Publier quand même ouvrirait un second chemin vers l'application, hors du
 proxy — sans TLS ni middleware.
 
 ```bash
-ADVISOR_HOST=advisor.example.org   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
 ```
 
-La surcouche annule le port publié, rattache le service au réseau `traefik` et pose
-`Auth__RequireHttps` : la terminaison TLS étant chez le proxy, le cookie de session ne doit pas
-voyager en clair. `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT` et `TRAEFIK_CERTRESOLVER` se
-surchargent au besoin.
+La surcouche ne fait que cela. Le routage vient d'ailleurs selon la plateforme : labels posés
+automatiquement par Coolify, configuration du proxy, ou labels écrits à la main.
 
 Sans proxy, pour n'exposer l'interface qu'à la machine elle-même, préfixez le port publié :
 `PGADVISOR_PORT=127.0.0.1:8080`.
