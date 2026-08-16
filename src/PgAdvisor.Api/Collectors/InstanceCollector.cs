@@ -4,8 +4,8 @@ using PgAdvisor.Api.Postgres;
 namespace PgAdvisor.Api.Collectors;
 
 /// <summary>
-/// Collecte en lecture seule de l'instantané d'une instance. Chaque bloc est conditionné aux
-/// capabilities : une vue non lisible produit une métrique absente, jamais une erreur.
+/// Read-only collection of an instance's snapshot. Each block is gated on capabilities: an
+/// unreadable view produces a missing metric, never an error.
 /// </summary>
 public sealed class InstanceCollector(ILogger<InstanceCollector> logger)
 {
@@ -43,9 +43,9 @@ public sealed class InstanceCollector(ILogger<InstanceCollector> logger)
     private async Task<InstanceMetrics> AddActivityAsync(
         NpgsqlConnection connection, InstanceMetrics metrics, CancellationToken cancellationToken)
     {
-        // pg_blocking_pids() est disponible depuis PostgreSQL 9.6 et ne requiert pas de privilège
-        // particulier ; les requêtes des autres sessions restent masquées sans pg_monitor, ce qui
-        // n'affecte pas les comptages.
+        // pg_blocking_pids() has been available since PostgreSQL 9.6 and requires no special
+        // privilege; other sessions' queries stay masked without pg_monitor, which does not
+        // affect the counts.
         const string sql = """
             SELECT
               count(*)                                                                     AS total,

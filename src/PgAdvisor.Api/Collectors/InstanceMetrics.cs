@@ -1,8 +1,8 @@
 namespace PgAdvisor.Api.Collectors;
 
 /// <summary>
-/// Instantané léger d'une instance, rafraîchi par le groupe « health ». Vit en mémoire :
-/// SQLite ne conserve que l'état de l'Advisor, pas de série temporelle de métriques.
+/// Lightweight snapshot of an instance, refreshed by the "health" group. Lives in memory:
+/// SQLite only stores the Advisor's state, not a time series of metrics.
 /// </summary>
 public sealed record InstanceMetrics
 {
@@ -26,7 +26,7 @@ public sealed record InstanceMetrics
     public long Deadlocks { get; init; }
     public long TempBytes { get; init; }
 
-    /// <summary>Taux d'occupation des slots de connexion, 0 à 1.</summary>
+    /// <summary>Connection slot occupancy rate, 0 to 1.</summary>
     public double ConnectionUsage =>
         MaxConnections - ReservedConnections > 0
             ? (double)Connections / (MaxConnections - ReservedConnections)
