@@ -245,7 +245,7 @@ An immediate manual reactivation is available: `POST /api/rules/{id}/reactivate`
 clean slate, the operator asserting that the cause is dealt with.
 
 The settings live in the `Scheduler` section (see the configuration table in the
-[README](../README.en.md)): `Scheduler__RuleGuard__Enabled`, `WarningThreshold`,
+[README](../README.md)): `Scheduler__RuleGuard__Enabled`, `WarningThreshold`,
 `QuarantineThreshold`, `QuarantineDuration`, `SlowRunRatio`.
 
 None of this is written to the supervised instance: it is Advisor state.
