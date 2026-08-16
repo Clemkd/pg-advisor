@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { Completion } from './yamlComplete'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +38,9 @@ interface Token {
   kind: TokenKind
   value: string
 }
+
+/** Propositions affichées d'un coup : au-delà, la liste se parcourt plus qu'elle ne se lit. */
+const MAX_SUGGESTIONS = 40
 
 const LITERALS = new Set(['true', 'false', 'null', 'yes', 'no', 'on', 'off', '~'])
 
@@ -308,9 +311,18 @@ export function YamlEditor({
   const own = useRef<HTMLTextAreaElement>(null)
   const input = textareaRef ?? own
 
+  const list = useRef<HTMLDivElement>(null)
+
   const [completion, setCompletion] = useState<Completion | null>(null)
   const [active, setActive] = useState(0)
   const [caret, setCaret] = useState({ top: 0, left: 0 })
+
+  // La liste suit la sélection : descendre au clavier au-delà du cadre visible ne doit pas faire
+  // disparaître l'entrée courante. `nearest` évite de recentrer la liste à chaque pas.
+  useEffect(() => {
+    const option = list.current?.children[active]
+    option?.scrollIntoView({ block: 'nearest' })
+  }, [active, completion])
 
   /*
    * Position du curseur, calculée plutôt que mesurée.
@@ -477,25 +489,29 @@ export function YamlEditor({
       {/*
        * Liste des propositions, posée à l'endroit du curseur.
        *
-       * `pointer-events-none` sur le conteneur et non sur les entrées : un clic dans la liste
-       * ferait perdre le focus à la saisie avant que le clic n'aboutisse, et la liste se fermerait
-       * sous le curseur. On garde donc le clavier comme seul moyen de choisir — c'est aussi ce
-       * qu'on attend d'une complétion pendant la frappe.
+       * `onMouseDown` neutralisé sur le conteneur : sans cela, le clic ferait perdre le focus à la
+       * saisie avant d'aboutir, la liste se fermerait sous le curseur, et le choix à la souris
+       * serait impossible. Le clavier et la souris mènent donc au même geste.
        */}
       {completion && (
         <div
+          ref={list}
           role="listbox"
           aria-label={label}
           style={{ top: caret.top, left: caret.left }}
-          className="bg-surface border-border-subtle shadow-popover pointer-events-none absolute z-30 max-h-48 min-w-56 overflow-auto rounded-[var(--radius-control)] border p-1"
+          onMouseDown={(event) => event.preventDefault()}
+          className="bg-surface border-border-subtle shadow-popover absolute z-30 max-h-48 min-w-56 overflow-y-auto overscroll-contain rounded-[var(--radius-control)] border p-1"
         >
-          {completion.items.slice(0, 40).map((item, index) => (
-            <div
+          {completion.items.slice(0, MAX_SUGGESTIONS).map((item, index) => (
+            <button
               key={item.value}
+              type="button"
               role="option"
               aria-selected={index === active}
+              onMouseEnter={() => setActive(index)}
+              onClick={() => accept(index)}
               className={cn(
-                'flex items-baseline justify-between gap-3 rounded-[var(--radius-control)] px-2 py-1',
+                'flex w-full items-baseline justify-between gap-3 rounded-[var(--radius-control)] px-2 py-1 text-left',
                 index === active ? 'bg-brand-subtle text-brand font-medium' : 'text-ink',
               )}
             >
@@ -503,7 +519,7 @@ export function YamlEditor({
               {item.detail && (
                 <span className="text-ink-muted shrink-0 truncate text-micro">{item.detail}</span>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}

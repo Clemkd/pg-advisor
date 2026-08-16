@@ -3,7 +3,9 @@ services:
     build: .
     image: pg-advisor
     ports:
-      - "8080:8080"
+      # Port publié sur l'hôte, surchargeable : PGADVISOR_PORT=9090 docker compose up -d.
+      # Le port interne reste 8080 — l'application écoute là où son image l'attend.
+      - "${PGADVISOR_PORT:-8080}:8080"
     volumes:
       # SQLite + règles créées depuis l'IHM
       - advisor-data:/app/data

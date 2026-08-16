@@ -67,6 +67,7 @@ recommendation:
     - expected_pages
     - wasted_bytes
     - wasted_ratio
-  sql: "-- Takes an exclusive lock; pg_repack avoids it
-VACUUM FULL {{ schemaname }}.{{ relname }};"
+  sql: |
+    -- Takes an exclusive lock; pg_repack avoids it
+    VACUUM FULL {{ schemaname }}.{{ relname }};
   documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-SPACE-RECOVERY

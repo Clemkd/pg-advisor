@@ -156,10 +156,21 @@ paramètres après le passage de l'Advisor.
 ## Configuration
 
 Toutes les clés se surchargent par variable d'environnement, préfixe `PGADVISOR_`, `__` pour
-la hiérarchie.
+la hiérarchie. Les deux premières lignes échappent à ce préfixe : elles ne configurent pas
+l'application mais l'endroit où on l'atteint.
+
+```bash
+PGADVISOR_PORT=9090 docker compose up -d
+```
+
+Sur un hébergeur qui impose son port et ne laisse pas publier le vôtre, c'est le port d'écoute
+interne qu'il faut déplacer — `ASPNETCORE_HTTP_PORTS=9090`, ou `PORT` recopié dedans si la
+plateforme n'expose que celui-là.
 
 | Clé | Rôle | Défaut |
 | --- | --- | --- |
+| `PGADVISOR_PORT` | Port publié sur l'hôte par `docker-compose.yml` | `8080` |
+| `ASPNETCORE_HTTP_PORTS` | Port d'écoute **dans** le conteneur, pour un hébergeur qui l'impose | `8080` |
 | `DataDirectory` | Volume inscriptible : SQLite, clés, règles créées depuis l'IHM | `/app/data` en conteneur |
 | `RulesDirectory` | Règles intégrées, montables en lecture seule | `/app/rules` en conteneur |
 | `Auth__BootstrapPassword` | Mot de passe du compte `admin` créé au premier démarrage | généré et journalisé une fois |

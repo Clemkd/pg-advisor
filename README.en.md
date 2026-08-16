@@ -153,10 +153,21 @@ settings left behind after the Advisor has run.
 ## Configuration
 
 Every key can be overridden by environment variable, with the `PGADVISOR_` prefix and `__` for
-nesting.
+nesting. The first two rows escape that prefix: they configure where the application is reached,
+not the application itself.
+
+```bash
+PGADVISOR_PORT=9090 docker compose up -d
+```
+
+On a host that imposes its own port and will not let you publish yours, move the internal listening
+port instead — `ASPNETCORE_HTTP_PORTS=9090`, or copy `PORT` into it if the platform only exposes
+that one.
 
 | Key | Role | Default |
 | --- | --- | --- |
+| `PGADVISOR_PORT` | Host port published by `docker-compose.yml` | `8080` |
+| `ASPNETCORE_HTTP_PORTS` | Port the app listens on **inside** the container, for a host that imposes one | `8080` |
 | `DataDirectory` | Writable volume: SQLite, keys, rules created from the UI | `/app/data` in the container |
 | `RulesDirectory` | Bundled rules, mountable read-only | `/app/rules` in the container |
 | `Auth__BootstrapPassword` | Password of the `admin` account created on first start | generated and logged once |
