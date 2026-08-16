@@ -1,0 +1,29 @@
+# Surcouche pour un déploiement hébergé, derrière le proxy de la plateforme.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.saas.yaml up -d
+#
+# Deux différences avec le déploiement autonome :
+#
+#   - rien n'est publié sur l'hôte. Le proxy joint le conteneur par le réseau Docker, sur son port
+#     interne ; publier en plus ouvrirait un second chemin vers l'application, hors du proxy, donc
+#     sans TLS ni middleware ;
+#   - le service rejoint le réseau de la plateforme, celui où le proxy l'attend.
+#
+# Le routage n'est pas décrit ici : les labels sont posés par la plateforme (Coolify le fait
+# d'elle-même), ou par la configuration du proxy.
+services:
+  pg-advisor:
+    # `!reset` et non une liste vide : Compose concatène les listes, et une liste vide laisserait
+    # le port du fichier de base en place — exactement le chemin qu'on veut fermer.
+    ports: !reset []
+
+    networks:
+      - cloud
+
+networks:
+  cloud:
+    # Déclaré externe : le réseau appartient à la plateforme, et le proxy y est déjà. Le créer
+    # ici donnerait un réseau homonyme mais distinct, sur lequel personne ne viendrait chercher
+    # l'application.
+    external: true
+    name: ${CLOUD_NETWORK:-devc-cloud-internal-network}

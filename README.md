@@ -192,18 +192,22 @@ plateforme n'expose que celui-là.
 
 Activer `Auth__RequireHttps` dès que l'Advisor est exposé derrière un reverse proxy en HTTPS.
 
-### Derrière un proxy
+### Hébergé, derrière le proxy de la plateforme
 
 Le proxy joint le conteneur par le réseau Docker, sur son port interne : rien n'a besoin d'être
 publié sur l'hôte. Publier quand même ouvrirait un second chemin vers l'application, hors du
 proxy — sans TLS ni middleware.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.saas.yaml up -d
 ```
 
-La surcouche ne fait que cela. Le routage vient d'ailleurs selon la plateforme : labels posés
-automatiquement par Coolify, configuration du proxy, ou labels écrits à la main.
+La surcouche ferme le port publié et rattache le service au réseau de la plateforme,
+`devc-cloud-internal-network` par défaut, surchargeable par `CLOUD_NETWORK`. Ce réseau est
+déclaré externe : il appartient à la plateforme, et le proxy y est déjà.
+
+Le routage n'est pas décrit dans le dépôt : les labels sont posés par la plateforme — Coolify le
+fait d'elle-même — ou par la configuration du proxy.
 
 Sans proxy, pour n'exposer l'interface qu'à la machine elle-même, préfixez le port publié :
 `PGADVISOR_PORT=127.0.0.1:8080`.
