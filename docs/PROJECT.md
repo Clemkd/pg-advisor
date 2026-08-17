@@ -349,7 +349,6 @@ services:
       - "8080:8080"
     volumes:
       - advisor-data:/app/data
-      - ./rules:/app/rules:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
@@ -364,9 +363,12 @@ volumes:
 
 No modification to the PostgreSQL container.
 
-> Note: editing rules from the UI requires the user-rules directory to be writable. Packaged rules
-> can stay read-only; user rules are written to the data volume (`/app/data/rules`), and the
-> `./rules:/app/rules:ro` mount remains valid for operator-supplied rules.
+> Note: the bundled rules are baked into the image (`Dockerfile`: `COPY rules/ /app/rules/`) and
+> need no volume to be available. Editing rules from the UI requires the user-rules directory to
+> be writable: user rules are written to the data volume (`/app/data/rules`) and take precedence
+> over a packaged rule with the same id. An operator who wants to replace the bundled set entirely
+> can still mount a host directory over `/app/rules:ro`, but doing so hides the packaged rules
+> whenever that directory is missing or empty — the default compose file deliberately avoids it.
 
 ## MVP — development priority
 

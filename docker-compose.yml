@@ -7,10 +7,10 @@ services:
       # Le port interne reste 8080 — l'application écoute là où son image l'attend.
       - "${PGADVISOR_PORT:-8080}:8080"
     volumes:
-      # SQLite + règles créées depuis l'IHM
+      # SQLite + règles créées ou modifiées depuis l'IHM. Les règles intégrées sont déjà dans
+      # l'image (Dockerfile: COPY rules/ /app/rules/) : ne pas monter par-dessus /app/rules, ce
+      # qui les masquerait par un dossier hôte vide et ferait tomber le compte à 0 règle chargée.
       - advisor-data:/app/data
-      # Règles fournies par l'opérateur, lecture seule
-      - ./rules:/app/rules:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]

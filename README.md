@@ -167,7 +167,7 @@ that one.
 | `PGADVISOR_PORT` | Host port published by `docker-compose.yml` | `8080` |
 | `ASPNETCORE_HTTP_PORTS` | Port the app listens on **inside** the container, for a host that imposes one | `8080` |
 | `DataDirectory` | Writable volume: SQLite, keys, rules created from the UI | `/app/data` in the container |
-| `RulesDirectory` | Bundled rules, mountable read-only | `/app/rules` in the container |
+| `RulesDirectory` | Bundled rules, baked into the image; override only to replace the set entirely | `/app/rules` in the container |
 | `Auth__BootstrapPassword` | Password of the `admin` account created on first start | generated and logged once |
 | `Auth__RequireHttps` | Forces the `Secure` attribute on the cookie | `false` |
 | `Auth__SlidingExpirationHours` | Session lifetime | `12` |
