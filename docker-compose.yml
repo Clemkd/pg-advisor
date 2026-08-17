@@ -12,6 +12,12 @@ services:
       # Règles fournies par l'opérateur, lecture seule
       - ./rules:/app/rules:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   advisor-data:

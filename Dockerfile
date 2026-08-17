@@ -24,8 +24,9 @@ WORKDIR /app
 
 # Npgsql charge GSSAPI au démarrage pour l'authentification Kerberos ; sans cette
 # bibliothèque, l'image journalise une erreur de chargement à chaque lancement.
+# curl sert au HEALTHCHECK ci-dessous, absent de l'image aspnet de base.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 curl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=api /app ./
 COPY --from=web /out ./wwwroot
@@ -37,5 +38,8 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 
 EXPOSE 8080
 VOLUME /app/data
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/api/health || exit 1
 
 ENTRYPOINT ["dotnet", "PgAdvisor.Api.dll"]
