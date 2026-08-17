@@ -31,10 +31,10 @@ docker compose up -d
 ```
 
 The interface is on http://localhost:8080. The `admin` account password is written **exactly once**
-to the container logs — the log line itself is in French:
+to the container logs:
 
 ```bash
-docker compose logs pg-advisor | grep "mot de passe"
+docker compose logs pg-advisor | grep -i password
 ```
 
 To set it up front:
