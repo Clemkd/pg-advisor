@@ -51,7 +51,7 @@ export function translate(locale: Locale, key: string, vars?: TranslateVars): st
   const template = CATALOGUES[locale][key] ?? CATALOGUES.fr[key] ?? key
 
   if (import.meta.env.DEV && CATALOGUES[locale][key] === undefined) {
-    console.warn(`[i18n] clé absente en « ${locale} » : ${key}`)
+    console.warn(`[i18n] missing key in "${locale}": ${key}`)
   }
 
   if (!vars) return template
