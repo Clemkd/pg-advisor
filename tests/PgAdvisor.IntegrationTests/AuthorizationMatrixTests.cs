@@ -26,8 +26,8 @@ public sealed record Endpoint(string Method, string Path, Access Access, object?
 /// never what the endpoint answers: a 400 or a 404 still counts as "reached it". Identifiers point
 /// at rows that do not exist, so nothing is created or destroyed along the way.
 /// </summary>
-public class AuthorizationMatrixTests(AdvisorApplicationFactory factory)
-    : IClassFixture<AdvisorApplicationFactory>
+public class AuthorizationMatrixTests(DefaultApplicationFactory factory)
+    : IClassFixture<DefaultApplicationFactory>
 {
     private static readonly Endpoint[] All =
     [

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -141,6 +143,26 @@ builder.Services
 builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
+// Le hachage coûte volontairement cher : sans plafond, la route de connexion est autant un
+// levier de déni de service processeur qu'une porte de force brute. Le partitionnement se fait
+// par adresse cliente, pour qu'un attaquant n'enferme pas les autres utilisateurs avec lui.
+builder.Services.AddRateLimiter(rateLimiter =>
+{
+    rateLimiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    rateLimiter.AddPolicy(RateLimitPolicies.Login, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = Math.Max(1, advisorOptions.Auth.LoginAttemptsPerWindow),
+                Window = advisorOptions.Auth.LoginAttemptWindow > TimeSpan.Zero
+                    ? advisorOptions.Auth.LoginAttemptWindow
+                    : TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
@@ -164,6 +186,8 @@ app.UseStaticFiles();
 // statiques s'abstient lorsqu'un endpoint est déjà associé à la requête, et le fallback SPA
 // attrape-tout ci-dessous en associerait un à chaque requête — y compris aux assets.
 app.UseRouting();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

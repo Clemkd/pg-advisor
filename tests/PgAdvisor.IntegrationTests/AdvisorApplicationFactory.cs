@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PgAdvisor.Api.Data;
@@ -14,7 +13,19 @@ namespace PgAdvisor.IntegrationTests;
 /// Boots the real application over a throwaway data directory. Nothing is mocked: the pipeline,
 /// the authorization policies and the controllers are the ones that ship.
 /// </summary>
-public sealed class AdvisorApplicationFactory : WebApplicationFactory<Program>
+/// <remarks>
+/// Settings travel as PGADVISOR_ environment variables rather than through
+/// ConfigureAppConfiguration. Program.cs reads a snapshot of its configuration — for the data
+/// directory, the database path and the rate limiting ceiling — before WebApplicationFactory gets
+/// a chance to add a source, so an in-memory collection arrives too late for those. The
+/// environment source is registered by Program.cs itself, which makes it the only hook early
+/// enough; it is also exactly how the container is configured in production.
+///
+/// Those variables are process-wide, so the assembly disables test parallelisation. Two factories
+/// alive at once would otherwise share one data directory — which is precisely the bug this
+/// replaced: every suite was silently writing to the same SQLite file under bin/.
+/// </remarks>
+public class AdvisorApplicationFactory : WebApplicationFactory<Program>
 {
     public const string AdminPassword = "integration-admin-pw";
     public const string ViewerPassword = "integration-viewer-pw";
@@ -22,21 +33,36 @@ public sealed class AdvisorApplicationFactory : WebApplicationFactory<Program>
     private readonly string _dataDirectory =
         Path.Combine(Path.GetTempPath(), "pg-advisor-tests", Guid.NewGuid().ToString("n"));
 
+    private readonly Dictionary<string, string?> _restore = [];
+
+    protected AdvisorApplicationFactory()
+    {
+        Directory.CreateDirectory(Path.Combine(_dataDirectory, "bundled-rules"));
+
+        foreach (var (key, value) in Settings())
+        {
+            // Nesting is a double underscore in an environment variable name.
+            var variable = "PGADVISOR_" + key.Replace(":", "__", StringComparison.Ordinal);
+            _restore[variable] = Environment.GetEnvironmentVariable(variable);
+            Environment.SetEnvironmentVariable(variable, value);
+        }
+    }
+
+    /// <summary>Configuration of the booted application. Override to change one setting.</summary>
+    protected virtual Dictionary<string, string?> Settings() => new()
+    {
+        ["DataDirectory"] = _dataDirectory,
+        ["RulesDirectory"] = Path.Combine(_dataDirectory, "bundled-rules"),
+        // No supervised instance in these tests: the scheduler would only add noise.
+        ["Scheduler:Enabled"] = "false",
+        // The suite signs in once per case, from a single client address: the shipped ceiling
+        // would throttle the tests themselves. LoginRateLimitTests sets its own.
+        ["Auth:LoginAttemptsPerWindow"] = "100000",
+    };
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Production");
-
-        Directory.CreateDirectory(Path.Combine(_dataDirectory, "bundled-rules"));
-
-        // Added last so it wins over the PGADVISOR_ environment source of Program.cs.
-        builder.ConfigureAppConfiguration(configuration => configuration.AddInMemoryCollection(
-            new Dictionary<string, string?>
-            {
-                ["DataDirectory"] = _dataDirectory,
-                ["RulesDirectory"] = Path.Combine(_dataDirectory, "bundled-rules"),
-                // No supervised instance in these tests: the scheduler would only add noise.
-                ["Scheduler:Enabled"] = "false",
-            }));
 
         builder.ConfigureServices(services =>
         {
@@ -110,6 +136,11 @@ public sealed class AdvisorApplicationFactory : WebApplicationFactory<Program>
             return;
         }
 
+        foreach (var (variable, value) in _restore)
+        {
+            Environment.SetEnvironmentVariable(variable, value);
+        }
+
         try
         {
             Directory.Delete(_dataDirectory, recursive: true);
@@ -120,3 +151,6 @@ public sealed class AdvisorApplicationFactory : WebApplicationFactory<Program>
         }
     }
 }
+
+/// <summary>The default factory, for the suites that need no particular setting.</summary>
+public sealed class DefaultApplicationFactory : AdvisorApplicationFactory;

@@ -46,6 +46,21 @@ public sealed class AuthOptions
     public string? BootstrapPassword { get; set; }
 
     public string BootstrapUsername { get; set; } = "admin";
+
+    /// <summary>
+    /// Sign-in attempts allowed per window and per client address. Hashing is PBKDF2 with 210 000
+    /// iterations: an unthrottled login route is a CPU denial of service as much as it is an open
+    /// door to brute force. Ten a minute leaves room for a mistyped password and nothing else.
+    /// </summary>
+    public int LoginAttemptsPerWindow { get; set; } = 10;
+
+    public TimeSpan LoginAttemptWindow { get; set; } = TimeSpan.FromMinutes(1);
+}
+
+/// <summary>Named rate limiting policies, shared by the pipeline and the controllers.</summary>
+public static class RateLimitPolicies
+{
+    public const string Login = "login";
 }
 
 public sealed class SchedulerOptions

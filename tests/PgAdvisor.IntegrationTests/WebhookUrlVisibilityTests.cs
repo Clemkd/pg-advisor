@@ -6,8 +6,8 @@ namespace PgAdvisor.IntegrationTests;
 /// A Slack or Discord webhook URL carries its token in the path: whoever reads it can post as the
 /// Advisor. The list endpoint is open to any signed-in account, so the URL has to be masked there.
 /// </summary>
-public class WebhookUrlVisibilityTests(AdvisorApplicationFactory factory)
-    : IClassFixture<AdvisorApplicationFactory>
+public class WebhookUrlVisibilityTests(DefaultApplicationFactory factory)
+    : IClassFixture<DefaultApplicationFactory>
 {
     private const string Secret = "T00000000/B00000000/xxxxxxxxxxxxxxxxxxxxxxxx";
     private static readonly string Url = $"https://hooks.slack.com/services/{Secret}";

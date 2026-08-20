@@ -10,8 +10,8 @@ namespace PgAdvisor.IntegrationTests;
 /// The role travels in the session cookie. Without a check on each request, demoting or deleting
 /// an account would leave its privileges standing until the cookie expired — twelve sliding hours.
 /// </summary>
-public class RoleRevocationTests(AdvisorApplicationFactory factory)
-    : IClassFixture<AdvisorApplicationFactory>
+public class RoleRevocationTests(DefaultApplicationFactory factory)
+    : IClassFixture<DefaultApplicationFactory>
 {
     private const string Password = "revocation-probe-password";
 

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PgAdvisor.Api.Data;
@@ -16,6 +17,7 @@ public sealed class AuthController(AdvisorDbContext db, ILogger<AuthController> 
 {
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.Login)]
     public async Task<ActionResult<CurrentUserResponse>> Login(LoginRequest request, CancellationToken ct)
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Username == request.Username, ct);
