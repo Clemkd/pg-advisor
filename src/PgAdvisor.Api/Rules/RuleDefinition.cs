@@ -45,6 +45,13 @@ public static class RuleGroups
 /// <summary>Bornes des champs numériques d'une règle, partagées par la validation et l'API.</summary>
 public static class RuleLimits
 {
+    /// <summary>
+    /// Taille maximale d'un YAML accepté par l'API. Sans borne, la seule limite est celle de
+    /// Kestrel — trente mégaoctets — que YamlDotNet chargerait intégralement en mémoire. La plus
+    /// grosse règle livrée tient en deux kilooctets.
+    /// </summary>
+    public const int MaxYamlLength = 256 * 1024;
+
     public const int MinIntervalSeconds = 5;
     public const int MaxIntervalSeconds = 86_400;
 

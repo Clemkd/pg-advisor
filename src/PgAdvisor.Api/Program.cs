@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -90,6 +92,37 @@ builder.Services
             : CookieSecurePolicy.SameAsRequest;
         options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromHours(Math.Max(1, advisorOptions.Auth.SlidingExpirationHours));
+
+        // Le rôle vit dans le cookie : sans cette relecture, un administrateur rétrogradé ou
+        // supprimé garderait ses droits jusqu'à l'expiration de sa session, soit douze heures
+        // glissantes. Une lecture SQLite locale par requête authentifiée, c'est le prix juste.
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var identifier = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var role = context.Principal?.FindFirstValue(ClaimTypes.Role);
+
+            if (!int.TryParse(identifier, out var userId))
+            {
+                context.RejectPrincipal();
+                return;
+            }
+
+            var db = context.HttpContext.RequestServices.GetRequiredService<AdvisorDbContext>();
+            var current = await db.Users
+                .AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.Role)
+                .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+
+            if (current is not null && string.Equals(current, role, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // Compte disparu, ou rôle changé depuis la connexion : la session ne vaut plus rien.
+            context.RejectPrincipal();
+            await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        };
 
         // API : renvoyer des codes plutôt que rediriger vers une page de login.
         options.Events.OnRedirectToLogin = context =>

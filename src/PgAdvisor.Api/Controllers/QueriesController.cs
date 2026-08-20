@@ -11,12 +11,26 @@ using PgAdvisor.Api.Services;
 
 namespace PgAdvisor.Api.Controllers;
 
+public static class QueryAnalysisLimits
+{
+    /// <summary>
+    /// Bornes des entrées d'analyse. Sans elles, la seule limite est celle de Kestrel — trente
+    /// mégaoctets — pour une requête que l'on va de toute façon envoyer à un EXPLAIN.
+    /// </summary>
+    public const int MaxSqlLength = 64 * 1024;
+
+    public const int MaxParameters = 64;
+    public const int MaxParameterLength = 4 * 1024;
+}
+
 public sealed record AnalyzeQueryRequest
 {
     /// <summary>SQL à analyser. Ignoré si <see cref="QueryId"/> est fourni.</summary>
+    [MaxLength(QueryAnalysisLimits.MaxSqlLength)]
     public string? Sql { get; init; }
 
     /// <summary>Identifiant pg_stat_statements : le texte normalisé est alors récupéré côté serveur.</summary>
+    [MaxLength(64)]
     public string? QueryId { get; init; }
 
     /// <summary>Ajoute les compteurs de blocs (BUFFERS) au plan mesuré.</summary>
@@ -187,6 +201,11 @@ public sealed class QueriesController(
         if (connection is null)
         {
             return NotFound();
+        }
+
+        if (TooManyParameters(request.Parameters) is { } tooMany)
+        {
+            return tooMany;
         }
 
         var sql = request.Sql;
@@ -469,6 +488,32 @@ public sealed class QueriesController(
                 ? item with { HasSavedPlan = true }
                 : item)
             .ToList();
+    }
+
+    /// <summary>
+    /// MaxLength ne sait valider qu'une chaîne ou un tableau : la cardinalité d'une liste et la
+    /// taille de chaque valeur se vérifient ici, avant qu'elles ne partent dans le SQL analysé.
+    /// </summary>
+    private ActionResult? TooManyParameters(List<string>? parameters)
+    {
+        if (parameters is null)
+        {
+            return null;
+        }
+
+        if (parameters.Count > QueryAnalysisLimits.MaxParameters)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: $"At most {QueryAnalysisLimits.MaxParameters} parameter values are accepted.");
+        }
+
+        if (parameters.Any(value => value.Length > QueryAnalysisLimits.MaxParameterLength))
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: $"A parameter value cannot exceed {QueryAnalysisLimits.MaxParameterLength} characters.");
+        }
+
+        return null;
     }
 
     private async Task<string?> ResolveQueryTextAsync(

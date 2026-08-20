@@ -155,6 +155,7 @@ public sealed record RuleOverrideResponse
 public sealed record SaveRuleRequest
 {
     [Required]
+    [MaxLength(RuleLimits.MaxYamlLength)]
     public string Yaml { get; init; } = string.Empty;
 }
 
@@ -184,6 +185,7 @@ public sealed record DryRunRequest
     public int ConnectionId { get; init; }
 
     /// <summary>YAML à tester ; à défaut, la version enregistrée de la règle est utilisée.</summary>
+    [MaxLength(RuleLimits.MaxYamlLength)]
     public string? Yaml { get; init; }
 }
 

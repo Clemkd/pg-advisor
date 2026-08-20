@@ -18,11 +18,22 @@ public static class ExpressionParser
     /// <summary>Fonctions disponibles, exposées à l'éditeur de règles de l'IHM.</summary>
     public static IReadOnlyList<string> FunctionNames { get; } = KnownFunctions.Order(StringComparer.Ordinal).ToList();
 
+    /// <summary>
+    /// Bornes de forme. L'analyse est une descente récursive : sans elles, une condition
+    /// suffisamment imbriquée épuise la pile, et un StackOverflowException ne se rattrape pas
+    /// en .NET — le processus meurt. Une condition de règle réelle tient en une quinzaine de
+    /// jetons et n'imbrique pas au-delà de deux ou trois niveaux.
+    /// </summary>
+    private const int MaxTokens = 512;
+    private const int MaxNesting = 32;
+
     public static Expr Parse(string source)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
 
         var tokens = Tokenize(source);
+        GuardShape(tokens);
+
         var position = 0;
         var expression = ParseOr(tokens, ref position);
 
@@ -47,6 +58,43 @@ public static class ExpressionParser
             expression = null;
             error = ex.Message;
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Vérifie avant l'analyse que la forme reste dans les bornes. Le nombre de jetons majore la
+    /// profondeur de récursion — chaque appel récursif en consomme au moins un — et l'imbrication
+    /// de parenthèses est mesurée pour rendre un message compréhensible dans le cas courant.
+    /// </summary>
+    private static void GuardShape(List<Token> tokens)
+    {
+        if (tokens.Count > MaxTokens)
+        {
+            throw new ExpressionException($"Expression too long: at most {MaxTokens} tokens are accepted.");
+        }
+
+        var depth = 0;
+
+        foreach (var token in tokens)
+        {
+            if (token.Kind != TokenKind.Punctuation)
+            {
+                continue;
+            }
+
+            if (token.Text == "(")
+            {
+                depth++;
+
+                if (depth > MaxNesting)
+                {
+                    throw new ExpressionException($"Expression nested too deeply: at most {MaxNesting} levels are accepted.");
+                }
+            }
+            else if (token.Text == ")")
+            {
+                depth--;
+            }
         }
     }
 
