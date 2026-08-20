@@ -273,7 +273,9 @@ export function RuleEditorPage() {
   }
 
   const runDryRun = useCallback(async () => {
-    if (dryRunInstance === null || dryRunBusy) return
+    // L'aperçu compile un YAML arbitraire et l'exécute sur l'instance : le serveur le réserve
+    // aux administrateurs. La garde couvre aussi le raccourci clavier, qui n'a pas de bouton.
+    if (!isAdmin || dryRunInstance === null || dryRunBusy) return
 
     setDryRunBusy(true)
 
@@ -295,7 +297,7 @@ export function RuleEditorPage() {
     } finally {
       setDryRunBusy(false)
     }
-  }, [detail?.rule.id, dryRunInstance, dryRunBusy, yaml])
+  }, [isAdmin, detail?.rule.id, dryRunInstance, dryRunBusy, yaml])
 
   // Le raccourci est lu au moment où il sert : la fonction qu'il déclenche change à chaque
   // frappe dans l'éditeur, on ne réabonne pas la fenêtre pour autant.
@@ -495,6 +497,7 @@ export function RuleEditorPage() {
           </Card>
 
           <div className="min-w-0 space-y-4">
+            {isAdmin && (
             <Card>
               <CardHeader
                 title={t('ruleEditor.dryRunTitle')}
@@ -562,6 +565,7 @@ export function RuleEditorPage() {
                 )}
               </CardBody>
             </Card>
+            )}
 
             {/* Où la règle s'applique, et avec quelles variables : une seule carte, parce que
                 c'est une seule question — sur quelles bases cette règle travaille, et comment.

@@ -86,6 +86,8 @@ export const frRules: Record<string, string> = {
   'findings.action.ignore': 'Ignorer',
   'findings.action.reconsider': 'Reconsidérer',
   'findings.action.verify': 'Vérifier',
+  'findings.viewerNotice':
+    'Votre compte consulte les diagnostics sans agir dessus : ignorer, se dédire ou vérifier à la demande est réservé aux administrateurs.',
   'findings.action.verifyHint':
     'Rejoue la règle sur l’instance : le moteur clôt le diagnostic si le fait a disparu.',
 

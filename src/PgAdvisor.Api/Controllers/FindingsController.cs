@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PgAdvisor.Api.Data;
@@ -170,6 +171,7 @@ public sealed class FindingsController(
     /// exécution de la règle, ou à la vérification à la demande, qui rejoue la règle et conclut.
     /// </summary>
     [HttpPost("{id:int}/status")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<FindingResponse>> ChangeStatus(
         int id, ChangeFindingStatusRequest request, CancellationToken ct)
     {
@@ -215,6 +217,7 @@ public sealed class FindingsController(
     /// du scheduler.
     /// </summary>
     [HttpPost("{id:int}/verify")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<VerifyFindingResponse>> Verify(int id, CancellationToken ct)
     {
         var finding = await db.Findings

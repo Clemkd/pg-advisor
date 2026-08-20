@@ -286,24 +286,28 @@ thresholds it names; the others keep their file value.
 
 ## API
 
-| Route | Role |
-| --- | --- |
-| `GET /api/rules` | List, filterable by category, origin and free-text search |
-| `GET /api/rules/{id}` | Rule, YAML and per-instance applicability, with deadline and guard state |
-| `GET /api/rules/health` | Guard state for every tracked rule, filterable by instance and state |
-| `GET /api/rules/schema` | Categories, groups, filters, functions, handlers, template |
-| `GET /api/rules/errors` | Rules rejected at load time |
-| `POST /api/rules/validate` | Validates a YAML without writing anything |
-| `POST /api/rules` | Creates a user rule |
-| `PUT /api/rules/{id}` | Replaces a rule |
-| `DELETE /api/rules/{id}` | Deletes the user rule |
-| `POST /api/rules/reload` | Forces a reload |
-| `POST /api/rules/{id}/dry-run` | Runs against an instance without persisting |
-| `POST /api/rules/{id}/reactivate` | Lifts the quarantine, on one instance or on all of them |
-| `PUT /api/rules/{id}/override` | Sets an override |
-| `DELETE /api/rules/{id}/override` | Removes an override |
+| Route | Role | What it does |
+| --- | --- | --- |
+| `GET /api/rules` | Viewer | List, filterable by category, origin and free-text search |
+| `GET /api/rules/{id}` | Viewer | Rule, YAML and per-instance applicability, with deadline and guard state |
+| `GET /api/rules/health` | Viewer | Guard state for every tracked rule, filterable by instance and state |
+| `GET /api/rules/schema` | Viewer | Categories, groups, filters, functions, handlers, template |
+| `GET /api/rules/errors` | Viewer | Rules rejected at load time |
+| `GET /api/rules/errors/{file}` | Viewer | Source of a rejected file, with its errors |
+| `PUT /api/rules/errors/{file}` | Admin | Repairs a rejected file in place |
+| `POST /api/rules/validate` | Viewer | Validates a YAML without writing anything and without touching an instance |
+| `POST /api/rules` | Admin | Creates a user rule |
+| `PUT /api/rules/{id}` | Admin | Replaces a rule |
+| `DELETE /api/rules/{id}` | Admin | Deletes the user rule |
+| `POST /api/rules/reload` | Admin | Forces a reload |
+| `POST /api/rules/{id}/dry-run` | Admin | Runs against an instance without persisting |
+| `POST /api/rules/{id}/reactivate` | Admin | Lifts the quarantine, on one instance or on all of them |
+| `PUT /api/rules/{id}/override` | Admin | Sets an override |
+| `DELETE /api/rules/{id}/override` | Admin | Removes an override |
 
-Writes require the `Admin` role.
+Writes require the `Admin` role, and so does `dry-run`: the request carries a YAML of its own, so
+running it means running SQL of the caller's choosing on a supervised instance. `validate` stays
+open because it stops at compilation and never opens a connection.
 
 Two notification events join the two existing ones: `rule_degraded` (warning, `warning` severity)
 and `rule_quarantined` (rule set aside, `critical` severity). They borrow the same deduplication: an

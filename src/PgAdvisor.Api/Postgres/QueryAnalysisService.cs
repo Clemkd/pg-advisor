@@ -404,7 +404,13 @@ public sealed partial class QueryAnalysisService(
         return sql;
     }
 
-    private static string FormatLiteral(string value)
+    /// <summary>
+    /// Writes a parameter value as a SQL literal. Everything that is not a number, a boolean or
+    /// NULL is quoted and escaped — including a value the operator already wrapped in quotes.
+    /// Respecting those quotes would hand the caller the surrounding statement: the value
+    /// <c>'||(SELECT ...)||'</c> would leave verbatim into the EXPLAIN built by RunExplainAsync.
+    /// </summary>
+    internal static string FormatLiteral(string value)
     {
         if (value.Length == 0)
         {
@@ -422,12 +428,6 @@ public sealed partial class QueryAnalysisService(
         }
 
         if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-        {
-            return value;
-        }
-
-        // Valeur déjà écrite comme littéral SQL par l'opérateur : on la respecte.
-        if (value.StartsWith('\'') && value.EndsWith('\'') && value.Length > 1)
         {
             return value;
         }

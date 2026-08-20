@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { CheckCircle2, ChevronRight, ExternalLink, FilterX } from 'lucide-react'
 import { api } from '@/api/client'
 import type { Connection, Finding, FindingDetail, FindingStatus, FindingSummary } from '@/api/types'
+import { useAuth } from '@/app/AuthContext'
 import { useEventListener } from '@/app/EventsContext'
 import { Hero, Page } from '@/components/layout/Page'
 import { FilterInput } from '@/components/ui/FilterInput'
@@ -123,6 +124,7 @@ function verdictTone(result: { resolved: boolean; stillPresent: boolean }): Verd
 }
 
 export function FindingsPage() {
+  const { isAdmin } = useAuth()
   const t = useT()
   const tc = useTc()
   const [params, setParams] = useSearchParams()
@@ -228,6 +230,8 @@ export function FindingsPage() {
   /** Change le statut sans rien annoncer : socle commun à l'action et à son annulation. */
   const applyStatus = useCallback(
     async (finding: Finding, next: FindingStatus) => {
+      if (!isAdmin) return false
+
       setBusyId(finding.id)
       setVerdict(null)
 
@@ -242,7 +246,7 @@ export function FindingsPage() {
         setBusyId(null)
       }
     },
-    [load],
+    [isAdmin, load],
   )
 
   /*
@@ -272,6 +276,8 @@ export function FindingsPage() {
    */
   const verify = useCallback(
     async (finding: Finding) => {
+      if (!isAdmin) return
+
       setBusyId(finding.id)
       setNotice(null)
       setVerdict(null)
@@ -294,7 +300,7 @@ export function FindingsPage() {
         setBusyId(null)
       }
     },
-    [load],
+    [isAdmin, load],
   )
 
   useEffect(() => {
@@ -412,6 +418,7 @@ export function FindingsPage() {
             </span>
           </Notice>
         )}
+        {!isAdmin && <Notice tone="info">{t('findings.viewerNotice')}</Notice>}
         {status === 'ignored' && <Notice tone="info">{t('findings.ignoredNotice')}</Notice>}
         {status === 'resolved' && <Notice tone="info">{t('findings.resolvedNotice')}</Notice>}
 
@@ -522,6 +529,7 @@ export function FindingsPage() {
                 changeStatus(finding, 'active', t('findings.notice.reconsidered', { title: finding.title }))
               }
               onVerify={verify}
+              isAdmin={isAdmin}
             />
           )}
         </Card>
@@ -659,6 +667,7 @@ function FindingsTable({
   onIgnore,
   onReconsider,
   onVerify,
+  isAdmin,
 }: {
   findings: Finding[]
   connections: Connection[]
@@ -681,6 +690,7 @@ function FindingsTable({
   onIgnore: (finding: Finding) => void
   onReconsider: (finding: Finding) => void
   onVerify: (finding: Finding) => void
+  isAdmin: boolean
 }) {
   const t = useT()
 
@@ -874,6 +884,7 @@ function FindingsTable({
                     onIgnore={onIgnore}
                     onReconsider={onReconsider}
                     onVerify={onVerify}
+                    isAdmin={isAdmin}
                   />
                 </div>
               )
@@ -895,6 +906,7 @@ function FindingRow({
   onIgnore,
   onReconsider,
   onVerify,
+  isAdmin,
 }: {
   finding: Finding
   index: number
@@ -905,6 +917,7 @@ function FindingRow({
   onIgnore: (finding: Finding) => void
   onReconsider: (finding: Finding) => void
   onVerify: (finding: Finding) => void
+  isAdmin: boolean
 }) {
   const t = useT()
   const tc = useTc()
@@ -1016,7 +1029,7 @@ function FindingRow({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
-        {finding.status === 'active' && (
+        {isAdmin && finding.status === 'active' && (
           <SplitButton
             label={t('findings.action.ignore')}
             loading={busy}
@@ -1026,7 +1039,7 @@ function FindingRow({
           />
         )}
 
-        {finding.status === 'ignored' && (
+        {isAdmin && finding.status === 'ignored' && (
           <SplitButton
             label={t('findings.action.reconsider')}
             loading={busy}
@@ -1036,7 +1049,7 @@ function FindingRow({
           />
         )}
 
-        {finding.status === 'resolved' && (
+        {isAdmin && finding.status === 'resolved' && (
           <Button loading={busy} disabled={busy} onClick={() => onVerify(finding)}>
             {t('findings.action.verify')}
           </Button>
@@ -1055,6 +1068,7 @@ function FindingDetailModal({
   onClose: () => void
   onChanged: () => void
 }) {
+  const { isAdmin } = useAuth()
   const t = useT()
   const [detail, setDetail] = useState<FindingDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1133,20 +1147,24 @@ function FindingDetailModal({
             <Button variant="ghost" onClick={onClose} className="mr-auto">
               {t('common.close')}
             </Button>
-            {finding.status === 'ignored' ? (
-              <Button disabled={busy} onClick={() => changeStatus('active')}>
-                {t('findings.action.reconsider')}
-              </Button>
-            ) : (
-              finding.status === 'active' && (
-                <Button disabled={busy} onClick={() => changeStatus('ignored')}>
-                  {t('findings.action.ignore')}
+            {isAdmin && (
+              <>
+                {finding.status === 'ignored' ? (
+                  <Button disabled={busy} onClick={() => changeStatus('active')}>
+                    {t('findings.action.reconsider')}
+                  </Button>
+                ) : (
+                  finding.status === 'active' && (
+                    <Button disabled={busy} onClick={() => changeStatus('ignored')}>
+                      {t('findings.action.ignore')}
+                    </Button>
+                  )
+                )}
+                <Button variant="primary" onClick={verify} loading={busy}>
+                  {t('findings.action.verify')}
                 </Button>
-              )
+              </>
             )}
-            <Button variant="primary" onClick={verify} loading={busy}>
-              {t('findings.action.verify')}
-            </Button>
           </>
         )
       }

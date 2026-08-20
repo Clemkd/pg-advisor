@@ -65,8 +65,8 @@ public class AuthorizationMatrixTests(AdvisorApplicationFactory factory)
         new("GET", "/api/findings", Access.Authenticated),
         new("GET", "/api/findings/summary", Access.Authenticated),
         new("GET", "/api/findings/99999", Access.Authenticated),
-        new("POST", "/api/findings/99999/status", Access.Authenticated, new { status = "ignored" }),
-        new("POST", "/api/findings/99999/verify", Access.Authenticated),
+        new("POST", "/api/findings/99999/status", Access.Admin, new { status = "ignored" }),
+        new("POST", "/api/findings/99999/verify", Access.Admin),
 
         // --- Webhooks -----------------------------------------------------------------------
         new("GET", "/api/notifications", Access.Authenticated),
@@ -99,7 +99,7 @@ public class AuthorizationMatrixTests(AdvisorApplicationFactory factory)
         new("DELETE", "/api/rules/does.not-exist", Access.Admin),
         new("POST", "/api/rules/reload", Access.Admin),
         new("POST", "/api/rules/does.not-exist/reactivate", Access.Admin, new { connectionId = (int?)null }),
-        new("POST", "/api/rules/does.not-exist/dry-run", Access.Authenticated, new { connectionId = 99999 }),
+        new("POST", "/api/rules/does.not-exist/dry-run", Access.Admin, new { connectionId = 99999 }),
         new("PUT", "/api/rules/does.not-exist/override", Access.Admin, new { enabled = true }),
         new("DELETE", "/api/rules/does.not-exist/override", Access.Admin),
 

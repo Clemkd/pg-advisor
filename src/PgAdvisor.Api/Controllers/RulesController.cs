@@ -390,6 +390,7 @@ public sealed class RulesController(
 
     /// <summary>Exécute la règle sur une instance et retourne le résultat sans rien persister.</summary>
     [HttpPost("{id}/dry-run")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<DryRunResponse>> DryRun(string id, DryRunRequest request, CancellationToken ct)
     {
         LoadedRule? rule;

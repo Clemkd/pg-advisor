@@ -30,7 +30,9 @@ public sealed class NotificationsController(
             })
             .ToListAsync(ct);
 
-        return Ok(rows.Select(row => ToResponse(row.Configuration, row.ConnectionName)));
+        var revealUrl = User.IsInRole(Roles.Admin);
+
+        return Ok(rows.Select(row => ToResponse(row.Configuration, row.ConnectionName, revealUrl)));
     }
 
     [HttpPost]
@@ -64,7 +66,7 @@ public sealed class NotificationsController(
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation("Webhook {Key} created.", configuration.Key);
-        return CreatedAtAction(nameof(List), null, ToResponse(configuration, null));
+        return CreatedAtAction(nameof(List), null, ToResponse(configuration, null, revealUrl: true));
     }
 
     [HttpPut("{id:int}")]
@@ -103,7 +105,7 @@ public sealed class NotificationsController(
         }
 
         await db.SaveChangesAsync(ct);
-        return Ok(ToResponse(configuration, null));
+        return Ok(ToResponse(configuration, null, revealUrl: true));
     }
 
     [HttpDelete("{id:int}")]
@@ -260,11 +262,27 @@ public sealed class NotificationsController(
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max] + "…";
 
-    private static NotificationConfigurationResponse ToResponse(NotificationConfiguration c, string? connectionName) => new()
+    /// <summary>
+    /// A Slack, Discord or Teams URL carries its own secret in the path: it is the credential,
+    /// not an address. Only an administrator sees it whole — everyone else gets the origin, which
+    /// is enough to tell the services apart in the interface.
+    /// </summary>
+    internal static string MaskUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
+        {
+            return "…";
+        }
+
+        return $"{parsed.Scheme}://{parsed.Host}/…";
+    }
+
+    private static NotificationConfigurationResponse ToResponse(
+        NotificationConfiguration c, string? connectionName, bool revealUrl) => new()
     {
         Id = c.Id,
         Key = c.Key,
-        Url = c.Url,
+        Url = revealUrl ? c.Url : MaskUrl(c.Url),
         Enabled = c.Enabled,
         MinimumSeverity = c.MinimumSeverity,
         Format = c.Format,

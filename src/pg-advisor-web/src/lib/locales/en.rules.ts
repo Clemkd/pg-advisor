@@ -76,6 +76,8 @@ export const enRules: Record<string, string> = {
   'findings.action.ignore': 'Ignore',
   'findings.action.reconsider': 'Reconsider',
   'findings.action.verify': 'Verify',
+  'findings.viewerNotice':
+    'Your account reads the diagnostics without acting on them: ignoring one, reconsidering it or verifying it on demand is reserved for administrators.',
   'findings.action.verifyHint':
     'Replays the rule on the instance: the engine closes the diagnostic if the fact is gone.',
 

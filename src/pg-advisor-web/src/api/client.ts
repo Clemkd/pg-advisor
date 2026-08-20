@@ -21,6 +21,7 @@ import type {
   ValidateRuleResult,
   WebhookConfiguration,
 } from './types'
+import { tr } from '@/lib/i18n'
 
 /** Erreur d'API portant le code HTTP et le message lisible renvoyé par le serveur. */
 export class ApiError extends Error {
@@ -75,7 +76,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       unauthorizedListeners.forEach((listener) => listener())
     }
 
-    throw new ApiError(401, 'Session expirée. Reconnectez-vous.')
+    throw new ApiError(401, tr('error.sessionExpired'))
+  }
+
+  if (response.status === 403) {
+    // ASP.NET Core renvoie un 403 sans corps : describeError n'aurait rien à lire et
+    // retomberait sur un message brut. Le rôle est la seule explication utile ici.
+    throw new ApiError(403, tr('error.forbidden'))
   }
 
   if (!response.ok) {
@@ -105,11 +112,11 @@ async function describeError(response: Response): Promise<ErrorDescription> {
       problem.title ??
       problem.detail ??
       details?.[0] ??
-      `Erreur ${response.status}`
+      tr('error.http', { status: response.status })
 
     return [message, details, problem as Record<string, unknown>]
   } catch {
-    return [`Erreur ${response.status} ${response.statusText}`.trim()]
+    return [tr('error.http', { status: response.status })]
   }
 }
 
