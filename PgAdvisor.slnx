@@ -4,6 +4,7 @@
     <Project Path="src/PgAdvisor.AppHost/PgAdvisor.AppHost.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PgAdvisor.IntegrationTests/PgAdvisor.IntegrationTests.csproj" />
     <Project Path="tests/PgAdvisor.Tests/PgAdvisor.Tests.csproj" />
   </Folder>
 </Solution>

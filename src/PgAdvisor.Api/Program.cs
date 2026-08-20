@@ -149,3 +149,7 @@ app.Map("/api/{**path}", () => Results.NotFound()).AllowAnonymous();
 app.MapFallbackToFile("{*path}", "index.html").AllowAnonymous();
 
 app.Run();
+
+// Top-level statements compile into an internal Program class, which WebApplicationFactory
+// cannot reach: this declaration opens it to the integration tests without changing behaviour.
+public partial class Program;
