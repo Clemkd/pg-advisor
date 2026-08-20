@@ -22,7 +22,7 @@ query: |
     n.nspname                                                          AS schemaname,
     c.relname,
     age(c.relfrozenxid)                                                AS age_xid,
-    (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS limit,
+    (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS freeze_max_age,
     age(c.relfrozenxid)::float /
       (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_freeze_max_age') AS share
   FROM pg_class c
@@ -40,12 +40,12 @@ key:
 
 recommendation:
   title: "Wraparound proche sur {{ schemaname }}.{{ relname }}"
-  message: "Transaction age on {{ relname }} has reached {{ age_xid | number }}, that is {{ share | percent }} of autovacuum_freeze_max_age ({{ limit | number }})."
+  message: "Transaction age on {{ relname }} has reached {{ age_xid | number }}, that is {{ share | percent }} of autovacuum_freeze_max_age ({{ freeze_max_age | number }})."
   impact: high
   confidence: high
   evidence:
     - age_xid
-    - limit
+    - freeze_max_age
     - share
   sql: "VACUUM (FREEZE, VERBOSE) {{ schemaname }}.{{ relname }};"
   documentation: https://www.postgresql.org/docs/current/routine-vacuuming.html#VACUUM-FOR-WRAPAROUND

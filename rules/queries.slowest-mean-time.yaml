@@ -14,6 +14,11 @@ requires:
     - pg_stat_statements
   views:
     - pg_stat_statements
+  # mean_exec_time et total_exec_time s'appellent mean_time et total_time avant
+  # pg_stat_statements 1.8, livré avec PostgreSQL 13. requires.extensions ne vérifie que la
+  # présence de l'extension, jamais sa version : sans cette borne, la règle échoue en 42703 à
+  # chaque exécution jusqu'à sa mise en quarantaine.
+  minVersion: 13
 
 parameters:
   threshold_ms: 500

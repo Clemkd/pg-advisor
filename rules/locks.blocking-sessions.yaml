@@ -25,10 +25,20 @@ query: |
     EXTRACT(EPOCH FROM (now() - blocked.query_start))             AS waiting_seconds,
     blocked.wait_event_type,
     blocked.wait_event,
-    (SELECT string_agg(DISTINCT p::text, ', ')
-       FROM unnest(pg_blocking_pids(blocked.pid)) AS p)           AS blocking_pids
+    blockers.pids                                                 AS blocking_pids
+  -- pg_blocking_pids() prend des verrous sur le gestionnaire de verrous. L'appeler depuis le
+  -- WHERE le faisait exécuter pour chaque backend, puis une seconde fois pour les lignes
+  -- retenues — toutes les dix secondes, groupe « health ». La présélection sur wait_event_type
+  -- est gratuite, et le LATERAL ne l'appelle qu'une fois, sur les seules sessions en attente.
   FROM pg_stat_activity blocked
-  WHERE cardinality(pg_blocking_pids(blocked.pid)) > 0
+  CROSS JOIN LATERAL (
+    SELECT
+      cardinality(pids) AS count,
+      (SELECT string_agg(DISTINCT p::text, ', ') FROM unnest(pids) AS p) AS pids
+    FROM (SELECT pg_blocking_pids(blocked.pid) AS pids) AS raw
+  ) AS blockers
+  WHERE blocked.wait_event_type = 'Lock'
+    AND blockers.count > 0
 
 condition: waiting_seconds > maximum_seconds
 

@@ -23,10 +23,12 @@ query: |
     relname,
     n_live_tup,
     n_mod_since_analyze,
-    GREATEST(
-      COALESCE(EXTRACT(EPOCH FROM (now() - last_analyze)), 0),
-      COALESCE(EXTRACT(EPOCH FROM (now() - last_autoanalyze)), 0)
-    ) / 86400 AS days_since_analyze
+    -- GREATEST sur les dates, pas sur les âges : le plus grand âge désignerait l'analyse la
+    -- plus ancienne, et une table auto-analysée il y a une heure serait rapportée comme
+    -- délaissée depuis six mois. GREATEST ignore les NULL, ce qui traite le cas où une seule
+    -- des deux dates est renseignée.
+    EXTRACT(EPOCH FROM (now() - GREATEST(last_analyze, last_autoanalyze))) / 86400
+      AS days_since_analyze
   FROM pg_stat_user_tables
   WHERE (last_analyze IS NOT NULL OR last_autoanalyze IS NOT NULL)
     AND n_mod_since_analyze > @minimum_modifications

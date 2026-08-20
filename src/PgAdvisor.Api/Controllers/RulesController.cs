@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -447,6 +448,41 @@ public sealed class RulesController(
         }
     }
 
+    /// <summary>
+    /// Vérifie qu'une surcharge de seuil reste du type déclaré par la règle, et qu'un seuil
+    /// numérique reste positif. Sans ce contrôle, un « minimum_pages: -1 » enregistré depuis
+    /// l'éditeur suffisait à faire diviser par zéro la règle de bloat, jusqu'à sa quarantaine.
+    /// </summary>
+    private ActionResult? InvalidThreshold(LoadedRule rule, Dictionary<string, object?>? parameters)
+    {
+        foreach (var (key, raw) in parameters ?? [])
+        {
+            var declared = RuleParameterSerializer.NormalizeScalar(
+                (rule.Definition.Parameters ?? []).GetValueOrDefault(key));
+
+            if (declared is not (long or int or double or float or decimal))
+            {
+                continue;
+            }
+
+            var supplied = RuleParameterSerializer.NormalizeScalar(raw?.ToString());
+
+            if (supplied is not (long or double))
+            {
+                return Problem(statusCode: StatusCodes.Status400BadRequest,
+                    title: $"Threshold \"{key}\" expects a number.");
+            }
+
+            if (Convert.ToDouble(supplied, CultureInfo.InvariantCulture) < 0)
+            {
+                return Problem(statusCode: StatusCodes.Status400BadRequest,
+                    title: $"Threshold \"{key}\" cannot be negative.");
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Crée ou remplace une surcharge : activation, sévérité, seuils, périodicité.</summary>
     [HttpPut("{id}/override")]
     [Authorize(Roles = Roles.Admin)]
@@ -479,6 +515,11 @@ public sealed class RulesController(
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest,
                 title: $"Unknown thresholds for this rule: {string.Join(", ", unknownParameters)}.");
+        }
+
+        if (InvalidThreshold(rule, request.Parameters) is { } invalid)
+        {
+            return invalid;
         }
 
         var existing = await db.RuleOverrides
