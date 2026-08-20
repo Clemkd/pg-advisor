@@ -11,6 +11,13 @@ services:
       # l'image (Dockerfile: COPY rules/ /app/rules/) : ne pas monter par-dessus /app/rules, ce
       # qui les masquerait par un dossier hôte vide et ferait tomber le compte à 0 règle chargée.
       - advisor-data:/app/data
+    environment:
+      # Sans ce bloc, `PGADVISOR_Auth__BootstrapPassword=... docker compose up -d` n'alimentait que
+      # l'interpolation du fichier compose : la variable n'atteignait jamais le conteneur, et la
+      # commande documentée dans le README ne faisait rien.
+      PGADVISOR_Auth__BootstrapPassword: ${PGADVISOR_Auth__BootstrapPassword:-}
+      # À activer dès que l'Advisor est joint en HTTPS : le cookie de session porte alors Secure.
+      PGADVISOR_Auth__RequireHttps: ${PGADVISOR_Auth__RequireHttps:-false}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]

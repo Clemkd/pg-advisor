@@ -34,7 +34,21 @@ Set-Location $repository
 
 # 127.0.0.1 plutôt que localhost : ce dernier résout d'abord en ::1, et le mappage IPv6 de
 # Docker Desktop n'aboutit pas, ce qui ferait expirer chaque appel avant le repli en IPv4.
-$api = 'http://127.0.0.1:8080'
+$port = if ($env:PGADVISOR_PORT) { ($env:PGADVISOR_PORT -split ':')[-1] } else { '8080' }
+$api = "http://127.0.0.1:$port"
+
+# Le nom du projet Compose vient du nom du dossier cloné, sauf si COMPOSE_PROJECT_NAME le fixe :
+# les noms de conteneurs en dur cassaient dès que le dépôt était cloné ailleurs.
+$project = if ($env:COMPOSE_PROJECT_NAME) { $env:COMPOSE_PROJECT_NAME } else { Split-Path -Leaf $repository }
+$pgFull = "$project-pg-full-1"
+$webhookEcho = "$project-webhook-echo-1"
+
+# Compteur d'échecs métier : le script doit pouvoir servir de garde-fou, donc sortir non nul.
+$script:problems = 0
+function Fail([string]$message) {
+    $script:problems++
+    Write-Output ('  FAIL  ' + $message)
+}
 
 function Step([string]$title) {
     Write-Output ''
@@ -54,11 +68,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 Show 'Docker daemon' $daemon
 
-$testInstances = @(docker compose -f docker-compose.test.yml ps --format '{{.Service}}:{{.State}}' 2>&1)
+$testInstances = @(docker compose -f docker-compose.test.yml ps --format '{{.Service}}:{{.Health}}' 2>&1)
 # Parenthèses indispensables : « $tableau -notmatch » renvoie les éléments non concordants,
 # ce qui serait toujours vrai dès qu'un autre service est listé.
-if (-not ($testInstances -match 'pg-full:running')) {
-    Write-Output '  Test instances are missing. Run: docker compose -f docker-compose.test.yml up -d'
+# « healthy » et non « running » : le healthcheck de docker-compose.test.yml attend pg_isready,
+# et le seed partait sinon avant que PostgreSQL n'accepte les connexions.
+if (-not ($testInstances -match 'pg-full:healthy')) {
+    Write-Output '  Test instances are not healthy yet. Run: docker compose -f docker-compose.test.yml up -d --wait'
     exit 1
 }
 Show 'test instances' ($testInstances -join ' ')
@@ -67,7 +83,7 @@ Show 'test instances' ($testInstances -join ' ')
 if (-not $SkipSeed) {
     Step 'Seeding the test instance'
     Get-Content (Join-Path $PSScriptRoot 'seed-test-data.sql') -Raw |
-        docker exec -i pg-advisor-pg-full-1 psql -U postgres -d shop 2>&1 |
+        docker exec -i $pgFull psql -U postgres -d shop 2>&1 |
         Select-String -Pattern 'ERROR|ERREUR' |
         Select-Object -First 5 |
         ForEach-Object { Show 'SQL error' $_.Line }
@@ -81,7 +97,7 @@ docker compose up -d --build 2>&1 | Select-Object -Last 5 | ForEach-Object { Sho
 $ready = $false
 for ($i = 0; $i -lt 60; $i++) {
     try {
-        Invoke-RestMethod 'http://127.0.0.1:8080/api/health' -TimeoutSec 5 | Out-Null
+        Invoke-RestMethod "$api/api/health" -TimeoutSec 5 | Out-Null
         $ready = $true
         break
     } catch { Start-Sleep -Seconds 3 }
@@ -103,7 +119,7 @@ if (-not $match.Success) {
 }
 
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-$login = Invoke-RestMethod 'http://127.0.0.1:8080/api/auth/login' -Method Post `
+$login = Invoke-RestMethod "$api/api/auth/login" -Method Post `
     -Body (@{ username = 'admin'; password = $match.Groups[1].Value } | ConvertTo-Json) `
     -ContentType 'application/json' -WebSession $session -TimeoutSec 15
 Show 'account' ($login.username + ' (' + $login.role + ')')
@@ -123,7 +139,7 @@ foreach ($target in $targets) {
         username = 'postgres'; password = 'advisor-test'; sslMode = 'Disable'
     } | ConvertTo-Json
 
-    $result = Invoke-RestMethod 'http://127.0.0.1:8080/api/connections/test' -Method Post `
+    $result = Invoke-RestMethod "$api/api/connections/test" -Method Post `
         -Body $probe -ContentType 'application/json' -WebSession $session -TimeoutSec 30
 
     Show $target.Name ('success=' + $result.success + ' PostgreSQL ' + $result.serverVersion +
@@ -148,13 +164,13 @@ foreach ($target in $targets) {
     } | ConvertTo-Json
 
     try {
-        $created = Invoke-RestMethod 'http://127.0.0.1:8080/api/connections' -Method Post `
+        $created = Invoke-RestMethod "$api/api/connections" -Method Post `
             -Body $payload -ContentType 'application/json' -WebSession $session -TimeoutSec 20
         $ids[$target.Name] = $created.id
         Show $target.Name ('registered, id=' + $created.id)
     } catch {
         # Une instance du même nom existe déjà : on récupère son identifiant.
-        $existing = (Invoke-RestMethod 'http://127.0.0.1:8080/api/connections' -WebSession $session) |
+        $existing = (Invoke-RestMethod "$api/api/connections" -WebSession $session) |
             Where-Object { $_.name -eq $target.Name }
         if ($existing) {
             $ids[$target.Name] = $existing.id
@@ -173,11 +189,11 @@ try {
         enabled = $true; minimumSeverity = 'info'; events = @('new_finding', 'finding_resolved')
     } | ConvertTo-Json
 
-    $webhook = Invoke-RestMethod 'http://127.0.0.1:8080/api/notifications' -Method Post `
+    $webhook = Invoke-RestMethod "$api/api/notifications" -Method Post `
         -Body $hook -ContentType 'application/json' -WebSession $session -TimeoutSec 15
     Show 'webhook registered' $webhook.key
 
-    $test = Invoke-RestMethod ('http://127.0.0.1:8080/api/notifications/' + $webhook.id + '/test') `
+    $test = Invoke-RestMethod ("$api/api/notifications/" + $webhook.id + '/test') `
         -Method Post -WebSession $session -TimeoutSec 20
     Show 'test delivery' ('success=' + $test.success + ' HTTP ' + $test.statusCode)
 } catch {
@@ -192,7 +208,7 @@ $dashboard = $null
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 15
     try {
-        $dashboard = Invoke-RestMethod 'http://127.0.0.1:8080/api/dashboard' -WebSession $session -TimeoutSec 20
+        $dashboard = Invoke-RestMethod "$api/api/dashboard" -WebSession $session -TimeoutSec 20
     } catch { continue }
 
     $collected = ($dashboard.instances | Where-Object { $_.lastCollectedAt }).Count
@@ -234,7 +250,7 @@ if ($dashboard) {
 
 Step 'Detected recommendations'
 try {
-    $page = Invoke-RestMethod 'http://127.0.0.1:8080/api/findings?status=active&pageSize=60' `
+    $page = Invoke-RestMethod "$api/api/findings?status=active&pageSize=60" `
         -WebSession $session -TimeoutSec 20
     Show 'total' $page.total
     foreach ($finding in $page.items) {
@@ -246,10 +262,10 @@ try {
 
 Step 'Notifications'
 try {
-    $history = Invoke-RestMethod 'http://127.0.0.1:8080/api/notifications/history' -WebSession $session -TimeoutSec 15
+    $history = Invoke-RestMethod "$api/api/notifications/history" -WebSession $session -TimeoutSec 15
     Show 'history' ($history.Count.ToString() + ' entries, ' +
         ($history | Where-Object { $_.success }).Count + ' succeeded')
-    $received = docker logs pg-advisor-webhook-echo-1 2>&1 | Select-String -Pattern 'new_finding' |
+    $received = docker logs $webhookEcho 2>&1 | Select-String -Pattern 'new_finding' |
         Measure-Object -Line
     Show 'requests seen by the receiver' $received.Lines
 } catch { Show 'ERROR' $_ }
@@ -257,7 +273,7 @@ try {
 # --- Aperçus de règles -------------------------------------------------------
 # Chaque règle est exécutée à blanc sur les deux instances : c'est la seule façon de vérifier
 # que son SQL est valide, que ses colonnes existent et que ses prérequis la filtrent bien.
-$allRules = Invoke-RestMethod 'http://127.0.0.1:8080/api/rules' -WebSession $session -TimeoutSec 20
+$allRules = Invoke-RestMethod "$api/api/rules" -WebSession $session -TimeoutSec 20
 
 foreach ($target in $targets) {
     Step ('Dry run of the ' + $allRules.Count + ' rules on ' + $target.Name)
@@ -266,7 +282,7 @@ foreach ($target in $targets) {
 
     foreach ($rule in $allRules) {
         try {
-            $dry = Invoke-RestMethod ('http://127.0.0.1:8080/api/rules/' + $rule.id + '/dry-run') -Method Post `
+            $dry = Invoke-RestMethod ("$api/api/rules/" + $rule.id + '/dry-run') -Method Post `
                 -Body (@{ connectionId = $ids[$target.Name] } | ConvertTo-Json) `
                 -ContentType 'application/json' -WebSession $session -TimeoutSec 120
 
@@ -293,12 +309,12 @@ foreach ($target in $targets) {
 
 # --- Zero-touch --------------------------------------------------------------
 Step 'Zero-touch verification'
-$extensions = docker exec pg-advisor-pg-full-1 psql -U postgres -d shop -At `
+$extensions = docker exec $pgFull psql -U postgres -d shop -At `
     -c "SELECT string_agg(extname, ', ' ORDER BY extname) FROM pg_extension" 2>&1
 Show 'extensions present' $extensions
 Show 'expected' 'plpgsql, timescaledb, pg_stat_statements (created by the test seed only)'
 
-$settings = docker exec pg-advisor-pg-full-1 psql -U postgres -d shop -At `
+$settings = docker exec $pgFull psql -U postgres -d shop -At `
     -c "SELECT count(*) FROM pg_settings WHERE source NOT IN ('default', 'override', 'command line', 'configuration file', 'environment variable', 'client')" 2>&1
 Show 'settings changed outside configuration' $settings
 
@@ -309,4 +325,11 @@ docker compose logs pg-advisor 2>&1 |
     ForEach-Object { Write-Output ('  ' + $_.Line) }
 
 Write-Output ''
-Write-Output 'Validation complete. UI: http://localhost:8080'
+
+if ($script:problems -gt 0) {
+    Write-Output ("Validation finished with $($script:problems) problem(s).")
+    exit 1
+}
+
+Write-Output "Validation complete. UI: $api"
+exit 0

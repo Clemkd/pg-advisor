@@ -17,6 +17,12 @@ services:
     # le port du fichier de base en place — exactement le chemin qu'on veut fermer.
     ports: !reset []
 
+    environment:
+      # Le proxy termine TLS et parle HTTP au conteneur. Sans ce forçage, la politique par défaut
+      # du cookie — Secure seulement si la requête l'était — laisse partir la session sans le
+      # drapeau, alors que c'est précisément le mode où il compte.
+      PGADVISOR_Auth__RequireHttps: "true"
+
     networks:
       - cloud
 

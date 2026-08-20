@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using PgAdvisor.Api;
 using PgAdvisor.Api.Collectors;
@@ -163,6 +164,18 @@ builder.Services.AddRateLimiter(rateLimiter =>
             }));
 });
 
+// Derrière le proxy de la plateforme, l'application ne voit sinon que l'adresse du proxy et un
+// schéma « http » : le partitionnement du limiteur de débit regrouperait tous les clients, et le
+// cookie se croirait en clair. Les réseaux connus sont vidés parce que le proxy porte une adresse
+// de réseau Docker, jamais loopback — la surcouche hébergée ne publie aucun port, donc rien
+// n'atteint le conteneur en dehors de lui.
+builder.Services.Configure<ForwardedHeadersOptions>(forwarded =>
+{
+    forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    forwarded.KnownIPNetworks.Clear();
+    forwarded.KnownProxies.Clear();
+});
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
@@ -177,6 +190,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+// Avant tout le reste : l'adresse et le schéma corrigés doivent valoir pour chaque middleware.
+app.UseForwardedHeaders();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();

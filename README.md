@@ -219,6 +219,13 @@ Without a proxy, to expose the interface only to the machine itself, prefix the 
 Supervised instance passwords are encrypted with AES-GCM using a key stored outside the database,
 and are never returned by the API nor written to the logs.
 
+The container runs as a non-root user. A fresh named volume inherits the right ownership from the
+image; a volume created by an earlier version belongs to root, and has to be handed over once:
+
+```bash
+docker compose run --rm --user root pg-advisor chown -R app:app /app/data
+```
+
 ## Documentation
 
 - [Interface overview](docs/OVERVIEW.md) — commented screenshots of every view

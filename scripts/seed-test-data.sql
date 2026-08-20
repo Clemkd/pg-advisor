@@ -1,11 +1,24 @@
 -- Jeu de données destiné à faire réagir les règles de l'Advisor sur une instance de test.
 -- À appliquer sur l'instance pg-full de docker-compose.test.yml :
 --
---   docker exec -i pg-advisor-pg-full-1 psql -U postgres -d shop < scripts/seed-test-data.sql
+--   docker exec -i <projet>-pg-full-1 psql -U postgres -d shop < scripts/seed-test-data.sql
 --
 -- Il crée volontairement des situations que les règles doivent détecter : lignes mortes,
 -- index redondant, index inutilisé, clé étrangère non indexée, table jamais analysée,
 -- chunks TimescaleDB anciens non compressés.
+
+-- Garde-fou : le script commence par des DROP TABLE ... CASCADE et réinitialise les statistiques
+-- de l'instance. Lancé par mégarde sur une base de production nommée « shop », il détruirait les
+-- tables homonymes. On refuse donc de s'exécuter ailleurs que sur la base de test attendue.
+DO $$
+BEGIN
+    IF current_database() <> 'shop' THEN
+        RAISE EXCEPTION
+            'seed-test-data.sql refuses to run on database "%": it drops tables and resets statistics. Expected "shop".',
+            current_database();
+    END IF;
+END
+$$;
 
 CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 

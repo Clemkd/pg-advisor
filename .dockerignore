@@ -9,4 +9,19 @@
 .git
 .gitignore
 docs
-advisor-data
+tests
+
+# Données locales de l'Advisor. Le motif doit être récursif : les répertoires réels sont sous
+# src/PgAdvisor.Api/, que le Dockerfile copie en entier. Sans les deux astérisques, la clé de
+# chiffrement des mots de passe, les clés de protection des cookies et la base SQLite partaient
+# dans le contexte de build et dans la couche intermédiaire.
+**/advisor-data*
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.key
+
+# Secrets et surcharges locales
+**/appsettings.Local.json
+.env
+.env.*
