@@ -199,6 +199,14 @@ public sealed class RuleEngine(
     }
 
     /// <summary>Rend la session à son délai global : la règle suivante ne doit pas hériter du précédent.</summary>
+    /// <remarks>
+    /// La restauration ignore délibérément le jeton d'annulation de l'analyse. Les garde-fous de
+    /// session sont posés par la chaîne de connexion (<c>Options</c>), donc appliqués une seule
+    /// fois à l'ouverture de la connexion physique : une reprise depuis le pool ne les réapplique
+    /// pas. Renoncer à restaurer parce que l'analyse vient d'être annulée rendait au pool une
+    /// connexion au délai modifié, dont héritait la règle suivante — exactement ce que cette
+    /// méthode existe pour empêcher.
+    /// </remarks>
     private async Task RestoreStatementTimeoutAsync(
         NpgsqlConnection connection, int timeoutSeconds, CancellationToken cancellationToken)
     {
@@ -209,13 +217,13 @@ public sealed class RuleEngine(
 
         try
         {
-            await SetStatementTimeoutAsync(connection, GlobalTimeoutSeconds, cancellationToken);
+            await SetStatementTimeoutAsync(connection, GlobalTimeoutSeconds, CancellationToken.None);
         }
         catch (Exception ex) when (ex is PostgresException or NpgsqlException or TimeoutException
                                       or InvalidOperationException or OperationCanceledException)
         {
-            // Connexion perdue, fermée, ou analyse interrompue : elle ne servira plus. Laisser
-            // cette exception remonter masquerait celle qui a réellement fait échouer la règle.
+            // La connexion est perdue ou cassée : Npgsql ne la rendra pas au pool. Laisser cette
+            // exception remonter masquerait celle qui a réellement fait échouer la règle.
             logger.LogDebug("Cannot restore the global statement_timeout: {Message}", ex.Message);
         }
     }

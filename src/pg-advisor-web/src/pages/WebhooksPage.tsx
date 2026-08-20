@@ -172,22 +172,32 @@ export function WebhooksPage() {
 
   async function test(webhook: WebhookConfiguration) {
     setNotice(null)
-    const result = await api.webhooks.test(webhook.id)
-    setNotice(
-      result.success
-        ? {
-            tone: 'success',
-            message: t('webhooks.testSent', {
-              key: webhook.key,
-              status: result.statusCode ?? '—',
-            }),
-          }
-        : {
-            tone: 'danger',
-            message: t('webhooks.testFailed', { key: webhook.key, error: result.error ?? '' }),
-          },
-    )
-    void load()
+
+    try {
+      const result = await api.webhooks.test(webhook.id)
+      setNotice(
+        result.success
+          ? {
+              tone: 'success',
+              message: t('webhooks.testSent', {
+                key: webhook.key,
+                status: result.statusCode ?? '—',
+              }),
+            }
+          : {
+              tone: 'danger',
+              message: t('webhooks.testFailed', { key: webhook.key, error: result.error ?? '' }),
+            },
+      )
+      void load()
+    } catch (cause) {
+      // Seule action de la page dépourvue de garde : un 403 ou un 500 y produisait un rejet de
+      // promesse non capturé, sans le moindre retour à l'écran.
+      setError(cause instanceof ApiError ? cause.message : t('webhooks.testFailed', {
+        key: webhook.key,
+        error: '',
+      }))
+    }
   }
 
   /** Applique le format déduit de l'URL, sans toucher au reste de la configuration. */

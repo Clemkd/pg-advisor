@@ -79,7 +79,7 @@ builder.Services.AddSingleton<RuleGuard>();
 builder.Services.AddSingleton<AnalysisService>();
 builder.Services.AddHostedService<SchedulerService>();
 
-builder.Services.AddHostedService<DatabaseInitializer>();
+builder.Services.AddSingleton<DatabaseInitializer>();
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -168,6 +168,10 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+// Migrations et compte initial avant d'ouvrir le port : le scheduler, le dispatcher et la
+// première requête HTTP trouvent une base prête, sans fenêtre de course.
+await app.Services.GetRequiredService<DatabaseInitializer>().InitializeAsync();
 
 if (app.Environment.IsDevelopment())
 {

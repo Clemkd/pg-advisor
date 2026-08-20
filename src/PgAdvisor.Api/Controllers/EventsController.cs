@@ -33,18 +33,32 @@ public sealed class EventsController(EventBus bus, ILogger<EventsController> log
 
         try
         {
+            // L'attente de lecture survit aux battements : la recréer à chaque tour empilerait
+            // les guetteurs sur un canal déclaré à lecteur unique.
+            Task<bool>? readTask = null;
+
             while (!cancellationToken.IsCancellationRequested)
             {
-                var readTask = subscription.Reader.WaitToReadAsync(cancellationToken).AsTask();
-                var heartbeatTask = Task.Delay(Heartbeat, cancellationToken);
+                readTask ??= subscription.Reader.WaitToReadAsync(cancellationToken).AsTask();
+
+                // Le battement a sa propre source d'annulation : sans elle, le Task.Delay perdant
+                // resterait vivant vingt secondes avec son inscription sur le jeton de la requête,
+                // que le CTS de celle-ci retient jusqu'à la déconnexion. Sur un flux bavard, les
+                // minuteurs et leurs inscriptions s'accumulent.
+                using var beat = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var heartbeatTask = Task.Delay(Heartbeat, beat.Token);
                 var completed = await Task.WhenAny(readTask, heartbeatTask);
 
                 if (completed == readTask)
                 {
+                    await beat.CancelAsync();
+
                     if (!await readTask)
                     {
                         break;
                     }
+
+                    readTask = null;
 
                     while (subscription.Reader.TryRead(out var advisorEvent))
                     {

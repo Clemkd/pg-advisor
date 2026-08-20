@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PgAdvisor.Api.Data;
@@ -58,39 +57,27 @@ public class AdvisorApplicationFactory : WebApplicationFactory<Program>
         // The suite signs in once per case, from a single client address: the shipped ceiling
         // would throttle the tests themselves. LoginRateLimitTests sets its own.
         ["Auth:LoginAttemptsPerWindow"] = "100000",
+        // The application creates the administrator itself, before serving anything. Naming the
+        // password here means the tests know it rather than racing to read it from the logs.
+        ["Auth:BootstrapPassword"] = AdminPassword,
     };
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
+    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
         builder.UseEnvironment("Production");
 
-        builder.ConfigureServices(services =>
-        {
-            // The initializer migrates from a hosted service, so it races with the first request.
-            // The accounts are seeded explicitly below instead, before the host is handed over.
-            var initializer = services.SingleOrDefault(descriptor =>
-                descriptor.ServiceType == typeof(IHostedService) &&
-                descriptor.ImplementationType == typeof(DatabaseInitializer));
-
-            if (initializer is not null)
-            {
-                services.Remove(initializer);
-            }
-        });
-    }
-
-    /// <summary>Migrates and seeds the two accounts once, before the first request is served.</summary>
+    /// <summary>
+    /// Adds the Viewer account. Migrations and the administrator are the application's own doing,
+    /// before it serves anything — see DatabaseInitializer.
+    /// </summary>
     protected override IHost CreateHost(IHostBuilder builder)
     {
         var host = base.CreateHost(builder);
 
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AdvisorDbContext>();
-        db.Database.Migrate();
 
         // The factory builds the host more than once over its lifetime, against the same SQLite
         // file: seeding has to be idempotent or the second pass trips the unique index.
-        Seed(db, "admin", AdminPassword, Roles.Admin);
         Seed(db, "viewer", ViewerPassword, Roles.Viewer);
 
         db.SaveChanges();

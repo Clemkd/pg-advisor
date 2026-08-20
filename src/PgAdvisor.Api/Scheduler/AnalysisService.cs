@@ -42,6 +42,22 @@ public sealed class AnalysisService(
     /// <summary>Dernière exécution par règle et par instance, pour honorer les périodicités propres.</summary>
     private readonly ConcurrentDictionary<(int ConnectionId, string RuleId), DateTimeOffset> _lastRuleRun = new();
 
+    /// <summary>
+    /// Oublie les instances et les règles disparues. Sans cela le dictionnaire ne fait que
+    /// croître : une instance supprimée ou une règle retirée y laisse son entrée pour la durée de
+    /// vie du processus. <c>SchedulerService</c> purge déjà le sien de la même façon.
+    /// </summary>
+    public void Forget(IReadOnlyCollection<int> knownConnectionIds, IReadOnlyCollection<string> knownRuleIds)
+    {
+        foreach (var key in _lastRuleRun.Keys)
+        {
+            if (!knownConnectionIds.Contains(key.ConnectionId) || !knownRuleIds.Contains(key.RuleId))
+            {
+                _lastRuleRun.TryRemove(key, out _);
+            }
+        }
+    }
+
     public async Task RunAsync(int connectionId, IReadOnlyCollection<string> groups, CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();

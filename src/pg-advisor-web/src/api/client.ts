@@ -53,6 +53,15 @@ export function onUnauthorized(listener: Listener): () => void {
   return () => unauthorizedListeners.delete(listener)
 }
 
+/**
+ * Déclare la session perdue. `request` le fait déjà sur tout 401, sauf sur `/auth/me` où un 401
+ * est l'état normal d'un visiteur non connecté. Un appelant qui sait qu'une session existait —
+ * le flux temps réel, par exemple — le signale lui-même.
+ */
+export function notifyUnauthorized(): void {
+  unauthorizedListeners.forEach((listener) => listener())
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,

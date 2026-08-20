@@ -25,6 +25,14 @@ public sealed class FindingsController(
     // La liste est virtualisée côté interface : elle demande tout le périmètre filtré d'un coup.
     private const int MaxPageSize = 2_000;
 
+    private const string LikeEscape = "\\";
+
+    /// <summary>Neutralise les jokers d'un LIKE : la saisie est du texte, pas un motif.</summary>
+    internal static string EscapeLikePattern(string value) => value
+        .Replace(LikeEscape, LikeEscape + LikeEscape, StringComparison.Ordinal)
+        .Replace("%", LikeEscape + "%", StringComparison.Ordinal)
+        .Replace("_", LikeEscape + "_", StringComparison.Ordinal);
+
     [HttpGet]
     public async Task<ActionResult<FindingPageResponse>> List(
         [FromQuery] int? connectionId,
@@ -68,12 +76,14 @@ public sealed class FindingsController(
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var pattern = $"%{search.Trim()}%";
+            // Sans échappement, un « % » saisi dans la barre de recherche est un joker et non un
+            // caractère : la requête balaie alors toute la table au lieu de filtrer.
+            var pattern = $"%{EscapeLikePattern(search.Trim())}%";
             query = query.Where(f =>
-                EF.Functions.Like(f.Title, pattern) ||
-                EF.Functions.Like(f.Message, pattern) ||
-                EF.Functions.Like(f.TargetKey, pattern) ||
-                EF.Functions.Like(f.RuleId, pattern));
+                EF.Functions.Like(f.Title, pattern, LikeEscape) ||
+                EF.Functions.Like(f.Message, pattern, LikeEscape) ||
+                EF.Functions.Like(f.TargetKey, pattern, LikeEscape) ||
+                EF.Functions.Like(f.RuleId, pattern, LikeEscape));
         }
 
         var total = await query.CountAsync(ct);

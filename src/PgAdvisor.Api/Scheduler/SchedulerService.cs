@@ -37,10 +37,12 @@ public sealed class SchedulerService(
 
         _slots = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentInstances));
 
-        // Laisse le temps aux migrations et au premier chargement des règles d'aboutir.
+        // Les migrations sont désormais appliquées avant app.Run() ; il ne reste qu'à laisser le
+        // premier chargement des règles aboutir, ce que RuleStore fait en quelques dizaines de
+        // millisecondes. Une seconde suffit là où trois couvraient une course désormais supprimée.
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         }
         catch (OperationCanceledException)
         {
@@ -129,6 +131,12 @@ public sealed class SchedulerService(
         {
             _lastRun.TryRemove(key, out _);
         }
+
+        // Le suivi par règle vit dans AnalysisService et se purge sur les mêmes critères, plus
+        // les règles disparues : un identifiant retiré du fichier n'a plus de raison d'y figurer.
+        analysis.Forget(
+            instances.Select(i => i.Id).ToList(),
+            ruleStore.Current.Rules.Select(rule => rule.Id).ToList());
     }
 
     private async Task RunInstanceAsync(

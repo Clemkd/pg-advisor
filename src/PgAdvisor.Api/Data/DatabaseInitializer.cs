@@ -5,17 +5,24 @@ using PgAdvisor.Api.Security;
 namespace PgAdvisor.Api.Data;
 
 /// <summary>
-/// Applique les migrations au démarrage et crée le compte administrateur initial.
-/// Le mot de passe de bootstrap est journalisé une seule fois, à la création.
+/// Applique les migrations et crée le compte administrateur initial. Le mot de passe de bootstrap
+/// est journalisé une seule fois, à la création.
 /// </summary>
+/// <remarks>
+/// Volontairement pas un <see cref="IHostedService"/> : les services hébergés démarrent dans leur
+/// ordre d'enregistrement, Kestrel écoute déjà, et le scheduler comme le dispatcher de
+/// notifications interrogent la base dès leur premier cycle. Un initialiseur hébergé laissait donc
+/// une fenêtre pendant laquelle des requêtes HTTP et des tâches de fond frappaient une base non
+/// migrée. Appelé avant <c>app.Run()</c>, il n'y a plus de course du tout.
+/// </remarks>
 public sealed class DatabaseInitializer(
     IServiceScopeFactory scopeFactory,
     IOptions<AdvisorOptions> options,
-    ILogger<DatabaseInitializer> logger) : IHostedService
+    ILogger<DatabaseInitializer> logger)
 {
     private readonly AdvisorOptions _options = options.Value;
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(_options.DataDirectory);
         Directory.CreateDirectory(_options.UserRulesDirectory);
@@ -26,8 +33,6 @@ public sealed class DatabaseInitializer(
         await db.Database.MigrateAsync(cancellationToken);
         await EnsureAdminAsync(db, cancellationToken);
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private async Task EnsureAdminAsync(AdvisorDbContext db, CancellationToken cancellationToken)
     {
