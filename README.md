@@ -66,7 +66,7 @@ reported as such in the interface. No write is ever attempted: the session is op
 ```
 pg-advisor
 ├── src/PgAdvisor.Api        ASP.NET Core 10 — REST API, SSE, rule engine, scheduler
-│   ├── Auth/ Security/      cookie, PBKDF2 hashing, secrets encrypted at rest
+│   ├── Security/            cookie, PBKDF2 hashing, secrets encrypted at rest
 │   ├── Collectors/          read-only collection of activity and statistics
 │   ├── Postgres/            Npgsql connections, capability detection
 │   ├── Rules/               YAML model, validation, expressions, templates, hot reload
@@ -76,7 +76,8 @@ pg-advisor
 │   └── Sse/                 real-time event bus
 ├── src/PgAdvisor.AppHost    Aspire — development stack orchestration
 ├── src/pg-advisor-web       React + TypeScript + Vite + Tailwind, built into wwwroot
-├── tests/PgAdvisor.Tests    rule engine and finding lifecycle tests
+├── tests/PgAdvisor.Tests    rule engine, bundled rules, finding lifecycle
+├── tests/PgAdvisor.IntegrationTests  the real pipeline: authorization, sessions, throttling
 ├── rules                    bundled YAML rules
 ├── scripts                  test dataset and end-to-end validation
 ├── docs                     project description and rule format
@@ -170,6 +171,10 @@ that one.
 | `RulesDirectory` | Bundled rules, baked into the image; override only to replace the set entirely | `/app/rules` in the container |
 | `Auth__BootstrapPassword` | Password of the `admin` account created on first start | generated and logged once |
 | `Auth__RequireHttps` | Forces the `Secure` attribute on the cookie | `false` |
+| `Auth__BootstrapUsername` | Name of the account created on first start | `admin` |
+| `Auth__CookieName` | Session cookie name | `pg-advisor` |
+| `Auth__LoginAttemptsPerWindow` | Sign-in attempts allowed per window and per client address | `10` |
+| `Auth__LoginAttemptWindow` | Length of that window | `00:01:00` |
 | `Auth__SlidingExpirationHours` | Session lifetime | `12` |
 | `Scheduler__Intervals__Health` | Activity and connection polling period | `00:00:10` |
 | `Scheduler__Intervals__Statistics` | Statistics polling period | `00:01:00` |
@@ -184,6 +189,10 @@ that one.
 | `Scheduler__RuleGuard__QuarantineDuration` | Quarantine length before an automatic retry | `06:00:00` |
 | `Scheduler__RuleGuard__SlowRunRatio` | Share of the deadline past which a success counts as an incident | `0.8` |
 | `Notifications__MaxRetries` | Webhook delivery attempts | `3` |
+| `Notifications__RetryDelay` | Delay before a new attempt, multiplied by the attempt number | `00:00:30` |
+| `Notifications__Timeout` | Deadline of a single webhook call | `00:00:10` |
+| `Scheduler__Enabled` | Automatic collection; disable it to run the API alone | `true` |
+| `UserRulesDirectoryName` | Subdirectory of the volume holding rules written from the UI | `rules` |
 
 Turn `Auth__RequireHttps` on as soon as the Advisor sits behind an HTTPS reverse proxy.
 

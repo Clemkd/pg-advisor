@@ -574,6 +574,9 @@ Les primitives restent compatibles : rien ne casse à la compilation, et l'adapt
 
 ### Ce qui reste en place
 
-`ui.tsx` (adaptateur historique), `PageHeader`, `Card` à en-tête intégré, `Alert`, `Tag`,
-`Modal wide` : conservés pour ne rien casser. Les vues reprises leur préfèrent les primitives
-directes, mais rien n'oblige à tout migrer d'un coup.
+`PageHeader`, `Card` à en-tête intégré, `Modal wide` : conservés pour ne rien casser. Les vues
+reprises leur préfèrent les primitives directes, mais rien n'oblige à tout migrer d'un coup.
+
+L'adaptateur historique `ui.tsx` a, lui, été supprimé : la migration des vues l'avait vidé de tout
+importateur, et avec lui `Alert` et `Tag`, qui n'existaient plus nulle part ailleurs. Ce n'était
+plus de la compatibilité, seulement du code mort.

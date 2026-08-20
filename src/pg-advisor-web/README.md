@@ -1,32 +1,19 @@
-# React + TypeScript + Vite
+# pg-advisor-web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Interface de l'Advisor : React, TypeScript, Vite et Tailwind. Elle est buildée dans
+`src/PgAdvisor.Api/wwwroot` et servie par l'API — il n'y a pas de déploiement séparé, et les appels
+partent en chemins relatifs vers la même origine.
 
-Currently, two official plugins are available:
+| Commande | Rôle |
+| --- | --- |
+| `npm run dev` | Serveur de développement sur le port 5173, `/api` et `/events` relayés vers l'API |
+| `npm run build` | Vérification des types puis build de production dans `wwwroot` |
+| `npm run lint` | Oxlint |
+| `npm run preview` | Sert le build de production |
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+En développement, l'API visée est celle de `PGADVISOR_API_URL`, à défaut le port du profil de
+lancement de `PgAdvisor.Api`. La pile complète se démarre plutôt par Aspire, depuis la racine du
+dépôt : `dotnet run --project src/PgAdvisor.AppHost`.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Le contrat d'interface — jetons, densités, primitives — est décrit dans
+[`docs/DESIGN.md`](../../docs/DESIGN.md).
