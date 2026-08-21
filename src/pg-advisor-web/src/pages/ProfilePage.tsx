@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { api, ApiError } from '@/api/client'
-import { useAuth } from '@/app/AuthContext'
+import { useAuth } from '@/app/useAuth'
 import { Page } from '@/components/layout/Page'
 import {
   Badge,

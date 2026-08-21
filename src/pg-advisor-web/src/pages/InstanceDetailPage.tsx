@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import { api } from '@/api/client'
 import type { CapabilityStatus, ConnectionDetail } from '@/api/types'
-import { useEventListener } from '@/app/EventsContext'
+import { useEventListener } from '@/app/useEvents'
 import { Hero, Page } from '@/components/layout/Page'
 import type { ValueTone } from '@/components/layout/Page'
 import {

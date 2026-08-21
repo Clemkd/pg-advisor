@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { Check, Database, X } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type { CapabilityStatus, Connection, TestConnectionResult } from '@/api/types'
-import { useAuth } from '@/app/AuthContext'
-import { useEventListener } from '@/app/EventsContext'
+import { useAuth } from '@/app/useAuth'
+import { useEventListener } from '@/app/useEvents'
 import { Page } from '@/components/layout/Page'
 import {
   Badge,

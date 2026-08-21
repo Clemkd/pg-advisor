@@ -12,8 +12,8 @@ import type {
   RuleOverride,
   RuleSchema,
 } from '@/api/types'
-import { useAuth } from '@/app/AuthContext'
-import { useEventListener } from '@/app/EventsContext'
+import { useAuth } from '@/app/useAuth'
+import { useEventListener } from '@/app/useEvents'
 import { Page } from '@/components/layout/Page'
 import {
   Badge,
@@ -56,7 +56,8 @@ import {
   RULE_GUARD_EVENTS,
 } from '@/lib/ruleGuard'
 import { SqlCommand } from '@/lib/sqlHighlight'
-import { errorLine, YamlEditor } from '@/lib/yamlHighlight'
+import { YamlEditor } from '@/lib/yamlHighlight'
+import { errorLine } from '@/lib/yamlErrorLine'
 import { cn } from '@/lib/utils'
 
 /** Le garde-fou mesure en millisecondes ; les durées se lisent partout ailleurs en secondes. */

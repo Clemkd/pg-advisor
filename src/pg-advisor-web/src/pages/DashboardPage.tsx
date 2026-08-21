@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Database } from 'lucide-react'
 import { api } from '@/api/client'
 import type { Connection, Dashboard } from '@/api/types'
-import { useEventListener, useEvents } from '@/app/EventsContext'
+import { useEventListener, useEvents } from '@/app/useEvents'
 import { Hero, Page } from '@/components/layout/Page'
 import type { ValueTone } from '@/components/layout/Page'
 import {

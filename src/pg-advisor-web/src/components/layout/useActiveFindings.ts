@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/api/client'
-import { useEventListener, useEvents } from '@/app/EventsContext'
+import { useEventListener, useEvents } from '@/app/useEvents'
 
 /**
  * Ce qui fait bouger le décompte : un diagnostic apparaît, le moteur le clôt, un opérateur

@@ -1,46 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ApiError, api, notifyUnauthorized } from '../api/client'
 import type { AdvisorEvent } from '../api/types'
-import { useAuth } from './AuthContext'
+import { EVENT_TYPES, EventsContext, type EventsState, type Handler } from './EventsContext'
+import { useAuth } from './useAuth'
 
-type Handler = (event: AdvisorEvent) => void
-
-interface EventsState {
-  connected: boolean
-
-  /**
-   * S'abonne à un type d'événement, ou à tous avec « * ».
-   *
-   * Son identité est stable : elle l'était si peu que le contexte changeait à chaque événement,
-   * et tous les abonnés de l'application se désabonnaient puis se réabonnaient à chaque fois —
-   * dix fois par minute, le groupe « health » suffisant à l'entretenir.
-   */
-  subscribe: (type: string, handler: Handler) => () => void
-}
-
-const EventsContext = createContext<EventsState | null>(null)
-
-const EVENT_TYPES = [
-  'finding.created',
-  'finding.resolved',
-  'finding.updated',
-  'health.changed',
-  'collection.state',
-  'analysis.progress',
-  'rules.reloaded',
-  'instance.changed',
-  // Garde-fou de coût : une règle signalée, écartée, ou rétablie sur une instance. Un type
-  // absent d'ici n'est jamais écouté — `EventSource` ne délivre que les noms enregistrés.
-  'rule.guard',
-  'rule.recovered',
-  'stream.open',
-]
-
-/**
- * Flux temps réel. EventSource gère lui-même la reconnexion ; on ne s'y branche que
- * lorsqu'une session est ouverte, la route étant protégée par [Authorize].
- */
 export function EventsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [connected, setConnected] = useState(false)
@@ -104,25 +68,4 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<EventsState>(() => ({ connected, subscribe }), [connected, subscribe])
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>
-}
-
-export function useEvents(): EventsState {
-  const context = useContext(EventsContext)
-  if (!context) {
-    throw new Error('useEvents doit être utilisé dans un EventsProvider.')
-  }
-  return context
-}
-
-/** Exécute un rappel à chaque événement des types demandés. */
-export function useEventListener(types: string[], handler: Handler) {
-  const { subscribe } = useEvents()
-  const stable = useRef(handler)
-  stable.current = handler
-
-  useEffect(() => {
-    const unsubscribes = types.map((type) => subscribe(type, (event) => stable.current(event)))
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscribe, types.join('|')])
 }

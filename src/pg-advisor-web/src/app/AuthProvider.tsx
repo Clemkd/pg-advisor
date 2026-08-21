@@ -1,18 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, onUnauthorized } from '../api/client'
 import type { CurrentUser } from '../api/types'
-
-interface AuthState {
-  user: CurrentUser | null
-  loading: boolean
-  login: (username: string, password: string) => Promise<void>
-  logout: () => Promise<void>
-  refresh: () => Promise<void>
-  isAdmin: boolean
-}
-
-const AuthContext = createContext<AuthState | null>(null)
+import { AuthContext, type AuthState } from './AuthContext'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null)
@@ -53,12 +43,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthState {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth doit être utilisé dans un AuthProvider.')
-  }
-  return context
 }

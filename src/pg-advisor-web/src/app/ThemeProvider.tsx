@@ -1,26 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-
-type Theme = 'light' | 'dark' | 'system'
-
-const STORAGE_KEY = 'pg-advisor.theme'
-
-interface ThemeState {
-  theme: Theme
-  resolved: 'light' | 'dark'
-  setTheme: (theme: Theme) => void
-  toggle: () => void
-}
-
-const ThemeContext = createContext<ThemeState | null>(null)
-
-function prefersDark(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-}
+import { STORAGE_KEY, ThemeContext, type Theme, type ThemeState } from './ThemeContext'
 
 function readStored(): Theme {
   const stored = localStorage.getItem(STORAGE_KEY)
   return stored === 'light' || stored === 'dark' ? stored : 'system'
+}
+
+function prefersDark(): boolean {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -61,12 +49,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-}
-
-export function useTheme(): ThemeState {
-  const context = useContext(ThemeContext)
-  if (!context) {
-    throw new Error('useTheme doit être utilisé dans un ThemeProvider.')
-  }
-  return context
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Webhook as WebhookIcon } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
 import type { Connection, NotificationHistoryEntry, WebhookConfiguration } from '@/api/types'
-import { useAuth } from '@/app/AuthContext'
+import { useAuth } from '@/app/useAuth'
 import { Page } from '@/components/layout/Page'
 import {
   Badge,

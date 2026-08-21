@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { Database } from 'lucide-react'
 import { api, ApiError } from '@/api/client'
-import { useAuth } from '@/app/AuthContext'
+import { useAuth } from '@/app/useAuth'
 import {
   Button,
   Card,

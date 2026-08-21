@@ -1,5 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { createContext, useContext } from 'react'
 import { en } from './locales/en'
 import { enInstances } from './locales/en.instances'
 import { enQueries } from './locales/en.queries'
@@ -16,7 +15,7 @@ export const LOCALES: Locale[] = ['fr', 'en']
 /** Chaque langue est nommée dans sa propre langue : c'est ce qu'un lecteur reconnaît. */
 export const LOCALE_LABELS: Record<Locale, string> = { fr: 'Français', en: 'English' }
 
-const STORAGE_KEY = 'pg-advisor.locale'
+export const STORAGE_KEY = 'pg-advisor.locale'
 
 // Un catalogue par zone, fusionné ici : les vues d'une zone se traduisent sans toucher au
 // fichier des autres.
@@ -31,6 +30,11 @@ const CATALOGUES: Record<Locale, Record<string, string>> = {
  * appel alourdirait une trentaine de fichiers pour rien.
  */
 let activeLocale: Locale = 'fr'
+
+/** Le fournisseur la pose au montage et à chaque bascule. */
+export function setActiveLocale(next: Locale): void {
+  activeLocale = next
+}
 
 export function currentLocale(): Locale {
   return activeLocale
@@ -103,7 +107,7 @@ export function translatePlural(
 
 export type PluralTranslator = (key: string, count: number, vars?: TranslateVars) => string
 
-interface LocaleState {
+export interface LocaleState {
   locale: Locale
   setLocale: (locale: Locale) => void
   t: Translator
@@ -111,42 +115,7 @@ interface LocaleState {
   tc: PluralTranslator
 }
 
-const LocaleContext = createContext<LocaleState | null>(null)
-
-function readStored(): Locale {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'fr' || stored === 'en') return stored
-  // À défaut de choix explicite, la langue du navigateur, français par défaut.
-  return navigator.language.toLowerCase().startsWith('en') ? 'en' : 'fr'
-}
-
-export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    const initial = readStored()
-    activeLocale = initial
-    document.documentElement.lang = initial
-    return initial
-  })
-
-  const setLocale = useCallback((next: Locale) => {
-    activeLocale = next
-    document.documentElement.lang = next
-    localStorage.setItem(STORAGE_KEY, next)
-    setLocaleState(next)
-  }, [])
-
-  const value = useMemo<LocaleState>(
-    () => ({
-      locale,
-      setLocale,
-      t: (key, vars) => translate(locale, key, vars),
-      tc: (key, count, vars) => translatePlural(locale, key, count, vars),
-    }),
-    [locale, setLocale],
-  )
-
-  return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
-}
+export const LocaleContext = createContext<LocaleState | null>(null)
 
 function useLocaleState(): LocaleState {
   const context = useContext(LocaleContext)
