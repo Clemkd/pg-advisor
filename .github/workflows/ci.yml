@@ -1,8 +1,10 @@
 name: CI
 
 on:
+  # Toutes les branches, pas seulement main : limiter le déclenchement à main et aux pull requests
+  # ne donnait aucun retour tant qu'une PR n'était pas ouverte — et laissait le workflow lui-même
+  # sans preuve d'exécution. La concurrence ci-dessous annule le run précédent d'une même branche.
   push:
-    branches: [main]
   pull_request:
 
 concurrency:
