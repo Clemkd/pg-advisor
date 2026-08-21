@@ -1,5 +1,5 @@
 id: checkpoints.forced-too-often-pg17
-version: 1
+version: 2
 
 name: Checkpoints forced by WAL volume (PostgreSQL 17+)
 description: >
@@ -25,16 +25,17 @@ query: |
     num_requested::float / NULLIF(num_timed + num_requested, 0) AS forced_share
   FROM pg_stat_checkpointer
 
-condition: num_timed + num_requested > minimum_checkpoints and forced_share > maximum_share
+condition: num_timed_delta + num_requested_delta > minimum_checkpoints
+  and num_requested_delta / (num_timed_delta + num_requested_delta) > maximum_share
 
 recommendation:
   title: "{{ forced_share | percent }} of checkpoints are forced"
-  message: "{{ num_requested }} checkpoints out of {{ num_timed }} scheduled were triggered by WAL volume. Raising max_wal_size smooths the writes."
+  message: "{{ num_requested_delta }} of the {{ num_timed_delta }} checkpoints since the previous measurement were triggered by WAL volume rather than scheduled. Raising max_wal_size smooths the writes."
   impact: medium
   confidence: high
   evidence:
-    - num_timed
-    - num_requested
+    - num_requested_delta
+    - num_timed_delta
     - forced_share
   sql: "ALTER SYSTEM SET max_wal_size = '4GB'; SELECT pg_reload_conf();"
   documentation: https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-CHECKPOINTER-VIEW

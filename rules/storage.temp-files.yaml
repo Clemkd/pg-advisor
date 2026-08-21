@@ -1,5 +1,5 @@
 id: storage.temp-files
-version: 1
+version: 2
 
 name: Large temporary files
 description: >
@@ -24,14 +24,15 @@ query: |
   FROM pg_stat_database
   WHERE datname = current_database()
 
-condition: temp_bytes > maximum_bytes
+condition: temp_bytes_delta > maximum_bytes
 
 recommendation:
   title: "{{ temp_bytes | bytes }} written to temporary files"
-  message: "{{ temp_files | number }} temporary files totalling {{ temp_bytes | bytes }} since the last reset, so {{ bytes_per_file | bytes }} on average. A larger work_mem would avoid these spills."
+  message: "{{ temp_bytes_delta | bytes }} spilled to temporary files since the previous measurement, out of {{ temp_bytes | bytes }} since the last statistics reset. A larger work_mem would avoid these spills."
   impact: medium
   confidence: medium
   evidence:
+    - temp_bytes_delta
     - temp_files
     - temp_bytes
     - bytes_per_file

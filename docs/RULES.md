@@ -117,6 +117,25 @@ a missing statistic never produces a finding and never breaks the rule.
 
 Without a `condition`, every returned row produces a finding.
 
+#### Comparing with the previous run
+
+Every numeric column is also available as `<column>_delta`: what it gained since the same rule last
+observed the same target. `elapsed_seconds` gives the time between the two measurements.
+
+This exists for the counters PostgreSQL accumulates since the last statistics reset —
+`blks_read`, `temp_bytes`, `checkpoints_req`. A total never comes back down, so a condition written
+against it keeps matching long after the problem is over, and the finding it raised can never
+resolve. The delta describes the window instead:
+
+```yaml
+condition: checkpoints_timed_delta + checkpoints_req_delta > minimum_checkpoints
+  and checkpoints_req_delta / (checkpoints_timed_delta + checkpoints_req_delta) > maximum_share
+```
+
+On the first run there is nothing to compare against, so these variables are absent and evaluate to
+`NULL` — the rule stays silent for one cycle rather than failing. A target that stops being
+returned has its sample dropped, so a table deleted and recreated does not inherit old numbers.
+
 ### `key`
 
 ```yaml
@@ -184,7 +203,11 @@ shown in the editor's cheat sheet.
 ## Categories
 
 `performance`, `queries`, `indexes`, `vacuum`, `bloat`, `connections`, `locks`, `transactions`,
-`checkpoints`, `configuration`, `storage`, `statistics`, `security`, `extensions`.
+`checkpoints`, `configuration`, `storage`, `statistics`, `security`, `extensions`, `timescaledb`.
+
+The health score aggregates by category, and the identifier of a rule carries its category as a
+prefix — `vacuum.dead-tuples` is in `vacuum`. A test holds the two together, since a rule filed
+under the wrong heading distorts a score without anything reporting it.
 
 ## Scheduling groups
 

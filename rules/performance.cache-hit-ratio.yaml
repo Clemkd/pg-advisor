@@ -1,5 +1,5 @@
 id: performance.cache-hit-ratio
-version: 1
+version: 2
 
 name: Low cache hit ratio
 description: >
@@ -27,14 +27,17 @@ query: |
   WHERE datname = current_database()
     AND blks_hit + blks_read > @minimum_reads
 
-condition: ratio < threshold
+condition: blks_hit_delta + blks_read_delta > minimum_reads
+  and blks_hit_delta / (blks_hit_delta + blks_read_delta) < threshold
 
 recommendation:
-  title: "Taux de cache de {{ ratio | percent }}"
-  message: "On {{ datname }}, {{ ratio | percent }} of blocks are served from cache. A larger shared_buffers or more selective queries would cut disk reads."
+  title: "Cache hit ratio of {{ ratio | percent }}"
+  message: "On {{ datname }}, {{ blks_read_delta | number }} block reads went to disk since the previous measurement, against {{ blks_hit_delta | number }} served from cache. A larger shared_buffers or more selective queries would cut disk reads."
   impact: medium
   confidence: medium
   evidence:
+    - blks_hit_delta
+    - blks_read_delta
     - blks_hit
     - blks_read
     - ratio

@@ -54,7 +54,23 @@ public sealed record RuleExecutionResult
 
     /// <summary>Lignes brutes, uniquement renseignées en mode aperçu depuis l'IHM.</summary>
     public IReadOnlyList<Dictionary<string, object?>> Rows { get; init; } = [];
+
+    /// <summary>
+    /// Colonnes numériques de chaque ligne, par cible. L'appelant les conserve pour que la
+    /// prochaine exécution puisse raisonner sur ce qui a bougé.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> Samples { get; init; } =
+        new Dictionary<string, IReadOnlyDictionary<string, double>>();
 }
+
+/// <summary>
+/// Ce que la règle avait observé la fois précédente, et quand. Sert aux règles qui lisent des
+/// compteurs cumulés : sans point de comparaison, leur valeur ne redescend jamais et le
+/// diagnostic qu'elles produisent ne peut plus se résoudre.
+/// </summary>
+public sealed record RulePreviousSample(
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> ByTarget,
+    DateTimeOffset At);
 
 /// <summary>
 /// Exécute une règle contre une instance : YAML → prérequis → SQL → condition → finding.
@@ -78,7 +94,8 @@ public sealed class RuleEngine(
         PgCapabilities capabilities,
         PostgresConnection instance,
         CancellationToken cancellationToken,
-        bool includeRows = false)
+        bool includeRows = false,
+        RulePreviousSample? previous = null)
     {
         var rule = effective.Rule;
         var timeoutSeconds = effective.ResolveTimeoutSeconds(_scheduler.QueryTimeout);
@@ -126,9 +143,20 @@ public sealed class RuleEngine(
         var candidates = new List<FindingCandidate>();
         var truncated = false;
 
+        var samples = new Dictionary<string, IReadOnlyDictionary<string, double>>(StringComparer.Ordinal);
+        var elapsedSeconds = previous is null
+            ? (double?)null
+            : Math.Max(0, (DateTimeOffset.UtcNow - previous.At).TotalSeconds);
+
         foreach (var row in rows)
         {
+            // La clé se calcule avant la condition : c'est elle qui relie la ligne à ce que la
+            // règle avait observé la fois d'avant.
+            var targetKey = BuildTargetKey(rule, row);
+            samples[targetKey] = NumericColumns(row);
+
             var variables = BuildVariables(effective, row);
+            AddDeltas(variables, row, targetKey, previous, elapsedSeconds);
 
             try
             {
@@ -158,7 +186,7 @@ public sealed class RuleEngine(
                 break;
             }
 
-            candidates.Add(BuildCandidate(effective, row, variables));
+            candidates.Add(BuildCandidate(effective, row, variables, targetKey));
         }
 
         if (truncated)
@@ -179,6 +207,7 @@ public sealed class RuleEngine(
             Rows = includeRows
                 ? rows.Take(limit).Select(r => r.ToDictionary(p => p.Key, p => NormalizeForJson(p.Value))).ToList()
                 : [],
+            Samples = samples,
         };
     }
 
@@ -383,7 +412,7 @@ public sealed class RuleEngine(
     }
 
     private static FindingCandidate BuildCandidate(
-        EffectiveRule effective, RuleRow row, Dictionary<string, object?> variables)
+        EffectiveRule effective, RuleRow row, Dictionary<string, object?> variables, string targetKey)
     {
         var rule = effective.Rule;
         var recommendation = rule.Definition.Recommendation!;
@@ -405,7 +434,7 @@ public sealed class RuleEngine(
         {
             RuleId = rule.Id,
             RuleVersion = rule.Definition.Version,
-            TargetKey = BuildTargetKey(rule, row),
+            TargetKey = targetKey,
             Category = rule.Category,
             Severity = effective.Severity,
             Title = rule.TitleTemplate.Render(variables),
@@ -422,6 +451,51 @@ public sealed class RuleEngine(
     /// Identité stable d'un finding à l'intérieur d'une règle : sans clé, la règle produit un
     /// finding unique par instance, ce qui évite les doublons à chaque exécution.
     /// </summary>
+    /// <summary>Seules les colonnes numériques ont un sens à comparer d'une exécution à l'autre.</summary>
+    private static IReadOnlyDictionary<string, double> NumericColumns(RuleRow row)
+    {
+        var numeric = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var column in row)
+        {
+            if (ValueOps.TryToNumber(column.Value, out var value))
+            {
+                numeric[column.Key] = value;
+            }
+        }
+
+        return numeric;
+    }
+
+    /// <summary>
+    /// Expose « colonne_delta » pour chaque compteur qui a bougé, et « elapsed_seconds » depuis la
+    /// mesure précédente. Une règle qui lit un compteur cumulé peut alors se résoudre : le total
+    /// ne redescend jamais, la variation, si.
+    /// </summary>
+    private static void AddDeltas(
+        Dictionary<string, object?> variables,
+        RuleRow row,
+        string targetKey,
+        RulePreviousSample? previous,
+        double? elapsedSeconds)
+    {
+        if (previous is null || !previous.ByTarget.TryGetValue(targetKey, out var before))
+        {
+            return;
+        }
+
+        variables["elapsed_seconds"] = elapsedSeconds ?? 0d;
+
+        foreach (var column in row)
+        {
+            if (before.TryGetValue(column.Key, out var earlier) &&
+                ValueOps.TryToNumber(column.Value, out var now))
+            {
+                variables[column.Key + "_delta"] = now - earlier;
+            }
+        }
+    }
+
     private static string BuildTargetKey(LoadedRule rule, RuleRow row)
     {
         if (rule.KeyColumns.Length == 0)

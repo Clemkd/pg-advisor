@@ -312,6 +312,30 @@ public class RuleOverride
 /// Toujours par couple (règle, instance) : une règle qui suffoque sur une base de 2 To ne doit
 /// pas être coupée sur les autres.
 /// </summary>
+/// <summary>
+/// Dernières valeurs observées par une règle sur une cible. Certaines règles lisent des compteurs
+/// cumulés depuis le dernier reset des statistiques — checkpoints forcés, fichiers temporaires,
+/// taux de cache. Une fois le seuil franchi, la valeur cumulée ne redescend plus : le diagnostic
+/// restait actif à vie, même après correction du problème. Conserver l'échantillon précédent
+/// permet à la règle de raisonner sur ce qui a bougé depuis, et donc de se résoudre.
+/// </summary>
+public class RuleSample
+{
+    public int Id { get; set; }
+    public int ConnectionId { get; set; }
+    public string RuleId { get; set; } = string.Empty;
+
+    /// <summary>Vide pour une règle qui ne produit qu'une ligne par instance.</summary>
+    public string TargetKey { get; set; } = string.Empty;
+
+    /// <summary>Colonnes numériques de la ligne, sérialisées en JSON.</summary>
+    public string ValuesJson { get; set; } = "{}";
+
+    public DateTimeOffset At { get; set; }
+
+    public PostgresConnection? Connection { get; set; }
+}
+
 public class RuleHealth
 {
     public int Id { get; set; }

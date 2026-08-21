@@ -23,6 +23,7 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
     public DbSet<NotificationHistoryEntry> NotificationHistory => Set<NotificationHistoryEntry>();
     public DbSet<RuleOverride> RuleOverrides => Set<RuleOverride>();
     public DbSet<RuleHealth> RuleHealth => Set<RuleHealth>();
+    public DbSet<RuleSample> RuleSamples => Set<RuleSample>();
     public DbSet<QueryPlanSnapshot> QueryPlanSnapshots => Set<QueryPlanSnapshot>();
     public DbSet<Setting> Settings => Set<Setting>();
 
@@ -125,6 +126,18 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
             e.HasOne(r => r.Connection)
                 .WithMany()
                 .HasForeignKey(r => r.ConnectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<RuleSample>(e =>
+        {
+            e.HasIndex(s => new { s.ConnectionId, s.RuleId, s.TargetKey }).IsUnique();
+            e.Property(s => s.RuleId).HasMaxLength(128).IsRequired();
+            e.Property(s => s.TargetKey).HasMaxLength(512).IsRequired();
+
+            e.HasOne(s => s.Connection)
+                .WithMany()
+                .HasForeignKey(s => s.ConnectionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

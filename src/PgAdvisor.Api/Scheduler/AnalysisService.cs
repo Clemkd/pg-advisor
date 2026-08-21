@@ -224,6 +224,13 @@ public sealed class AnalysisService(
             .ToDictionary(h => h.RuleId, StringComparer.OrdinalIgnoreCase);
 
         var now = DateTimeOffset.UtcNow;
+
+        // Les échantillons précédents de l'instance, chargés en une fois : quelques règles en ont
+        // besoin pour savoir ce qui a bougé depuis leur dernier passage.
+        var samples = await db.RuleSamples
+            .Where(sample => sample.ConnectionId == connection.Id)
+            .ToDictionaryAsync(sample => (sample.RuleId, sample.TargetKey), cancellationToken);
+
         var executedRuleIds = new List<string>();
         var produced = new List<FindingCandidate>();
         var transitions = new List<(RuleHealth State, RuleGuardTransition Transition, string RuleName)>();
@@ -254,10 +261,13 @@ public sealed class AnalysisService(
                 continue;
             }
 
-            var result = await engine.ExecuteAsync(effective, pg, capabilities, connection, cancellationToken);
+            var result = await engine.ExecuteAsync(
+                effective, pg, capabilities, connection, cancellationToken,
+                previous: ReadSample(samples, rule.Id));
 
             if (result.Executed)
             {
+                RecordSample(db, samples, connection.Id, rule.Id, result.Samples, now);
                 _lastRuleRun[(connection.Id, rule.Id)] = now;
                 executedRuleIds.Add(rule.Id);
                 produced.AddRange(result.Findings);
@@ -538,6 +548,72 @@ public sealed class AnalysisService(
 
         return (rows.FirstOrDefault(o => o.ConnectionId is null),
                 rows.FirstOrDefault(o => o.ConnectionId == connectionId));
+    }
+
+    private static readonly JsonSerializerOptions SampleJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Ce que la règle avait observé sur cette instance, toutes cibles confondues.</summary>
+    private static RulePreviousSample? ReadSample(
+        Dictionary<(string RuleId, string TargetKey), RuleSample> stored, string ruleId)
+    {
+        var rows = stored.Where(entry => entry.Key.RuleId == ruleId).ToList();
+        if (rows.Count == 0)
+        {
+            return null;
+        }
+
+        var byTarget = new Dictionary<string, IReadOnlyDictionary<string, double>>(StringComparer.Ordinal);
+
+        foreach (var (key, sample) in rows)
+        {
+            var values = JsonSerializer.Deserialize<Dictionary<string, double>>(sample.ValuesJson, SampleJson);
+            byTarget[key.TargetKey] = values ?? [];
+        }
+
+        return new RulePreviousSample(byTarget, rows.Min(entry => entry.Value.At));
+    }
+
+    /// <summary>
+    /// Remplace l'échantillon de chaque cible encore observée. Les cibles disparues sont retirées :
+    /// une table supprimée ne doit pas laisser sa mesure derrière elle.
+    /// </summary>
+    private static void RecordSample(
+        AdvisorDbContext db,
+        Dictionary<(string RuleId, string TargetKey), RuleSample> stored,
+        int connectionId,
+        string ruleId,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> observed,
+        DateTimeOffset now)
+    {
+        foreach (var (targetKey, values) in observed)
+        {
+            var json = JsonSerializer.Serialize(values, SampleJson);
+
+            if (stored.TryGetValue((ruleId, targetKey), out var existing))
+            {
+                existing.ValuesJson = json;
+                existing.At = now;
+                continue;
+            }
+
+            var created = new RuleSample
+            {
+                ConnectionId = connectionId,
+                RuleId = ruleId,
+                TargetKey = targetKey,
+                ValuesJson = json,
+                At = now,
+            };
+
+            db.RuleSamples.Add(created);
+            stored[(ruleId, targetKey)] = created;
+        }
+
+        foreach (var (key, sample) in stored.Where(e => e.Key.RuleId == ruleId && !observed.ContainsKey(e.Key.TargetKey)).ToList())
+        {
+            db.RuleSamples.Remove(sample);
+            stored.Remove(key);
+        }
     }
 
     private static string Describe(Exception exception) => exception switch
