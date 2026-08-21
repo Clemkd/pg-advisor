@@ -57,6 +57,13 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
             // Identité fonctionnelle d'un finding : une règle, une cible, une instance.
             e.HasIndex(f => new { f.ConnectionId, f.RuleId, f.TargetKey }).IsUnique();
             e.HasIndex(f => new { f.ConnectionId, f.Status });
+
+            // La vue par défaut ne filtre pas sur l'instance : « tous les diagnostics actifs, du
+            // plus récent au plus ancien ». Sans cet index, cette page-là balayait toute la table.
+            // Le tri par sévérité, lui, porte sur des expressions et reste en mémoire — le rendre
+            // indexable demanderait une colonne de rang, ce qui n'en vaut la peine que le jour où
+            // le volume le justifie.
+            e.HasIndex(f => new { f.Status, f.LastSeenAt });
             e.Property(f => f.RuleId).HasMaxLength(128).IsRequired();
             e.Property(f => f.TargetKey).HasMaxLength(512).IsRequired();
             e.Property(f => f.Category).HasMaxLength(64).IsRequired();

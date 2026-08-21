@@ -69,7 +69,9 @@ public sealed class RulesController(
                 (r.Definition.Description ?? string.Empty).Contains(needle, StringComparison.OrdinalIgnoreCase));
         }
 
-        return Ok(rules.Select(rule => ToSummary(rule, snapshot, overrides, health)).ToList());
+        var names = await ConnectionNamesAsync(ct);
+
+        return Ok(rules.Select(rule => ToSummary(rule, snapshot, overrides, health, names)).ToList());
     }
 
     /// <summary>
@@ -194,7 +196,7 @@ public sealed class RulesController(
 
         return Ok(new RuleDetailResponse
         {
-            Rule = ToSummary(saved.Rule, store.Current, overrides, health),
+            Rule = ToSummary(saved.Rule, store.Current, overrides, health, await ConnectionNamesAsync(ct)),
             Yaml = saved.Rule.RawYaml,
         });
     }
@@ -242,7 +244,7 @@ public sealed class RulesController(
 
         return Ok(new RuleDetailResponse
         {
-            Rule = ToSummary(rule, snapshot, overrides, health),
+            Rule = ToSummary(rule, snapshot, overrides, health, await ConnectionNamesAsync(ct)),
             Yaml = rule.RawYaml,
             Applicability = applicability,
         });
@@ -304,7 +306,7 @@ public sealed class RulesController(
         return Ok(new ValidateRuleResponse(
             compilation.Rule is not null,
             compilation.Errors,
-            compilation.Rule is null ? null : ToSummary(compilation.Rule, store.Current, [], [])));
+            compilation.Rule is null ? null : ToSummary(compilation.Rule, store.Current, [], [], EmptyNames)));
     }
 
     [HttpPost]
@@ -585,7 +587,7 @@ public sealed class RulesController(
 
         return Ok(new RuleDetailResponse
         {
-            Rule = ToSummary(result.Rule, snapshot, overrides, health),
+            Rule = ToSummary(result.Rule, snapshot, overrides, health, await ConnectionNamesAsync(ct)),
             Yaml = result.Rule.RawYaml,
         });
     }
@@ -616,6 +618,9 @@ public sealed class RulesController(
 
     private async Task<List<RuleHealth>> LoadHealthAsync(CancellationToken ct) =>
         await db.RuleHealth.AsNoTracking().ToListAsync(ct);
+
+    /// <summary>Validation d'un YAML : aucune surcharge en jeu, donc aucun nom à résoudre.</summary>
+    private static readonly Dictionary<int, string> EmptyNames = [];
 
     private async Task<Dictionary<int, string>> ConnectionNamesAsync(CancellationToken ct) =>
         await db.PostgresConnections.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Name, ct);
@@ -649,14 +654,19 @@ public sealed class RulesController(
         UpdatedAt = source.UpdatedAt,
     };
 
+    /// <summary>
+    /// Les noms d'instances sont passés, jamais relus ici : cette méthode est appelée une fois par
+    /// règle, et l'interrogation qu'elle contenait était en plus synchrone — trente-quatre allers
+    /// bloquants vers SQLite pour un seul GET /api/rules, chacun immobilisant un fil du pool.
+    /// </summary>
     private RuleSummaryResponse ToSummary(
-        LoadedRule rule, RuleSnapshot snapshot, List<RuleOverride> overrides, List<RuleHealth> health)
+        LoadedRule rule,
+        RuleSnapshot snapshot,
+        List<RuleOverride> overrides,
+        List<RuleHealth> health,
+        IReadOnlyDictionary<int, string> connectionNames)
     {
         var requires = rule.Definition.Requires;
-        var connectionNames = db.PostgresConnections
-            .AsNoTracking()
-            .ToDictionary(c => c.Id, c => c.Name);
-
         var now = DateTimeOffset.UtcNow;
         var states = health
             .Where(h => string.Equals(h.RuleId, rule.Id, StringComparison.OrdinalIgnoreCase))
