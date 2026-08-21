@@ -69,7 +69,12 @@ public class AdvisorDbContext(DbContextOptions<AdvisorDbContext> options) : DbCo
             e.Property(f => f.TargetKey).HasMaxLength(512).IsRequired();
             e.Property(f => f.Category).HasMaxLength(64).IsRequired();
             e.Property(f => f.Severity).HasMaxLength(16).IsRequired();
-            e.Property(f => f.Status).HasMaxLength(16).IsRequired();
+            // Jeton de concurrence sur le statut, et sur lui seul. Deux écrivains se disputent
+            // cette colonne : le scheduler, qui résout un diagnostic qu'il ne détecte plus, et
+            // l'exploitant, qui l'ignore. Sans ce jeton, une résolution partie d'une lecture
+            // antérieure écrasait la décision prise entre-temps. Aucune colonne du schéma ne
+            // change : seul le WHERE des UPDATE générés se resserre.
+            e.Property(f => f.Status).HasMaxLength(16).IsRequired().IsConcurrencyToken();
 
             e.HasOne(f => f.Connection)
                 .WithMany(c => c.Findings)

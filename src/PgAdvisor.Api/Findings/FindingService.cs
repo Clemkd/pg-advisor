@@ -103,8 +103,54 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
             result.Resolved.Add(finding);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        await SaveYieldingToConcurrentStatusChangesAsync(result, cancellationToken);
         return result;
+    }
+
+    /// <summary>
+    /// Enregistre le bilan en cédant sur les diagnostics dont le statut a changé depuis la lecture.
+    /// Le cas concret : l'exploitant ignore un diagnostic pendant que l'analyse tourne, et
+    /// l'analyse, partie d'une lecture antérieure, s'apprêtait à le résoudre. C'est sa décision
+    /// qui vaut — le moteur repassera au cycle suivant.
+    /// </summary>
+    private async Task SaveYieldingToConcurrentStatusChangesAsync(
+        ReconciliationResult result, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException conflict)
+        {
+            foreach (var entry in conflict.Entries)
+            {
+                var current = await entry.GetDatabaseValuesAsync(cancellationToken);
+
+                if (current is null)
+                {
+                    // Supprimé entre-temps : plus rien à écrire, et rien à annoncer.
+                    entry.State = EntityState.Detached;
+                }
+                else
+                {
+                    entry.OriginalValues.SetValues(current);
+                    entry.CurrentValues.SetValues(current);
+                }
+
+                if (entry.Entity is Finding finding)
+                {
+                    logger.LogInformation(
+                        "Finding {FindingId} changed status while the analysis was running: the stored value wins.",
+                        finding.Id);
+
+                    result.Resolved.Remove(finding);
+                    result.Updated.Remove(finding);
+                    result.Created.Remove(finding);
+                }
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     /// <summary>Supprime les findings des règles qui n'existent plus, afin qu'ils ne pèsent plus sur le score.</summary>
@@ -178,7 +224,23 @@ public sealed class FindingService(AdvisorDbContext db, ILogger<FindingService> 
         finding.ResolvedAt = status == FindingStatus.Resolved ? now : null;
 
         db.FindingHistory.Add(History(finding, previous, status, now, note, actor));
-        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Quelqu'un d'autre — un autre exploitant, ou le moteur — a changé ce statut entre la
+            // lecture et l'écriture. On rend l'état réellement enregistré plutôt que de prétendre
+            // avoir appliqué une transition qui n'a pas eu lieu.
+            db.ChangeTracker.Clear();
+
+            logger.LogInformation(
+                "Finding {FindingId} was changed concurrently; the stored status is returned.", findingId);
+
+            return await db.Findings.FirstOrDefaultAsync(f => f.Id == findingId, cancellationToken);
+        }
 
         logger.LogInformation("Finding {FindingId} moved from {From} to {To} by {Actor}.",
             findingId, previous, status, actor ?? "the system");
