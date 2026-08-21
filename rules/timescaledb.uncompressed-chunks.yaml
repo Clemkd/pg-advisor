@@ -1,11 +1,11 @@
 id: timescaledb.uncompressed-chunks
-version: 1
+version: 2
 
-name: Old chunks left uncompressed
+name: Compression policy falling behind
 description: >
-  Chunks whose window closed long ago and that are still uncompressed: either no policy is in
-  place, or it is not keeping up.
-category: storage
+  An hypertable whose compression is enabled but whose closed chunks are still uncompressed:
+  the policy is missing, paused, or not keeping up with the ingest rate.
+category: timescaledb
 severity: info
 group: configuration
 
@@ -14,38 +14,51 @@ requires:
     - timescaledb
   views:
     - timescaledb_information.chunks
+    - timescaledb_information.hypertables
 
 parameters:
   minimum_days: 7
 
-limit: 50
-
 query: |
+  -- Un diagnostic par hypertable, pas un par chunk : la cause est unique — la politique ne suit
+  -- pas — et cinquante lignes décrivant le même retard ne s'ignorent ni ne se corrigent une par
+  -- une. Le décompte et l'âge du plus ancien disent l'ampleur.
+  --
+  -- Les hypertables sans compression activée sont écartées : c'est une autre cause, et
+  -- timescaledb.compression-not-configured la signale déjà. Sans ce filtre, une même hypertable
+  -- produisait les deux diagnostics à la fois.
   SELECT
-    hypertable_schema,
-    hypertable_name,
-    chunk_name,
-    range_end,
-    is_compressed,
-    EXTRACT(EPOCH FROM (now() - range_end)) / 86400 AS age_days
-  FROM timescaledb_information.chunks
-  WHERE range_end < now()
-  ORDER BY range_end
+    c.hypertable_schema,
+    c.hypertable_name,
+    count(*)                                                            AS stale_chunks,
+    MAX(EXTRACT(EPOCH FROM (now() - c.range_end)) / 86400)              AS oldest_days,
+    MIN(c.range_end)                                                    AS oldest_range_end
+  FROM timescaledb_information.chunks c
+  JOIN timescaledb_information.hypertables h
+    ON h.hypertable_schema = c.hypertable_schema
+   AND h.hypertable_name = c.hypertable_name
+  WHERE c.range_end < now()
+    AND c.is_compressed = false
+    AND h.compression_enabled = true
+  GROUP BY c.hypertable_schema, c.hypertable_name
 
-condition: is_compressed == false and age_days > minimum_days
+condition: oldest_days > minimum_days
 
 key:
   - hypertable_schema
-  - chunk_name
+  - hypertable_name
 
 recommendation:
-  title: "Chunk uncompressed for {{ age_days | round }} days"
-  message: "{{ chunk_name }} of hypertable {{ hypertable_name }} closed {{ age_days | round }} days ago and is not compressed."
+  title: "Compression behind on {{ hypertable_name }}"
+  message: "{{ stale_chunks }} closed chunks of {{ hypertable_name }} are still uncompressed, the oldest for {{ oldest_days | round }} days."
   impact: medium
   confidence: medium
   evidence:
-    - hypertable_name
-    - range_end
-    - age_days
-  sql: "SELECT compress_chunk('{{ chunk_name }}');"
+    - stale_chunks
+    - oldest_days
+    - oldest_range_end
+  sql: |
+    -- Rattrape le retard, puis vérifiez la politique : SELECT * FROM timescaledb_information.jobs.
+    SELECT compress_chunk(chunk)
+    FROM show_chunks('{{ hypertable_schema }}.{{ hypertable_name }}', older_than => INTERVAL '7 days') AS chunk;
   documentation: https://docs.timescale.com/use-timescale/latest/compression/

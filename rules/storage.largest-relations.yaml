@@ -1,10 +1,10 @@
 id: storage.largest-relations
-version: 1
+version: 2
 
 name: Largest relations
 description: >
-  An inventory of tables above a size threshold, indexes included. Serves as a reference point for
-  backups, retention and partitioning.
+  An inventory of the relations above a size threshold, indexes included. Serves as a reference
+  point for backups, retention and partitioning.
 category: storage
 severity: info
 group: configuration
@@ -16,37 +16,53 @@ requires:
 parameters:
   minimum_size_bytes: 1073741824
 
-limit: 20
-
 query: |
+  -- Un seul diagnostic pour toute l'instance, et non un par relation. Il n'y a rien à corriger
+  -- ici : c'est un repère, pas un défaut. En produire vingt coûtait quarante points de score en
+  -- permanence — deux par diagnostic « info » — à toute base d'un certain volume, ce qui rendait
+  -- le score illisible sans jamais désigner un problème.
+  --
+  -- pg_total_relation_size est appelé une fois par relation retenue, jamais dans le ORDER BY d'un
+  -- balayage complet : le filtre de taille passe d'abord.
+  WITH volumineuses AS (
+    SELECT
+      n.nspname                                  AS schemaname,
+      c.relname,
+      pg_total_relation_size(c.oid)              AS total_bytes,
+      pg_relation_size(c.oid)                    AS heap_bytes,
+      pg_indexes_size(c.oid)                     AS index_bytes,
+      c.reltuples::bigint                        AS estimated_rows
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r', 'p', 'm')
+      AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+      AND pg_total_relation_size(c.oid) > @minimum_size_bytes
+  )
   SELECT
-    n.nspname                                    AS schemaname,
-    c.relname,
-    pg_total_relation_size(c.oid)                AS total_bytes,
-    pg_relation_size(c.oid)                      AS table_octets,
-    pg_indexes_size(c.oid)                       AS index_bytes,
-    c.reltuples::bigint                          AS estimated_rows
-  FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE c.relkind IN ('r', 'p', 'm')
-    AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-  ORDER BY pg_total_relation_size(c.oid) DESC
-  LIMIT 50
+    count(*)                                     AS relation_count,
+    SUM(total_bytes)                             AS total_bytes,
+    SUM(index_bytes)                             AS index_bytes,
+    MAX(total_bytes)                             AS largest_bytes,
+    (SELECT schemaname || '.' || relname FROM volumineuses ORDER BY total_bytes DESC LIMIT 1)
+                                                 AS largest_relation,
+    (SELECT string_agg(schemaname || '.' || relname, ', ' ORDER BY total_bytes DESC)
+       FROM (SELECT * FROM volumineuses ORDER BY total_bytes DESC LIMIT 10) AS top)
+                                                 AS top_relations
+  FROM volumineuses
+  HAVING count(*) > 0
 
-condition: total_bytes > minimum_size_bytes
-
-key:
-  - schemaname
-  - relname
+# Pas de condition : la requête ne rend au plus qu'une ligne, et si elle en rend une c'est
+# qu'il y a quelque chose à rapporter.
 
 recommendation:
-  title: "{{ schemaname }}.{{ relname }} occupe {{ total_bytes | bytes }}"
-  message: "{{ relname }} totals {{ total_bytes | bytes }}, of which {{ index_bytes | bytes }} is indexes, for roughly {{ estimated_rows | number }} rows."
+  title: "{{ relation_count }} relations above the size threshold"
+  message: "{{ relation_count }} relations total {{ total_bytes | bytes }}, {{ index_bytes | bytes }} of it indexes. Largest: {{ largest_relation }} at {{ largest_bytes | bytes }}."
   impact: low
   confidence: high
   evidence:
+    - relation_count
     - total_bytes
-    - table_octets
     - index_bytes
-    - estimated_rows
+    - largest_relation
+    - top_relations
   documentation: https://www.postgresql.org/docs/current/disk-usage.html

@@ -80,6 +80,24 @@ public class BundledRuleTests
         Assert.Equal(Path.GetFileNameWithoutExtension(fileName), compilation.Rule.Id);
     }
 
+    /// <summary>
+    /// L'identifiant porte la catégorie. Le préfixe et le champ avaient déjà divergé une fois —
+    /// une règle nommée vacuum.* classée en statistics — et comme le score de santé agrège par
+    /// catégorie, la divergence se lit sur le tableau de bord sans que rien ne la signale.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(RuleFiles))]
+    public void TheIdPrefixMatchesTheCategory(string fileName)
+    {
+        var path = Path.Combine(RulesDirectory, fileName);
+        var compilation = Loader.Compile(File.ReadAllText(path), path, RuleOrigin.Provided);
+
+        Assert.NotNull(compilation.Rule);
+
+        var prefix = compilation.Rule.Id.Split('.')[0];
+        Assert.Equal(prefix, compilation.Rule.Category);
+    }
+
     private static string LocateRulesDirectory()
     {
         // The tests run from bin/, the rules live at the repository root: walk up to the solution.

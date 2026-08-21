@@ -1,11 +1,13 @@
 id: timescaledb.compression-not-configured
-version: 1
+version: 2
 
 name: Large hypertable without compression
 description: >
   A hypertable past a certain volume with no compression enabled. Compression sharply reduces the
-  space taken by historical data.
-category: storage
+  space taken by historical data. Once it is enabled, a policy that falls behind is reported
+  separately by timescaledb.uncompressed-chunks — the two describe distinct causes and never
+  fire together on the same hypertable.
+category: timescaledb
 severity: info
 group: configuration
 
@@ -34,7 +36,7 @@ key:
   - hypertable_name
 
 recommendation:
-  title: "Compression inactive sur {{ hypertable_name }}"
+  title: "Compression disabled on {{ hypertable_name }}"
   message: "{{ hypertable_name }} takes {{ size_bytes | bytes }} over {{ num_chunks }} chunks with no compression enabled."
   impact: medium
   confidence: medium

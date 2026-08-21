@@ -1,5 +1,5 @@
-id: vacuum.never-analyzed
-version: 1
+id: statistics.never-analyzed
+version: 2
 
 name: Table never analysed
 description: >

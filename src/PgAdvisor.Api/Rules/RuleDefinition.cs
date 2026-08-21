@@ -18,10 +18,17 @@ public static class RuleCategories
     public const string Security = "security";
     public const string Extensions = "extensions";
 
+    /// <summary>
+    /// Spécifique à TimescaleDB. Une catégorie à part plutôt que de répartir ces règles dans
+    /// storage et configuration : le score de santé agrège par catégorie, et un diagnostic qui ne
+    /// concerne qu'une extension n'a pas à peser sur la lecture d'une instance qui ne l'a pas.
+    /// </summary>
+    public const string TimescaleDb = "timescaledb";
+
     public static readonly string[] All =
     [
         Performance, Queries, Indexes, Vacuum, Bloat, Connections, Locks, Transactions,
-        Checkpoints, Configuration, Storage, Statistics, Security, Extensions,
+        Checkpoints, Configuration, Storage, Statistics, Security, Extensions, TimescaleDb,
     ];
 
     public static bool IsValid(string? category) =>
