@@ -114,10 +114,8 @@ public sealed class RulesController(
     });
 
     [HttpGet("errors")]
-    public ActionResult<IEnumerable<RuleErrorResponse>> Errors() => Ok(store.Current.Errors
-        .Select(e => new RuleErrorResponse(
-            Path.GetFileName(e.Path), e.RuleId, e.Message, e.Origin.ToString().ToLowerInvariant()))
-        .ToList());
+    public ActionResult<IEnumerable<RuleErrorResponse>> Errors() =>
+        Ok(store.Current.Errors.Select(RuleErrorResponse.From).ToList());
 
     /// <summary>
     /// Contenu d'un fichier refusé par le moteur, pour le corriger depuis l'interface.
@@ -373,22 +371,7 @@ public sealed class RulesController(
         var snapshot = store.Reload();
         bus.Publish(AdvisorEventTypes.RulesReloaded, BuildReloadPayload());
 
-        return Ok(new RulesStatusResponse
-        {
-            Total = snapshot.Rules.Count,
-            Enabled = snapshot.Rules.Count(r => r.Definition.Enabled),
-            Provided = snapshot.Rules.Count(r => r.Origin == RuleOrigin.Provided),
-            User = snapshot.Rules.Count(r => r.Origin == RuleOrigin.User),
-            LoadedAt = snapshot.LoadedAt,
-            Errors = snapshot.Errors
-                .Select(e => new RuleErrorResponse(
-                    Path.GetFileName(e.Path), e.RuleId, e.Message, e.Origin.ToString().ToLowerInvariant()))
-                .ToList(),
-            ByCategory = snapshot.Rules
-                .GroupBy(r => r.Category)
-                .OrderBy(g => g.Key, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.Count()),
-        });
+        return Ok(RulesStatusResponse.From(snapshot));
     }
 
     /// <summary>Exécute la règle sur une instance et retourne le résultat sans rien persister.</summary>

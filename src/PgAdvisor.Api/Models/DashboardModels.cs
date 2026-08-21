@@ -1,3 +1,5 @@
+using PgAdvisor.Api.Rules;
+
 namespace PgAdvisor.Api.Models;
 
 public sealed record DashboardResponse
@@ -19,9 +21,36 @@ public sealed record RulesStatusResponse
     public DateTimeOffset LoadedAt { get; init; }
     public IReadOnlyList<RuleErrorResponse> Errors { get; init; } = [];
     public Dictionary<string, int> ByCategory { get; init; } = [];
+
+    /// <summary>
+    /// Le tableau de bord et la page des règles décrivent le même instantané : la projection vit
+    /// ici plutôt que recopiée dans chaque contrôleur, où elle avait déjà commencé à diverger de
+    /// mise en forme.
+    /// </summary>
+    public static RulesStatusResponse From(RuleSnapshot snapshot) => new()
+    {
+        Total = snapshot.Rules.Count,
+        Enabled = snapshot.Rules.Count(rule => rule.Definition.Enabled),
+        Provided = snapshot.Rules.Count(rule => rule.Origin == RuleOrigin.Provided),
+        User = snapshot.Rules.Count(rule => rule.Origin == RuleOrigin.User),
+        LoadedAt = snapshot.LoadedAt,
+        Errors = snapshot.Errors.Select(RuleErrorResponse.From).ToList(),
+        ByCategory = snapshot.Rules
+            .GroupBy(rule => rule.Category)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count()),
+    };
 }
 
-public sealed record RuleErrorResponse(string File, string? RuleId, string Message, string Origin);
+public sealed record RuleErrorResponse(string File, string? RuleId, string Message, string Origin)
+{
+    /// <summary>Seul le nom de fichier sort : le chemin serveur ne regarde pas le client.</summary>
+    public static RuleErrorResponse From(RuleLoadError error) => new(
+        Path.GetFileName(error.Path),
+        error.RuleId,
+        error.Message,
+        error.Origin.ToString().ToLowerInvariant());
+}
 
 /// <summary>
 /// Un fichier de règle que le moteur a refusé, avec son contenu : une règle en erreur n'entre pas

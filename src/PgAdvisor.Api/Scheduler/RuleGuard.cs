@@ -263,8 +263,8 @@ public sealed class RuleGuard(IOptions<AdvisorOptions> options)
             $"The rule itself is most likely at fault: {state.LastFailureMessage}",
     };
 
-    private static string? Truncate(string? value) =>
-        value is null || value.Length <= 500 ? value : value[..500];
+    /// <summary>Coupe net à la largeur de la colonne : ni ellipse, ni perte du null.</summary>
+    private static string? Truncate(string? value) => Services.Text.Clip(value, 500);
 }
 
 /// <summary>Correspondance entre un franchissement de seuil et la notification qui l'annonce.</summary>

@@ -110,28 +110,5 @@ public sealed class DashboardController(
         };
     }
 
-    private RulesStatusResponse BuildRulesStatus()
-    {
-        var snapshot = ruleStore.Current;
-
-        return new RulesStatusResponse
-        {
-            Total = snapshot.Rules.Count,
-            Enabled = snapshot.Rules.Count(r => r.Definition.Enabled),
-            Provided = snapshot.Rules.Count(r => r.Origin == RuleOrigin.Provided),
-            User = snapshot.Rules.Count(r => r.Origin == RuleOrigin.User),
-            LoadedAt = snapshot.LoadedAt,
-            Errors = snapshot.Errors
-                .Select(e => new RuleErrorResponse(
-                    Path.GetFileName(e.Path),
-                    e.RuleId,
-                    e.Message,
-                    e.Origin.ToString().ToLowerInvariant()))
-                .ToList(),
-            ByCategory = snapshot.Rules
-                .GroupBy(r => r.Category)
-                .OrderBy(g => g.Key, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.Count()),
-        };
-    }
+    private RulesStatusResponse BuildRulesStatus() => RulesStatusResponse.From(ruleStore.Current);
 }

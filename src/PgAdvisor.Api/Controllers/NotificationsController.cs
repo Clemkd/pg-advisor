@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PgAdvisor.Api.Data;
 using PgAdvisor.Api.Models;
+using PgAdvisor.Api.Services;
 using PgAdvisor.Api.Notifications;
 
 namespace PgAdvisor.Api.Controllers;
@@ -165,7 +166,7 @@ public sealed class NotificationsController(
             var detail = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}".Trim();
             if (!string.IsNullOrWhiteSpace(body))
             {
-                detail += $" — {Truncate(body.ReplaceLineEndings(" ").Trim(), 300)}";
+                detail += $" — {Text.Ellipsis(body.ReplaceLineEndings(" ").Trim(), 300)}";
             }
 
             return Ok(new TestWebhookResponse(false, (int)response.StatusCode, detail));
@@ -258,9 +259,6 @@ public sealed class NotificationsController(
             return [];
         }
     }
-
-    private static string Truncate(string value, int max) =>
-        value.Length <= max ? value : value[..max] + "…";
 
     /// <summary>
     /// A Slack, Discord or Teams URL carries its own secret in the path: it is the credential,

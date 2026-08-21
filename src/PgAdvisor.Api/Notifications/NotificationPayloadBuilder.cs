@@ -374,8 +374,7 @@ public static class NotificationPayloadBuilder
         _ => "#0284c7",
     };
 
-    private static string Truncate(string value, int max) =>
-        value.Length <= max ? value : value[..(max - 1)] + "…";
+    private static string Truncate(string value, int max) => Services.Text.Ellipsis(value, max);
 
     private static JsonElement? ParseEvidence(string? json)
     {
