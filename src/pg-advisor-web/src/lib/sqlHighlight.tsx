@@ -62,7 +62,7 @@ export function tokenizeSql(sql: string): Token[] {
   }
 
   while (index < sql.length) {
-    const character = sql[index]
+    const character = sql[index]!
 
     // Commentaire de fin de ligne
     if (character === '-' && sql[index + 1] === '-') {
@@ -123,15 +123,16 @@ export function tokenizeSql(sql: string): Token[] {
     }
 
     if (/\d/.test(character)) {
-      const match = /^\d+(\.\d+)?([eE][+-]?\d+)?/.exec(sql.slice(index))!
-      push('number', match[0])
-      index += match[0].length
+      // La garde ci-dessus a vu un chiffre : le motif ancré correspond donc, et sur au moins un
+      // caractère. Un repli sur la chaîne vide ferait boucler l'analyseur indéfiniment.
+      const number = /^\d+(\.\d+)?([eE][+-]?\d+)?/.exec(sql.slice(index))![0]
+      push('number', number)
+      index += number.length
       continue
     }
 
     if (/[A-Za-z_]/.test(character)) {
-      const match = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sql.slice(index))!
-      const word = match[0]
+      const word = /^[A-Za-z_][A-Za-z0-9_]*/.exec(sql.slice(index))![0]
       const lower = word.toLowerCase()
       push(KEYWORDS.has(lower) ? 'keyword' : TYPES.has(lower) ? 'type' : 'plain', word)
       index += word.length

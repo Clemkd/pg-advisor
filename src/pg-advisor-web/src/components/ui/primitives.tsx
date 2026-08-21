@@ -235,7 +235,7 @@ export function Select({
       let next = start
       for (let step = 0; step < options.length; step++) {
         next = (next + delta + options.length) % options.length
-        if (!options[next].disabled) return next
+        if (!options[next]?.disabled) return next
       }
       return start
     })
@@ -525,7 +525,7 @@ export function MultiSelect({
     selected.length === 0
       ? t('multiSelect.empty')
       : selected.length === 1
-        ? selected[0].label
+        ? selected[0]!.label
         : t('multiSelect.count', {
             count: selected.length,
             unit: unitPlural ?? `${singular}s`,
@@ -957,8 +957,8 @@ export function Modal({
       const elements = focusable()
       if (elements.length === 0) return
 
-      const first = elements[0]
-      const last = elements[elements.length - 1]
+      const first = elements[0]!
+      const last = elements[elements.length - 1]!
       const active = document.activeElement
 
       if (event.shiftKey && (active === first || !panel.current?.contains(active))) {

@@ -235,7 +235,7 @@ export function QueryTable({
     estimateSize: () => 96,
     overscan: 6,
     scrollMargin: listOffset,
-    getItemKey: (index) => rowKey(visible[index]),
+    getItemKey: (index) => (visible[index] ? rowKey(visible[index]) : index),
   })
 
   const filtering = textFilter.trim() !== '' || Object.values(numericFilters).some((f) => f.value.trim() !== '')
@@ -362,6 +362,12 @@ export function QueryTable({
           >
             {virtualizer.getVirtualItems().map((item) => {
               const query = visible[item.index]
+
+              // Le virtualiseur compte les lignes visibles, donc l'index reste dans les bornes.
+              // Le garde n'est pas là pour ce cas-là mais pour le suivant : si la liste change
+              // sous ses pieds, ne rien rendre vaut mieux que lire au-delà du tableau.
+              if (!query) return null
+
               const key = rowKey(query)
 
               return (

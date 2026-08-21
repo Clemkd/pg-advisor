@@ -19,7 +19,7 @@ export function ScoreRing({
   className?: string
 }) {
   const t = useT()
-  const colors = SCORE_COLORS[score === null ? 'warn' : scoreTone(score)]
+  const colors = SCORE_COLORS[score === null ? 'warn' : scoreTone(score)]!
   const radius = size / 2 - 8
   const circumference = 2 * Math.PI * radius
   const filled = score === null ? 0 : (score / 100) * circumference
@@ -78,7 +78,7 @@ export function ScoreRing({
  * reste lisible en entier au survol.
  */
 export function ScoreBar({ label, score }: { label: string; score: number }) {
-  const colors = SCORE_COLORS[scoreTone(score)]
+  const colors = SCORE_COLORS[scoreTone(score)]!
 
   return (
     <div className="flex items-center gap-3">

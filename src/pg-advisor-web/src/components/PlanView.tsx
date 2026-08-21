@@ -434,13 +434,13 @@ function layout(
       cursor += NODE_W + GAP_X
     } else {
       const centers = children.map((child) => walk(child, depth + 1))
-      center = (centers[0] + centers[centers.length - 1]) / 2
+      center = (centers[0]! + centers[centers.length - 1]!) / 2
     }
 
     placed.push({
       node: entry.node,
       x: center - NODE_W / 2,
-      y: rowY[depth],
+      y: rowY[depth] ?? 0,
       height: heights.get(entry.node.id) ?? ESTIMATED_H,
       childCount: entry.children.length,
       hidden: isFolded ? descendantCount(entry) : 0,

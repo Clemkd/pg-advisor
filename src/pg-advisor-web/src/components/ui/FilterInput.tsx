@@ -42,7 +42,7 @@ export function FilterInput({
   const container = useRef<HTMLDivElement>(null)
   const numeric = operator !== undefined && onOperatorChange !== undefined
 
-  const current = OPERATORS.find((item) => item.value === operator) ?? OPERATORS[0]
+  const current = OPERATORS.find((item) => item.value === operator) ?? OPERATORS[0]!
 
   return (
     <div

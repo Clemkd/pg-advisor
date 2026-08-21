@@ -53,7 +53,7 @@ function tokenizeValue(value: string, push: (kind: TokenKind, text: string) => v
 
     // Commentaire de fin de ligne : il doit être précédé d'une espace pour ne pas couper
     // une valeur qui contient un « # ».
-    if (value[index] === '#' && (index === 0 || /\s/.test(value[index - 1]))) {
+    if (value[index] === '#' && (index === 0 || /\s/.test(value[index - 1]!))) {
       push('comment', rest)
       return
     }
@@ -100,7 +100,7 @@ function tokenizeValue(value: string, push: (kind: TokenKind, text: string) => v
       continue
     }
 
-    push('plain', value[index])
+    push('plain', value[index]!)
     index += 1
   }
 }
@@ -142,7 +142,7 @@ function tokenizeYamlLines(yaml: string): Token[][] {
     // Clé : tout ce qui précède un « : » suivi d'une espace ou d'une fin de ligne.
     const key = /^((?:"[^"]*")|(?:'[^']*')|(?:[^:#\s][^:#]*?))\s*:(?=\s|$)/.exec(rest)
     if (key) {
-      push('key', key[1])
+      push('key', key[1]!)
       push('punctuation', ':')
       rest = rest.slice(key[0].length)
     }
@@ -162,10 +162,10 @@ function findPath(lines: string[], path: string[]): number | null {
     let hit: number | null = null
 
     for (let index = from; index < lines.length; index++) {
-      const match = /^(\s*)(?:- )?["']?([\w.-]+)["']?\s*:/.exec(lines[index])
+      const match = /^(\s*)(?:- )?["']?([\w.-]+)["']?\s*:/.exec(lines[index] ?? '')
       if (!match) continue
 
-      const indent = match[1].length
+      const indent = match[1]!.length
       // Sorti du bloc du parent : le segment cherché n'y était pas.
       if (parentIndent >= 0 && indent <= parentIndent) break
       if (match[2] === segment) {
@@ -176,7 +176,7 @@ function findPath(lines: string[], path: string[]): number | null {
 
     if (hit === null) return found
     found = hit
-    parentIndent = /^(\s*)/.exec(lines[hit])![1].length
+    parentIndent = /^(\s*)/.exec(lines[hit] ?? '')![1]!.length
     from = hit + 1
   }
 
@@ -199,7 +199,7 @@ export function errorLine(message: string, yaml: string): number | null {
 
   const quoted = /"([A-Za-z][\w.]*)"/.exec(message)
   if (quoted) {
-    const byPath = findPath(lines, quoted[1].split('.'))
+    const byPath = findPath(lines, (quoted[1] ?? '').split('.'))
     if (byPath !== null) return byPath
   }
 

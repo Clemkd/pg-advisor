@@ -87,7 +87,7 @@ export function QueriesPage() {
         setConnections(list)
         if (selected.length === 0 && list.length > 0) {
           const next = new URLSearchParams(params)
-          next.set('connectionIds', String(list[0].id))
+          next.set('connectionIds', String(list[0]!.id))
           setParams(next, { replace: true })
         }
       })

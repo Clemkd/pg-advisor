@@ -721,7 +721,7 @@ function FindingsTable({
     estimateSize: () => 64,
     overscan: 10,
     scrollMargin: listOffset,
-    getItemKey: (index) => findings[index].id,
+    getItemKey: (index) => findings[index]?.id ?? index,
   })
 
   const setList = (key: string) => (values: string[]) => onFilter(key, values.join(','))
@@ -870,6 +870,11 @@ function FindingsTable({
           >
             {virtualizer.getVirtualItems().map((item) => {
               const finding = findings[item.index]
+
+              // Le virtualiseur compte les diagnostics affichés, donc l'index reste borné. Le
+              // garde couvre le cas où la liste se renouvelle pendant qu'il mesure : ne rien
+              // rendre vaut mieux que lire au-delà du tableau.
+              if (!finding) return null
 
               return (
                 <div

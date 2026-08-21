@@ -16,12 +16,16 @@ export function changedLines(before: string, after: string): Set<number> {
     new Array<number>(target.length + 1).fill(0),
   )
 
+  // Le tableau est rempli de zéros et bordé d'une ligne et d'une colonne : un accès au-delà vaut
+  // donc zéro par construction, ce que cet accesseur dit au compilateur sans rien assumer.
+  const at = (i: number, j: number) => table[i]?.[j] ?? 0
+
   for (let i = source.length - 1; i >= 0; i--) {
+    const row = table[i]
+    if (!row) continue
+
     for (let j = target.length - 1; j >= 0; j--) {
-      table[i][j] =
-        source[i] === target[j]
-          ? table[i + 1][j + 1] + 1
-          : Math.max(table[i + 1][j], table[i][j + 1])
+      row[j] = source[i] === target[j] ? at(i + 1, j + 1) + 1 : Math.max(at(i + 1, j), at(i, j + 1))
     }
   }
 
@@ -33,7 +37,7 @@ export function changedLines(before: string, after: string): Set<number> {
     if (source[i] === target[j]) {
       i += 1
       j += 1
-    } else if (table[i + 1][j] >= table[i][j + 1]) {
+    } else if (at(i + 1, j) >= at(i, j + 1)) {
       i += 1
     } else {
       changed.add(j + 1)

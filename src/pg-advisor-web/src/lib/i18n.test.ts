@@ -43,7 +43,7 @@ describe('catalogues de traduction', () => {
 
     const divergentes = Object.keys(source)
       .filter((cle) => cible[cle] !== undefined)
-      .filter((cle) => variables(source[cle]).join() !== variables(cible[cle]).join())
+      .filter((cle) => variables(source[cle] ?? '').join() !== variables(cible[cle] ?? '').join())
 
     expect(divergentes).toEqual([])
   })

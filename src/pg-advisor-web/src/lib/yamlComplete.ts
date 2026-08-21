@@ -84,11 +84,11 @@ function indentOf(line: string): number {
 function parentKey(lines: string[], index: number, indent: number): string | null {
   for (let i = index - 1; i >= 0; i--) {
     const line = lines[i]
-    if (!line.trim() || line.trimStart().startsWith('#')) continue
+    if (!line?.trim() || line.trimStart().startsWith('#')) continue
     if (indentOf(line) >= indent) continue
 
     const match = /^\s*([A-Za-z_][\w-]*)\s*:/.exec(line)
-    return match ? match[1] : null
+    return match?.[1] ?? null
   }
 
   return null
@@ -177,7 +177,7 @@ export function completionAt(yaml: string, offset: number, schema: RuleSchema): 
 
   const bullet = /^\s*-\s*(.*)$/.exec(typed)
   if (bullet) {
-    return narrow(itemsFor(parent, schema), bullet[1].trim(), offset)
+    return narrow(itemsFor(parent, schema), (bullet[1] ?? '').trim(), offset)
   }
 
   const colon = typed.indexOf(':')
