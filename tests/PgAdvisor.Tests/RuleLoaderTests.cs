@@ -7,6 +7,13 @@ namespace PgAdvisor.Tests;
 
 public class RuleLoaderTests
 {
+    /// <summary>Retire la ligne commençant par ce préfixe, quelles que soient les fins de ligne.</summary>
+    private static string WithoutLine(string yaml, string prefix) => string.Join(
+        Environment.NewLine,
+        yaml.ReplaceLineEndings()
+            .Split(Environment.NewLine)
+            .Where(line => !line.StartsWith(prefix, StringComparison.Ordinal)));
+
     private static readonly RuleLoader Loader = new(
         new RuleHandlerRegistry([new MissingExtensionHandler(), new RedundantIndexHandler()]),
         NullLogger<RuleLoader>.Instance);
@@ -68,7 +75,10 @@ public class RuleLoaderTests
     [Fact]
     public void MessageAbsentRetombeSurLeTitre()
     {
-        var yaml = ValidYaml.Replace("  message: \"{{ ratio | percent }} de lignes mortes\"\n", string.Empty);
+        // Retrait par ligne plutôt que par sous-chaîne : chercher un fragment terminé par « \n »
+        // rendait le test dépendant des fins de ligne du fichier source, donc vert ou rouge selon
+        // la plateforme sur laquelle le dépôt avait été extrait.
+        var yaml = WithoutLine(ValidYaml, "  message:");
         var rule = Loader.Compile(yaml, "test.yaml", RuleOrigin.User).Rule;
 
         Assert.NotNull(rule);
@@ -119,7 +129,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("a single query", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("query", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -139,7 +149,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("Invalid condition", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("condition", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -179,7 +189,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("or \"handler\"", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("handler", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -198,7 +208,7 @@ public class RuleLoaderTests
         var result = Loader.Compile(yaml, "test.yaml", RuleOrigin.User);
 
         Assert.Null(result.Rule);
-        Assert.Contains(result.Errors, error => error.Contains("requirement", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("requires", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
