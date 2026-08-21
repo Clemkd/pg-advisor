@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ApiError, api, notifyUnauthorized } from '../api/client'
 import type { AdvisorEvent } from '../api/types'
@@ -8,8 +8,14 @@ type Handler = (event: AdvisorEvent) => void
 
 interface EventsState {
   connected: boolean
-  lastEvent: AdvisorEvent | null
-  /** S'abonne à un type d'événement, ou à tous avec « * ». */
+
+  /**
+   * S'abonne à un type d'événement, ou à tous avec « * ».
+   *
+   * Son identité est stable : elle l'était si peu que le contexte changeait à chaque événement,
+   * et tous les abonnés de l'application se désabonnaient puis se réabonnaient à chaque fois —
+   * dix fois par minute, le groupe « health » suffisant à l'entretenir.
+   */
   subscribe: (type: string, handler: Handler) => () => void
 }
 
@@ -38,7 +44,6 @@ const EVENT_TYPES = [
 export function EventsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [connected, setConnected] = useState(false)
-  const [lastEvent, setLastEvent] = useState<AdvisorEvent | null>(null)
   const handlers = useRef(new Map<string, Set<Handler>>())
 
   useEffect(() => {
@@ -57,7 +62,6 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      setLastEvent(parsed)
       handlers.current.get(parsed.type)?.forEach((handler) => handler(parsed))
       handlers.current.get('*')?.forEach((handler) => handler(parsed))
     }
@@ -86,19 +90,18 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     }
   }, [user])
 
-  const value = useMemo<EventsState>(
-    () => ({
-      connected,
-      lastEvent,
-      subscribe: (type, handler) => {
-        const set = handlers.current.get(type) ?? new Set<Handler>()
-        set.add(handler)
-        handlers.current.set(type, set)
-        return () => set.delete(handler)
-      },
-    }),
-    [connected, lastEvent],
-  )
+  const subscribe = useCallback<EventsState['subscribe']>((type, handler) => {
+    const set = handlers.current.get(type) ?? new Set<Handler>()
+    set.add(handler)
+    handlers.current.set(type, set)
+
+    return () => {
+      set.delete(handler)
+      if (set.size === 0) handlers.current.delete(type)
+    }
+  }, [])
+
+  const value = useMemo<EventsState>(() => ({ connected, subscribe }), [connected, subscribe])
 
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>
 }

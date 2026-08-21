@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Clock, Code2, Info, Play, Terminal, Wand2, Workflow, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { api, ApiError } from '@/api/client'
+import { api, ApiError, isAbort } from '@/api/client'
+import { useAbortable } from '@/lib/useAbortable'
 import type {
   AnalysisNote,
   Connection,
@@ -48,6 +49,7 @@ function queryKey(query: TopQuery): string {
 }
 
 export function QueriesPage() {
+  const nextSignal = useAbortable()
   const t = useT()
   const tc = useTc()
   const [params, setParams] = useSearchParams()
@@ -103,18 +105,23 @@ export function QueriesPage() {
     }
 
     setLoading(true)
+    const signal = nextSignal()
+
     try {
       const result = await api.queries.across({
         connectionIds: selection,
         sort,
         limit: Math.min(Math.max(limit, 1), 200),
         includeAdvisor,
-      })
+      }, signal)
       setQueries(result.items)
       setStatuses(result.instances)
       setLoadedAt(new Date().toISOString())
       setError(null)
     } catch (cause) {
+      // Chargement remplacé par un plus récent : sa réponse ne doit ni s'afficher ni alarmer.
+      if (isAbort(cause)) return
+
       // `tr` plutôt que `t` : le rappel est mémorisé, et dépendre du traducteur le recréerait
       // à chaque bascule de langue — donc rechargerait la liste pour rien.
       setError(cause instanceof Error ? cause.message : tr('queries.loadFailed'))
@@ -122,7 +129,7 @@ export function QueriesPage() {
       setLoading(false)
       setSettled(true)
     }
-  }, [selection, sort, limit, includeAdvisor])
+  }, [selection, sort, limit, includeAdvisor, nextSignal])
 
   useEffect(() => {
     void load()

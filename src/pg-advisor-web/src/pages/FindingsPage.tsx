@@ -2,9 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useSearchParams } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { CheckCircle2, ChevronRight, ExternalLink, FilterX } from 'lucide-react'
-import { api } from '@/api/client'
+import { api, isAbort } from '@/api/client'
 import type { Connection, Finding, FindingDetail, FindingStatus, FindingSummary } from '@/api/types'
 import { useAuth } from '@/app/AuthContext'
+import { useAbortable } from '@/lib/useAbortable'
 import { useEventListener } from '@/app/EventsContext'
 import { Hero, Page } from '@/components/layout/Page'
 import { FilterInput } from '@/components/ui/FilterInput'
@@ -125,6 +126,7 @@ function verdictTone(result: { resolved: boolean; stillPresent: boolean }): Verd
 
 export function FindingsPage() {
   const { isAdmin } = useAuth()
+  const nextSignal = useAbortable()
   const t = useT()
   const tc = useTc()
   const [params, setParams] = useSearchParams()
@@ -186,11 +188,12 @@ export function FindingsPage() {
    */
   const load = useCallback(async () => {
     setRefreshing(true)
+    const signal = nextSignal()
 
     try {
       const [result, counts] = await Promise.all([
-        api.findings.list({ status, page: 1, pageSize: PAGE_SIZE }),
-        api.findings.summary(),
+        api.findings.list({ status, page: 1, pageSize: PAGE_SIZE }, signal),
+        api.findings.summary(undefined, signal),
       ])
 
       // Ce qui vient d'arriver se compte, à plan de travail constant seulement : changer d'onglet
@@ -220,12 +223,15 @@ export function FindingsPage() {
       setLoadedAt(new Date().toISOString())
       setError(null)
     } catch (cause) {
+      // Chargement remplacé par un plus récent : sa réponse ne doit ni s'afficher ni alarmer.
+      if (isAbort(cause)) return
+
       setError(cause instanceof Error ? cause.message : tr('common.loadFailed'))
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [status])
+  }, [status, nextSignal])
 
   /** Change le statut sans rien annoncer : socle commun à l'action et à son annulation. */
   const applyStatus = useCallback(

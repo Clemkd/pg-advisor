@@ -62,6 +62,11 @@ export function notifyUnauthorized(): void {
   unauthorizedListeners.forEach((listener) => listener())
 }
 
+/** Vrai lorsque l'échec vient d'un abandon volontaire, et non d'une erreur du serveur. */
+export function isAbort(cause: unknown): boolean {
+  return cause instanceof DOMException && cause.name === 'AbortError'
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -129,7 +134,7 @@ async function describeError(response: Response): Promise<ErrorDescription> {
   }
 }
 
-const get = <T>(path: string) => request<T>(path)
+const get = <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal })
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })
 const put = <T>(path: string, body?: unknown) =>
@@ -184,10 +189,10 @@ export const api = {
       search?: string
       page?: number
       pageSize?: number
-    }) => get<FindingPage>(`/api/findings${query(params)}`),
+    }, signal?: AbortSignal) => get<FindingPage>(`/api/findings${query(params)}`, signal),
     get: (id: number) => get<FindingDetail>(`/api/findings/${id}`),
-    summary: (connectionId?: number) =>
-      get<FindingSummary>(`/api/findings/summary${query({ connectionId })}`),
+    summary: (connectionId?: number, signal?: AbortSignal) =>
+      get<FindingSummary>(`/api/findings/summary${query({ connectionId })}`, signal),
     setStatus: (id: number, status: FindingStatus, note?: string) =>
       post<Finding>(`/api/findings/${id}/status`, { status, note }),
     verify: (id: number) => post<import('./types').VerifyFindingResult>(`/api/findings/${id}/verify`),
@@ -268,7 +273,8 @@ export const api = {
       limit?: number
       search?: string
       includeAdvisor?: boolean
-    }) => get<import('./types').MergedQueriesResponse>(`/api/queries${query(params)}`),
+    }, signal?: AbortSignal) =>
+      get<import('./types').MergedQueriesResponse>(`/api/queries${query(params)}`, signal),
     suggestParameters: (connectionId: number, body: { sql?: string; queryId?: string }) =>
       post<{ items: import('./types').ParameterSuggestion[] }>(
         `/api/instances/${connectionId}/queries/parameters`,
