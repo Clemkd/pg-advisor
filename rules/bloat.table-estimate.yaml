@@ -47,11 +47,11 @@ query: |
     pg_relation_size(oid)                                                          AS size_bytes,
     CEIL(reltuples * (largeur_ligne + 24) / (bs - 24))                             AS expected_pages,
     GREATEST(relpages - CEIL(reltuples * (largeur_ligne + 24) / (bs - 24)), 0) * bs AS wasted_bytes,
-    -- NULLIF : relpages ne vaut zéro que si une surcharge a abaissé minimum_pages, mais une
-    -- division par zéro ferait échouer la règle jusqu'à sa mise en quarantaine.
     1 - (CEIL(reltuples * (largeur_ligne + 24) / (bs - 24)) / NULLIF(relpages, 0))  AS wasted_ratio
   FROM largeurs
   WHERE largeur_ligne IS NOT NULL
+  ORDER BY wasted_bytes DESC
+  LIMIT 500
 
 condition: wasted_ratio > minimum_ratio
 

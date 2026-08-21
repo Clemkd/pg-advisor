@@ -45,6 +45,8 @@ query: |
         ) @> c.conkey
     )
     AND pg_relation_size(t.oid) > @minimum_size_bytes
+  ORDER BY pg_relation_size(t.oid) DESC
+  LIMIT 200
 
 key:
   - schemaname

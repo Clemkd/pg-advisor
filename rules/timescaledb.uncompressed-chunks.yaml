@@ -20,13 +20,6 @@ parameters:
   minimum_days: 7
 
 query: |
-  -- Un diagnostic par hypertable, pas un par chunk : la cause est unique — la politique ne suit
-  -- pas — et cinquante lignes décrivant le même retard ne s'ignorent ni ne se corrigent une par
-  -- une. Le décompte et l'âge du plus ancien disent l'ampleur.
-  --
-  -- Les hypertables sans compression activée sont écartées : c'est une autre cause, et
-  -- timescaledb.compression-not-configured la signale déjà. Sans ce filtre, une même hypertable
-  -- produisait les deux diagnostics à la fois.
   SELECT
     c.hypertable_schema,
     c.hypertable_name,
@@ -58,7 +51,6 @@ recommendation:
     - oldest_days
     - oldest_range_end
   sql: |
-    -- Rattrape le retard, puis vérifiez la politique : SELECT * FROM timescaledb_information.jobs.
     SELECT compress_chunk(chunk)
     FROM show_chunks('{{ hypertable_schema }}.{{ hypertable_name }}', older_than => INTERVAL '7 days') AS chunk;
   documentation: https://docs.timescale.com/use-timescale/latest/compression/

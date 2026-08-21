@@ -24,6 +24,10 @@ query: |
     last_autoanalyze
   FROM pg_stat_user_tables
   WHERE n_live_tup > @minimum_rows
+    AND last_analyze IS NULL
+    AND last_autoanalyze IS NULL
+  ORDER BY n_live_tup DESC
+  LIMIT 200
 
 condition: last_analyze is null and last_autoanalyze is null
 

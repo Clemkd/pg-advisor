@@ -17,8 +17,6 @@ requires:
 parameters:
   threshold: 0.85
 
-# Several sub-queries aggregated into one row: the condition combines the columns with each other.
-# Only client sessions are counted: those are what max_connections caps.
 query: |
   SELECT
     (SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend')              AS used,
@@ -26,10 +24,6 @@ query: |
     (SELECT setting::int FROM pg_settings WHERE name = 'superuser_reserved_connections')        AS reserved,
     (SELECT count(*) FROM pg_stat_activity
       WHERE backend_type = 'client backend' AND state = 'idle')                                AS idle,
-    -- Le diviseur est calculé ici plutôt que dans la condition : une soustraction nue rendait
-    -- NULL dès qu'un des paramètres manquait, la condition devenait fausse, et une saturation
-    -- réelle passait sans le moindre signal. Pour une règle « critical », ce silence est le pire
-    -- des comportements. COALESCE couvre le paramètre absent, GREATEST la division par zéro.
     GREATEST(
       (SELECT setting::int FROM pg_settings WHERE name = 'max_connections')
         - COALESCE((SELECT setting::int FROM pg_settings WHERE name = 'superuser_reserved_connections'), 0),

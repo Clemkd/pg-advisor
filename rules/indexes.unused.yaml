@@ -29,7 +29,9 @@ query: |
   WHERE NOT i.indisunique
     AND NOT i.indisprimary
     AND pg_relation_size(s.indexrelid) > @minimum_size_bytes
+    AND s.idx_scan = 0
   ORDER BY pg_relation_size(s.indexrelid) DESC
+  LIMIT 200
 
 condition: idx_scan == 0
 

@@ -1,5 +1,5 @@
 id: performance.sequential-scans
-version: 1
+version: 2
 
 name: Sequential scans on a large table
 description: >
@@ -16,7 +16,8 @@ requires:
 parameters:
   minimum_rows: 100000
   minimum_scans: 100
-  part_sequentielle: 0.5
+  sequential_share: 0.5
+  minimum_rows_per_scan: 10000
 
 query: |
   SELECT
@@ -31,8 +32,12 @@ query: |
   FROM pg_stat_user_tables
   WHERE n_live_tup > @minimum_rows
     AND seq_scan > @minimum_scans
+    AND seq_scan::float / NULLIF(seq_scan + COALESCE(idx_scan, 0), 0) > @sequential_share
+    AND seq_tup_read::float / NULLIF(seq_scan, 0) > @minimum_rows_per_scan
+  ORDER BY seq_tup_read DESC
+  LIMIT 200
 
-condition: seq_share > part_sequentielle and rows_per_scan > 10000
+condition: seq_share > sequential_share and rows_per_scan > minimum_rows_per_scan
 
 key:
   - schemaname

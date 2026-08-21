@@ -17,13 +17,6 @@ parameters:
   minimum_size_bytes: 1073741824
 
 query: |
-  -- Un seul diagnostic pour toute l'instance, et non un par relation. Il n'y a rien à corriger
-  -- ici : c'est un repère, pas un défaut. En produire vingt coûtait quarante points de score en
-  -- permanence — deux par diagnostic « info » — à toute base d'un certain volume, ce qui rendait
-  -- le score illisible sans jamais désigner un problème.
-  --
-  -- pg_total_relation_size est appelé une fois par relation retenue, jamais dans le ORDER BY d'un
-  -- balayage complet : le filtre de taille passe d'abord.
   WITH volumineuses AS (
     SELECT
       n.nspname                                  AS schemaname,
@@ -50,9 +43,6 @@ query: |
                                                  AS top_relations
   FROM volumineuses
   HAVING count(*) > 0
-
-# Pas de condition : la requête ne rend au plus qu'une ligne, et si elle en rend une c'est
-# qu'il y a quelque chose à rapporter.
 
 recommendation:
   title: "{{ relation_count }} relations above the size threshold"

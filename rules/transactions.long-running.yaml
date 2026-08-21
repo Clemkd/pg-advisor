@@ -28,6 +28,9 @@ query: |
   WHERE xact_start IS NOT NULL
     AND backend_type = 'client backend'
     AND pid <> pg_backend_pid()
+    AND now() - xact_start > @maximum_seconds * INTERVAL '1 second'
+  ORDER BY xact_start
+  LIMIT 100
 
 condition: transaction_seconds > maximum_seconds
 

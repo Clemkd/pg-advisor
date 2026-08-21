@@ -28,7 +28,9 @@ query: |
     n_dead_tup::float / NULLIF(n_live_tup, 0) AS ratio
   FROM pg_stat_user_tables
   WHERE n_live_tup > @minimum_rows
+    AND n_dead_tup::float / NULLIF(n_live_tup, 0) > @minimum_ratio
   ORDER BY n_dead_tup DESC
+  LIMIT 200
 
 condition: ratio > minimum_ratio
 
