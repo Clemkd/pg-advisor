@@ -9,7 +9,11 @@ COPY src/pg-advisor-web/ ./
 RUN npm run build -- --outDir /out --emptyOutDir
 
 # --- API ---------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0.111 AS api
+# Tag de bande, volontairement pas un patch : MCR publie 10.0.100, 10.0.200, 10.0.400… jamais la
+# version exacte que global.json épingle. Fixer un patch ici ferait compiler l'image avec un SDK
+# différent de celui du poste de travail et de la CI, ce qui est pire que de suivre les correctifs.
+# L'image de runtime et celle de Node, elles, sont épinglées : ce sont elles qui partent en prod.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS api
 WORKDIR /src
 # Restauration à partir du seul csproj de l'API : la couche est réutilisée tant que les
 # dépendances ne changent pas, et le fichier solution n'a pas à être copié.
