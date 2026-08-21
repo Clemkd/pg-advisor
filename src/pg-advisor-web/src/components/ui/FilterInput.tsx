@@ -56,7 +56,7 @@ export function FilterInput({
         <>
           <button
             type="button"
-            onClick={() => setOpen((current) => !current)}
+            onClick={() => setOpen((wasOpen) => !wasOpen)}
             aria-haspopup="menu"
             aria-expanded={open}
             aria-label={`${t('filter.operatorFor', { label })} : ${t(current.labelKey)}`}

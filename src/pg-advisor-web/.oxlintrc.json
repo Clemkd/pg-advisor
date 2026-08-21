@@ -1,8 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
+  // Les catégories font le gros du travail : deux règles nommées ne couvraient presque rien.
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    // Obsolète avec la transformation JSX automatique (`"jsx": "react-jsx"`) : la règle réclamait
+    // un import de React dans chaque fichier, soit 1508 avertissements sans le moindre défaut.
+    "react/react-in-jsx-scope": "off"
   }
 }
