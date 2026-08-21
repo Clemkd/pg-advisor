@@ -56,6 +56,8 @@ jobs:
 
       - run: npm run lint
 
+      - run: npm test
+
       # `tsc -b` fait partie du script de build : la compilation des types est donc couverte.
       - run: npm run build
 
